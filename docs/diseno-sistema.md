@@ -61,7 +61,7 @@
 ### Contratos compartidos
 El backend publica **OpenAPI**. De ahí se generan el cliente **Dart** (3 apps) y el cliente **TypeScript** (web). Así rutas y modelos nunca se desincronizan.
 
-### Estructura del repositorio (monorepo `devepmax-oss/devepmax-emenu`)
+### Estructura del repositorio (monorepo `devepmax-oss/Devepmax-E-menu`)
 
 ```
 devepmax-emenu/
@@ -783,7 +783,7 @@ Toda cancelación, anulación de ítem, descuento, reembolso y cambio de precio 
 
 | Fase | Contenido | Resultado |
 |---|---|---|
-| **0. Preparación** | Monorepo `devepmax-emenu` con apps y web copiadas (respaldo en git). Esqueleto de backend NestJS, paquetes Flutter compartidos, Docker con PostgreSQL local, CI. | Base de trabajo ordenada |
+| **0. Preparación** | Monorepo `Devepmax-E-menu` con apps y web copiadas (respaldo en git). Esqueleto de backend NestJS, paquetes Flutter compartidos, Docker con PostgreSQL local, CI. | Base de trabajo ordenada |
 | **1. Fundamentos** | NestJS + Prisma con el esquema nuevo. Auth (empleados, roles, permisos, PIN, dispositivos con vinculación). Ajustes + marca. Auditoría. OpenAPI → clientes Dart y TS. Menú: categorías, productos, modificadores reutilizables, estaciones, imágenes, agotado. Admin de menú en app Staff (portado). Renombrar apps (`com.devepmax.emenu.*`) y configuración Firebase por instancia. | Sistema central seguro con menú administrable |
 | **2. Motor de órdenes + canal online** | Órdenes, ítems con modificadores, tickets por estación, máquina de estados, idempotencia, numeración diaria, cuentas. Gateway Socket.IO con rooms y resync. Port de carrito, checkout Stripe y repartidores. Web apuntando a la API nueva en **gopicadera.online**. | Pedidos online de punta a punta sobre el motor nuevo |
 | **3. Sala: E-Menu, KDS y meseros** | Áreas, mesas, plano visual, sesiones. App E-Menu (kiosco Android, bilingüe, fotos, modificadores, seguimiento, llamar mesero, pedir cuenta). KDS por estación con temporizadores y alertas. Modo mesero. | Las mesas piden solas y cocina opera por estaciones |
