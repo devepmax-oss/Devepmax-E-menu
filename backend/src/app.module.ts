@@ -5,13 +5,16 @@ import { AuthModule } from './modules/auth/auth.module';
 import { DevicesModule } from './modules/devices/devices.module';
 import { EmployeesModule } from './modules/employees/employees.module';
 import { MenuModule } from './modules/menu/menu.module';
+import { OrdersModule } from './modules/orders/orders.module';
 import { SettingsModule } from './modules/settings/settings.module';
 import { PrismaModule } from './prisma/prisma.module';
+import { DomainEventsModule } from './realtime/domain-events.service';
 import { StorageModule } from './storage/storage.module';
 
 @Module({
   imports: [
     PrismaModule,
+    DomainEventsModule,
     StorageModule,
     AuditModule,
     AuthModule,
@@ -19,6 +22,7 @@ import { StorageModule } from './storage/storage.module';
     DevicesModule,
     SettingsModule,
     MenuModule,
+    OrdersModule,
   ],
   controllers: [HealthController],
 })
