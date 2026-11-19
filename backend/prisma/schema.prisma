@@ -1,6 +1,5 @@
-// Devepmax E-Menu — esquema de base de datos.
-// Fase 0: solo configuración. Los modelos se agregan en la Fase 1
-// a partir de docs/diseno-sistema.md (sección 3).
+// Devepmax E-Menu — esquema de base de datos (v1).
+// Fuente: docs/diseno-sistema.md, sección 3. Mantener ambos sincronizados.
 
 generator client {
   provider = "prisma-client-js"
@@ -9,4 +8,652 @@ generator client {
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
+}
+
+// ───────────── Configuración ─────────────
+model RestaurantSettings {
+  id                    Int      @id @default(1) // fila única
+  name                  String
+  legalName             String?
+  logoUrl               String?
+  primaryColor          String   @default("#111111")
+  accentColor           String   @default("#FACC15")
+  phone                 String?
+  whatsapp              String?
+  email                 String?
+  addressLine           String?
+  city                  String?
+  state                 String?
+  zipCode               String?
+  lat                   Float?
+  lng                   Float?
+  socialLinks           Json? // { instagram, tiktok, ... }
+  timezone              String   @default("America/New_York")
+  currency              String   @default("USD")
+  locales               String[] @default(["es", "en"])
+  acceptsDineIn         Boolean  @default(true)
+  acceptsPickup         Boolean  @default(true)
+  acceptsDelivery       Boolean  @default(true)
+  onlineOrderingPaused  Boolean  @default(false)
+  requireWaiterApproval Boolean  @default(false) // órdenes de tablet esperan OK del mesero
+  prepTimeMinutes       Int      @default(20)
+  tipPresets            Int[]    @default([15, 18, 20])
+  receiptFooter         String?
+  maintenanceMode       Boolean  @default(false)
+  updatedAt             DateTime @updatedAt
+}
+
+model OpeningHour {
+  id        String @id @default(cuid())
+  dayOfWeek Int // 0 = domingo
+  opensAt   String // "10:30"
+  closesAt  String // "01:00" (puede cruzar medianoche)
+}
+
+model TaxRate {
+  id        String    @id @default(cuid())
+  name      String
+  rate      Decimal   @db.Decimal(6, 4)
+  isDefault Boolean   @default(false)
+  products  Product[]
+}
+
+// ───────────── Personas y acceso ─────────────
+model Role {
+  id          String     @id @default(cuid())
+  name        String     @unique // Admin, Gerente, Cajero, Mesero, Cocina, Repartidor
+  permissions String[] // códigos, ver sección 5
+  isSystem    Boolean    @default(false)
+  employees   Employee[]
+}
+
+model Employee {
+  id            String         @id @default(cuid())
+  name          String
+  email         String?        @unique
+  phone         String?
+  passwordHash  String? // login completo (admin, gerente, repartidor)
+  pinHash       String? // login rápido en POS/KDS
+  roleId        String
+  isActive      Boolean        @default(true)
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  role          Role           @relation(fields: [roleId], references: [id])
+  driverProfile DriverProfile?
+}
+
+model AuthSession {
+  id        String    @id @default(cuid())
+  subject   String // "employee:<id>" | "customer:<id>" | "device:<id>"
+  tokenHash String    @unique
+  userAgent String?
+  expiresAt DateTime
+  revokedAt DateTime?
+  createdAt DateTime  @default(now())
+}
+
+model Customer {
+  id             String            @id @default(cuid())
+  name           String
+  phone          String?           @unique
+  email          String?           @unique
+  passwordHash   String?
+  marketingOptIn Boolean           @default(false)
+  createdAt      DateTime          @default(now())
+  addresses      CustomerAddress[]
+  orders         Order[]
+}
+
+model CustomerAddress {
+  id           String   @id @default(cuid())
+  customerId   String
+  label        String?
+  street       String
+  city         String
+  state        String
+  zipCode      String
+  instructions String?
+  lat          Float?
+  lng          Float?
+  customer     Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+}
+
+// ───────────── Sala y dispositivos ─────────────
+enum TableStatus {
+  AVAILABLE
+  OCCUPIED
+  RESERVED
+  CLEANING
+}
+
+enum DeviceType {
+  EMENU
+  POS
+  KDS
+  WAITER
+}
+
+enum SessionStatus {
+  OPEN
+  BILL_REQUESTED
+  CLOSED
+}
+
+model DiningArea {
+  id        String        @id @default(cuid())
+  name      String // Salón, Terraza
+  sortOrder Int           @default(0)
+  tables    DiningTable[]
+}
+
+model DiningTable {
+  id       String         @id @default(cuid())
+  label    String         @unique // "12"
+  areaId   String
+  seats    Int            @default(4)
+  status   TableStatus    @default(AVAILABLE)
+  posX     Int? // plano visual
+  posY     Int?
+  isActive Boolean        @default(true)
+  area     DiningArea     @relation(fields: [areaId], references: [id])
+  devices  Device[]
+  sessions TableSession[]
+}
+
+model Device {
+  id               String          @id @default(cuid())
+  name             String
+  type             DeviceType
+  tableId          String? // EMENU
+  stationId        String? // KDS
+  tokenHash        String?         @unique // credencial del dispositivo (revocable)
+  pairingCode      String?         @unique // código de 6 dígitos para vincular
+  pairingExpiresAt DateTime?
+  appVersion       String?
+  lastSeenAt       DateTime?
+  isActive         Boolean         @default(true)
+  table            DiningTable?    @relation(fields: [tableId], references: [id])
+  station          KitchenStation? @relation(fields: [stationId], references: [id])
+}
+
+model TableSession {
+  id              String           @id @default(cuid())
+  tableId         String
+  status          SessionStatus    @default(OPEN)
+  guestCount      Int?
+  waiterId        String?
+  openedAt        DateTime         @default(now())
+  closedAt        DateTime?
+  table           DiningTable      @relation(fields: [tableId], references: [id])
+  orders          Order[]
+  bills           Bill[]
+  serviceRequests ServiceRequest[]
+}
+
+enum ServiceRequestType {
+  CALL_WAITER
+  REQUEST_BILL
+  ASSISTANCE
+}
+
+enum ServiceRequestStatus {
+  OPEN
+  ACKNOWLEDGED
+  DONE
+}
+
+model ServiceRequest {
+  id             String               @id @default(cuid())
+  tableSessionId String
+  type           ServiceRequestType
+  status         ServiceRequestStatus @default(OPEN)
+  createdAt      DateTime             @default(now())
+  resolvedById   String?
+  resolvedAt     DateTime?
+  tableSession   TableSession         @relation(fields: [tableSessionId], references: [id])
+}
+
+// ───────────── Menú ─────────────
+enum SelectionType {
+  SINGLE
+  MULTIPLE
+}
+
+model KitchenStation {
+  id        String          @id @default(cuid())
+  name      String // Cocina caliente, Bebidas, Postres
+  color     String?
+  sortOrder Int             @default(0)
+  isActive  Boolean         @default(true)
+  products  Product[]
+  tickets   KitchenTicket[]
+  devices   Device[]
+}
+
+model Category {
+  id            String    @id @default(cuid())
+  name          String
+  translations  Json? // { en: { name } }
+  imageUrl      String?
+  sortOrder     Int       @default(0)
+  isActive      Boolean   @default(true)
+  visibleDineIn Boolean   @default(true)
+  visibleOnline Boolean   @default(true)
+  products      Product[]
+}
+
+model Product {
+  id              String                 @id @default(cuid())
+  categoryId      String
+  name            String
+  description     String?
+  translations    Json? // { en: { name, description } }
+  price           Decimal                @db.Decimal(10, 2)
+  imageUrl        String?
+  stationId       String? // a qué estación va
+  taxRateId       String? // null = impuesto por defecto
+  sortOrder       Int                    @default(0)
+  isActive        Boolean                @default(true) // existe en el menú
+  isAvailable     Boolean                @default(true) // agotado hoy (86)
+  visibleDineIn   Boolean                @default(true)
+  visibleOnline   Boolean                @default(true)
+  allergens       String[]
+  prepTimeMinutes Int?
+  createdAt       DateTime               @default(now())
+  updatedAt       DateTime               @updatedAt
+  category        Category               @relation(fields: [categoryId], references: [id])
+  station         KitchenStation?        @relation(fields: [stationId], references: [id])
+  taxRate         TaxRate?               @relation(fields: [taxRateId], references: [id])
+  modifierGroups  ProductModifierGroup[]
+}
+
+model ModifierGroup {
+  id            String                 @id @default(cuid())
+  name          String // "Tamaño", "Extras", "Quitar ingredientes"
+  translations  Json?
+  selectionType SelectionType
+  minSelect     Int                    @default(0)
+  maxSelect     Int                    @default(1)
+  isActive      Boolean                @default(true)
+  options       ModifierOption[]
+  products      ProductModifierGroup[]
+}
+
+model ProductModifierGroup {
+  productId       String
+  modifierGroupId String
+  sortOrder       Int           @default(0)
+  product         Product       @relation(fields: [productId], references: [id], onDelete: Cascade)
+  modifierGroup   ModifierGroup @relation(fields: [modifierGroupId], references: [id], onDelete: Cascade)
+
+  @@id([productId, modifierGroupId])
+}
+
+model ModifierOption {
+  id              String        @id @default(cuid())
+  groupId         String
+  name            String
+  translations    Json?
+  priceAdjustment Decimal       @default(0) @db.Decimal(10, 2)
+  isDefault       Boolean       @default(false)
+  isAvailable     Boolean       @default(true)
+  sortOrder       Int           @default(0)
+  group           ModifierGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+}
+
+// ───────────── Órdenes y cocina ─────────────
+enum OrderChannel {
+  TABLET
+  POS
+  WAITER
+  ONLINE
+}
+
+enum FulfillmentType {
+  DINE_IN
+  TAKEOUT
+  PICKUP
+  DELIVERY
+}
+
+enum OrderStatus {
+  PENDING_PAYMENT // online prepago esperando Stripe
+  PENDING_APPROVAL // tablet esperando OK del mesero (si está activado)
+  PLACED // recibida, enviada a cocina
+  ACCEPTED
+  PREPARING
+  READY
+  OUT_FOR_DELIVERY
+  COMPLETED
+  CANCELLED
+}
+
+enum TicketStatus {
+  NEW
+  ACCEPTED
+  PREPARING
+  READY
+  COMPLETED
+  CANCELLED
+}
+
+enum ItemStatus {
+  ACTIVE
+  VOIDED
+}
+
+model Order {
+  id                   String              @id @default(cuid())
+  businessDate         DateTime            @db.Date
+  number               Int // 1, 2, 3… se reinicia cada día
+  publicCode           String              @unique // para seguimiento online
+  clientRequestId      String              @unique // idempotencia
+  channel              OrderChannel
+  fulfillmentType      FulfillmentType
+  status               OrderStatus
+  tableSessionId       String?
+  billId               String
+  customerId           String?
+  deviceId             String?
+  createdById          String? // empleado
+  customerName         String?
+  customerPhone        String?
+  customerEmail        String?
+  deliveryAddress      Json? // snapshot de la dirección
+  deliveryInstructions String?
+  deliveryZoneId       String?
+  scheduledFor         DateTime?
+  notes                String?
+  estimatedReadyAt     DateTime?
+  placedAt             DateTime?
+  acceptedAt           DateTime?
+  readyAt              DateTime?
+  completedAt          DateTime?
+  cancelledAt          DateTime?
+  cancelReason         String?
+  cancelledById        String?
+  createdAt            DateTime            @default(now())
+  updatedAt            DateTime            @updatedAt
+  tableSession         TableSession?       @relation(fields: [tableSessionId], references: [id])
+  bill                 Bill                @relation(fields: [billId], references: [id])
+  customer             Customer?           @relation(fields: [customerId], references: [id])
+  items                OrderItem[]
+  tickets              KitchenTicket[]
+  deliveryAssignment   DeliveryAssignment?
+
+  @@unique([businessDate, number])
+  @@index([status])
+}
+
+model OrderItem {
+  id             String              @id @default(cuid())
+  orderId        String
+  billId         String // cambia al dividir la cuenta
+  ticketId       String?
+  productId      String?
+  stationId      String?
+  nameSnapshot   String
+  unitPrice      Decimal             @db.Decimal(10, 2) // precio base
+  modifiersTotal Decimal             @default(0) @db.Decimal(10, 2)
+  quantity       Int
+  lineTotal      Decimal             @db.Decimal(10, 2)
+  taxRate        Decimal             @db.Decimal(6, 4) // snapshot
+  notes          String?
+  seat           Int? // para dividir por asiento
+  status         ItemStatus          @default(ACTIVE)
+  voidReason     String?
+  voidedById     String?
+  voidedAt       DateTime?
+  order          Order               @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  bill           Bill                @relation(fields: [billId], references: [id])
+  ticket         KitchenTicket?      @relation(fields: [ticketId], references: [id])
+  modifiers      OrderItemModifier[]
+}
+
+model OrderItemModifier {
+  id                 String    @id @default(cuid())
+  orderItemId        String
+  modifierOptionId   String?
+  groupNameSnapshot  String
+  optionNameSnapshot String
+  priceAdjustment    Decimal   @db.Decimal(10, 2)
+  orderItem          OrderItem @relation(fields: [orderItemId], references: [id], onDelete: Cascade)
+}
+
+model KitchenTicket {
+  id          String         @id @default(cuid())
+  orderId     String
+  stationId   String
+  status      TicketStatus   @default(NEW)
+  createdAt   DateTime       @default(now())
+  acceptedAt  DateTime?
+  startedAt   DateTime?
+  readyAt     DateTime?
+  completedAt DateTime?
+  order       Order          @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  station     KitchenStation @relation(fields: [stationId], references: [id])
+  items       OrderItem[]
+
+  @@index([stationId, status])
+}
+
+model DailyCounter {
+  businessDate    DateTime @id @db.Date
+  lastOrderNumber Int      @default(0)
+}
+
+// ───────────── Cuentas, pagos y caja ─────────────
+enum BillStatus {
+  UNPAID
+  PARTIALLY_PAID
+  PAID
+  REFUNDED
+  VOID
+}
+
+enum PaymentMethod {
+  CASH
+  CARD_TERMINAL
+  CARD_ONLINE
+  CARD_QR
+  OTHER
+}
+
+enum PaymentStatus {
+  PENDING
+  SUCCEEDED
+  FAILED
+  CANCELLED
+  REFUNDED
+  PARTIALLY_REFUNDED
+}
+
+enum DiscountType {
+  PERCENT
+  AMOUNT
+}
+
+enum CashMovementType {
+  PAY_IN
+  PAY_OUT
+  DROP
+}
+
+model Bill {
+  id             String        @id @default(cuid())
+  tableSessionId String?
+  status         BillStatus    @default(UNPAID)
+  subtotal       Decimal       @default(0) @db.Decimal(10, 2)
+  discountTotal  Decimal       @default(0) @db.Decimal(10, 2)
+  taxTotal       Decimal       @default(0) @db.Decimal(10, 2)
+  deliveryFee    Decimal       @default(0) @db.Decimal(10, 2)
+  tipTotal       Decimal       @default(0) @db.Decimal(10, 2)
+  total          Decimal       @default(0) @db.Decimal(10, 2)
+  amountPaid     Decimal       @default(0) @db.Decimal(10, 2)
+  closedAt       DateTime?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+  tableSession   TableSession? @relation(fields: [tableSessionId], references: [id])
+  orders         Order[]
+  items          OrderItem[]
+  payments       Payment[]
+  discounts      Discount[]
+}
+
+model Discount {
+  id             String       @id @default(cuid())
+  billId         String
+  orderItemId    String? // null = a toda la cuenta
+  type           DiscountType
+  value          Decimal      @db.Decimal(10, 2)
+  amount         Decimal      @db.Decimal(10, 2) // calculado
+  reason         String
+  appliedById    String
+  authorizedById String? // gerente que puso el PIN
+  createdAt      DateTime     @default(now())
+  bill           Bill         @relation(fields: [billId], references: [id])
+}
+
+model Payment {
+  id                    String        @id @default(cuid())
+  billId                String
+  method                PaymentMethod
+  status                PaymentStatus @default(PENDING)
+  amount                Decimal       @db.Decimal(10, 2)
+  tipAmount             Decimal       @default(0) @db.Decimal(10, 2)
+  cashTendered          Decimal?      @db.Decimal(10, 2)
+  changeGiven           Decimal?      @db.Decimal(10, 2)
+  stripePaymentIntentId String?       @unique
+  employeeId            String?
+  cashShiftId           String?
+  createdAt             DateTime      @default(now())
+  bill                  Bill          @relation(fields: [billId], references: [id])
+  cashShift             CashShift?    @relation(fields: [cashShiftId], references: [id])
+  refunds               Refund[]
+}
+
+model Refund {
+  id             String   @id @default(cuid())
+  paymentId      String
+  amount         Decimal  @db.Decimal(10, 2)
+  reason         String
+  stripeRefundId String?  @unique
+  employeeId     String
+  createdAt      DateTime @default(now())
+  payment        Payment  @relation(fields: [paymentId], references: [id])
+}
+
+model CashShift {
+  id           String         @id @default(cuid())
+  deviceId     String?
+  openedById   String
+  closedById   String?
+  openedAt     DateTime       @default(now())
+  closedAt     DateTime?
+  openingCash  Decimal        @db.Decimal(10, 2)
+  expectedCash Decimal?       @db.Decimal(10, 2)
+  countedCash  Decimal?       @db.Decimal(10, 2)
+  difference   Decimal?       @db.Decimal(10, 2)
+  notes        String?
+  payments     Payment[]
+  movements    CashMovement[]
+}
+
+model CashMovement {
+  id         String           @id @default(cuid())
+  shiftId    String
+  type       CashMovementType
+  amount     Decimal          @db.Decimal(10, 2)
+  reason     String
+  employeeId String
+  createdAt  DateTime         @default(now())
+  shift      CashShift        @relation(fields: [shiftId], references: [id])
+}
+
+// ───────────── Delivery (port de Gopicadera) ─────────────
+enum DriverStatus {
+  OFFLINE
+  AVAILABLE
+  BUSY
+  SUSPENDED
+}
+
+enum DeliveryAssignmentStatus {
+  PENDING
+  ACCEPTED
+  PICKED_UP
+  DELIVERED
+  CANCELLED
+}
+
+model DeliveryZone {
+  id         String   @id @default(cuid())
+  name       String
+  polygon    Json? // GeoJSON; o radio
+  radiusKm   Decimal? @db.Decimal(6, 2)
+  fee        Decimal  @db.Decimal(10, 2)
+  minOrder   Decimal  @default(0) @db.Decimal(10, 2)
+  etaMinutes Int      @default(30)
+  isActive   Boolean  @default(true)
+}
+
+model DriverProfile {
+  id           String               @id @default(cuid())
+  employeeId   String               @unique
+  photoUrl     String?
+  vehicleType  String?
+  vehiclePlate String?
+  vehicleColor String?
+  status       DriverStatus         @default(OFFLINE)
+  lastLat      Float?
+  lastLng      Float?
+  lastSeenAt   DateTime?
+  employee     Employee             @relation(fields: [employeeId], references: [id])
+  assignments  DeliveryAssignment[]
+}
+
+model DeliveryAssignment {
+  id          String                   @id @default(cuid())
+  orderId     String                   @unique
+  driverId    String
+  status      DeliveryAssignmentStatus @default(PENDING)
+  acceptedAt  DateTime?
+  pickedUpAt  DateTime?
+  deliveredAt DateTime?
+  cancelledAt DateTime?
+  createdAt   DateTime                 @default(now())
+  order       Order                    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  driver      DriverProfile            @relation(fields: [driverId], references: [id])
+}
+
+// ───────────── Sistema ─────────────
+model NotificationToken {
+  id         String   @id @default(cuid())
+  token      String   @unique
+  platform   String?
+  subject    String // "employee:<id>" | "customer:<id>" | "device:<id>"
+  isActive   Boolean  @default(true)
+  lastSeenAt DateTime @default(now())
+
+  @@index([subject, isActive])
+}
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  actor      String // "employee:<id>" | "device:<id>" | "customer:<id>" | "system"
+  action     String // "order.cancel", "item.void", "discount.apply", "price.change"…
+  entityType String
+  entityId   String
+  data       Json?
+  createdAt  DateTime @default(now())
+
+  @@index([entityType, entityId])
+  @@index([createdAt])
+}
+
+model IdempotencyKey {
+  key       String   @id
+  endpoint  String
+  response  Json
+  createdAt DateTime @default(now())
 }
