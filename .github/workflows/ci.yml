@@ -28,6 +28,8 @@ jobs:
       - run: npm ci --no-audit --no-fund
       - run: npx prisma validate
       - run: npx prisma generate
+      - run: npm run typecheck
+      - run: npm test
       - run: npm run build
 
   web:

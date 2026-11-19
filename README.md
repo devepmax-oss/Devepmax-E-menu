@@ -35,8 +35,11 @@ docker compose -f infra/docker-compose.yml up -d
 # 2. Backend
 cd backend
 cp .env.example .env
+# completar JWT_ACCESS_SECRET, PIN_PEPPER y SEED_ADMIN_* en .env
 npm install
-npm run start:dev          # http://localhost:3000/api/v1/health
+npx prisma migrate dev
+npm run db:seed            # roles de fábrica + primer administrador
+npm run start:dev          # API: http://localhost:3000/api/v1  ·  Docs: http://localhost:3000/api/docs
 
 # 3. Web
 cd ../web

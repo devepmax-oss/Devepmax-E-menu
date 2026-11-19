@@ -15,7 +15,14 @@
     "skipLibCheck": true,
     "strict": true,
     "strictPropertyInitialization": false,
-    "forceConsistentCasingInFileNames": true
+    "forceConsistentCasingInFileNames": true,
+    "types": [
+      "node",
+      "jest"
+    ]
   },
-  "include": ["src/**/*"]
+  "include": [
+    "src/**/*",
+    "prisma/**/*.ts"
+  ]
 }

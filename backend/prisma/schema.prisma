@@ -73,7 +73,7 @@ model Employee {
   email         String?        @unique
   phone         String?
   passwordHash  String? // login completo (admin, gerente, repartidor)
-  pinHash       String? // login rápido en POS/KDS
+  pinHash       String? @unique // HMAC del PIN (login rápido en POS/KDS)
   roleId        String
   isActive      Boolean        @default(true)
   createdAt     DateTime       @default(now())
