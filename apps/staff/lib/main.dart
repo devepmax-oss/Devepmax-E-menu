@@ -1,54 +1,28 @@
-import 'package:firebase_core/firebase_core.dart';
-import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:devepmax_ui/devepmax_ui.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
-import 'screens/app_shell_screen.dart';
-import 'services/notification_service.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-Future<void> main() async {
+import 'app/router.dart';
+
+void main() {
   WidgetsFlutterBinding.ensureInitialized();
-
-  await SystemChrome.setPreferredOrientations([
-    DeviceOrientation.landscapeLeft,
-    DeviceOrientation.landscapeRight,
-  ]);
-
-  try {
-    if (Firebase.apps.isEmpty) {
-      await Firebase.initializeApp();
-    }
-  } on FirebaseException catch (e) {
-    if (e.code != 'duplicate-app') {
-      rethrow;
-    }
-  }
-
-  FirebaseMessaging.onBackgroundMessage(
-    firebaseMessagingBackgroundHandler,
-  );
-
-  await NotificationService.init();
-
-  runApp(const RestaurantApp());
+  runApp(const ProviderScope(child: StaffApp()));
 }
 
-class RestaurantApp extends StatelessWidget {
-  const RestaurantApp({super.key});
+class StaffApp extends ConsumerWidget {
+  const StaffApp({super.key});
 
   @override
-  Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'Go Picadera',
+  Widget build(BuildContext context, WidgetRef ref) {
+    return MaterialApp.router(
+      title: 'Devepmax E-Menu',
       debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        useMaterial3: true,
-        scaffoldBackgroundColor: const Color(0xFFF5F7FB),
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: const Color(0xFFFF6A3D),
-        ),
-        fontFamily: 'Roboto',
+      // Fase 1: colores fijos. Luego vendrán de la marca del restaurante (/settings/public).
+      theme: buildBrandTheme(
+        primary: const Color(0xFFFF6A3D),
+        accent: const Color(0xFFFACC15),
       ),
-      home: const AppShellScreen(),
+      routerConfig: ref.watch(routerProvider),
     );
   }
 }

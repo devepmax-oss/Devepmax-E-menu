@@ -48,13 +48,13 @@ export class UpdateStationDto {
 export class CreateTaxRateDto {
   @IsString() @MinLength(1) @MaxLength(60) name: string;
   /** Fracción: 0.08875 = 8.875 % */
-  @IsNumber({ maxDecimalPlaces: 4 }) @Min(0) @Max(1) rate: number;
+  @IsNumber({ maxDecimalPlaces: 5 }) @Min(0) @Max(1) rate: number;
   @IsOptional() @IsBoolean() isDefault?: boolean;
 }
 
 export class UpdateTaxRateDto {
   @IsOptional() @IsString() @MinLength(1) @MaxLength(60) name?: string;
-  @IsOptional() @IsNumber({ maxDecimalPlaces: 4 }) @Min(0) @Max(1) rate?: number;
+  @IsOptional() @IsNumber({ maxDecimalPlaces: 5 }) @Min(0) @Max(1) rate?: number;
   @IsOptional() @IsBoolean() isDefault?: boolean;
 }
 
