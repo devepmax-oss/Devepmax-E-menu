@@ -1,4 +1,12 @@
-import { generatePairingCode, generateToken, hashPassword, hashPin, verifyPassword } from './crypto';
+import {
+  generateEmployeePin,
+  generatePairingCode,
+  generateToken,
+  hashPassword,
+  hashPin,
+  isTrivialPin,
+  verifyPassword,
+} from './crypto';
 
 describe('crypto', () => {
   it('verifica la contraseña correcta y rechaza la incorrecta', async () => {
@@ -24,5 +32,20 @@ describe('crypto', () => {
   it('genera códigos de 6 dígitos y tokens sin puntos', () => {
     for (let i = 0; i < 50; i++) expect(generatePairingCode()).toMatch(/^\d{6}$/);
     expect(generateToken()).not.toContain('.');
+  });
+
+  it('genera PINs de 6 dígitos que no son triviales', () => {
+    for (let i = 0; i < 200; i++) {
+      const pin = generateEmployeePin();
+      expect(pin).toMatch(/^\d{6}$/);
+      expect(isTrivialPin(pin)).toBe(false);
+    }
+  });
+
+  it('detecta PINs triviales', () => {
+    for (const pin of ['000000', '111111', '123456', '654321', '890123', '345678']) {
+      expect(isTrivialPin(pin)).toBe(true);
+    }
+    expect(isTrivialPin('482915')).toBe(false);
   });
 });

@@ -65,3 +65,23 @@ export function generateToken(bytes = 32): string {
 export function generatePairingCode(): string {
   return String(randomInt(0, 1_000_000)).padStart(6, '0');
 }
+
+/**
+ * PIN aleatorio de 6 dígitos para empleados. Lo genera siempre el servidor:
+ * nadie lo elige, así no se puede adivinar el PIN de otro probando valores.
+ * Se descartan PINs triviales (repetidos o secuenciales).
+ */
+export function generateEmployeePin(): string {
+  for (;;) {
+    const pin = String(randomInt(0, 1_000_000)).padStart(6, '0');
+    if (!isTrivialPin(pin)) return pin;
+  }
+}
+
+export function isTrivialPin(pin: string): boolean {
+  if (/^(\d)\1+$/.test(pin)) return true;
+  const digits = pin.split('').map(Number);
+  const ascending = digits.every((d, i) => i === 0 || d === (digits[i - 1] + 1) % 10);
+  const descending = digits.every((d, i) => i === 0 || d === (digits[i - 1] + 9) % 10);
+  return ascending || descending;
+}

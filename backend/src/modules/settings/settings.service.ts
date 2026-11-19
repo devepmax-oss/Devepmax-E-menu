@@ -2,6 +2,7 @@ import { BadRequestException, Injectable } from '@nestjs/common';
 import { RestaurantSettings } from '@prisma/client';
 import { EmployeeActor } from '../../common/auth/actor';
 import { PrismaService } from '../../prisma/prisma.service';
+import { ImageService } from '../../storage/image.service';
 import { AuditService } from '../audit/audit.service';
 import { ReplaceOpeningHoursDto, UpdateSettingsDto } from './dto/settings.dto';
 
@@ -22,6 +23,7 @@ export class SettingsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
+    private readonly images: ImageService,
   ) {}
 
   async get(): Promise<RestaurantSettings> {
@@ -98,5 +100,25 @@ export class SettingsService {
       count: dto.hours.length,
     });
     return this.prisma.openingHour.findMany({ orderBy: [{ dayOfWeek: 'asc' }, { opensAt: 'asc' }] });
+  }
+
+  async setLogo(actor: EmployeeActor, file: { buffer: Buffer; mimetype: string; size: number }) {
+    const current = await this.get();
+    const logoUrl = await this.images.save('brand', file);
+    const settings = await this.prisma.restaurantSettings.update({ where: { id: SETTINGS_ID }, data: { logoUrl } });
+    await this.images.remove(current.logoUrl);
+    await this.audit.log(actor, 'settings.logo', 'settings', String(SETTINGS_ID));
+    return settings;
+  }
+
+  async removeLogo(actor: EmployeeActor) {
+    const current = await this.get();
+    const settings = await this.prisma.restaurantSettings.update({
+      where: { id: SETTINGS_ID },
+      data: { logoUrl: null },
+    });
+    await this.images.remove(current.logoUrl);
+    await this.audit.log(actor, 'settings.logo_removed', 'settings', String(SETTINGS_ID));
+    return settings;
   }
 }

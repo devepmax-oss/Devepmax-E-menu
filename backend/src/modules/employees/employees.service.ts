@@ -7,7 +7,7 @@ import {
 } from '@nestjs/common';
 import { Employee, Prisma, Role } from '@prisma/client';
 import { EmployeeActor } from '../../common/auth/actor';
-import { hashPassword, hashPin } from '../../common/crypto';
+import { generateEmployeePin, hashPassword, hashPin } from '../../common/crypto';
 import { loadEnv } from '../../config/env';
 import { isUniqueViolation } from '../../prisma/errors';
 import { PrismaService } from '../../prisma/prisma.service';
@@ -16,6 +16,8 @@ import { AuthService } from '../auth/auth.service';
 import { CreateEmployeeDto, UpdateEmployeeDto } from './dto/employee.dto';
 
 type EmployeeWithRole = Employee & { role: Role };
+
+const PIN_ATTEMPTS = 20;
 
 export function toEmployeeView(employee: EmployeeWithRole) {
   return {
@@ -30,6 +32,10 @@ export function toEmployeeView(employee: EmployeeWithRole) {
     createdAt: employee.createdAt,
     updatedAt: employee.updatedAt,
   };
+}
+
+function uniqueTarget(error: unknown): string {
+  return String((error as Prisma.PrismaClientKnownRequestError).meta?.target ?? '');
 }
 
 @Injectable()
@@ -57,27 +63,28 @@ export class EmployeesService {
   async create(actor: EmployeeActor, dto: CreateEmployeeDto) {
     const role = await this.findRole(dto.roleId);
     this.assertCanHandleRole(actor, role);
+    const passwordHash = dto.password ? await hashPassword(dto.password) : undefined;
 
-    try {
-      const employee = await this.prisma.employee.create({
+    const { result: employee, pin } = await this.withFreshPin(!!dto.generatePin, (pinHash) =>
+      this.prisma.employee.create({
         data: {
           name: dto.name.trim(),
           email: dto.email?.trim().toLowerCase(),
           phone: dto.phone?.trim(),
           roleId: role.id,
-          passwordHash: dto.password ? await hashPassword(dto.password) : undefined,
-          pinHash: dto.pin ? hashPin(dto.pin, this.env.pinPepper) : undefined,
+          passwordHash,
+          pinHash,
         },
         include: { role: true },
-      });
-      await this.audit.log(actor, 'employee.create', 'employee', employee.id, {
-        name: employee.name,
-        role: role.name,
-      });
-      return toEmployeeView(employee);
-    } catch (error) {
-      throw this.translateUniqueError(error);
-    }
+      }),
+    );
+
+    await this.audit.log(actor, 'employee.create', 'employee', employee.id, {
+      name: employee.name,
+      role: role.name,
+      pinGenerated: !!pin,
+    });
+    return { ...toEmployeeView(employee), generatedPin: pin };
   }
 
   async update(actor: EmployeeActor, id: string, dto: UpdateEmployeeDto) {
@@ -87,6 +94,9 @@ export class EmployeesService {
 
     if (id === actor.id && (dto.isActive === false || (dto.roleId && dto.roleId !== current.roleId))) {
       throw new BadRequestException('No puedes desactivarte ni cambiar tu propio rol');
+    }
+    if (dto.regeneratePin && dto.removePin) {
+      throw new BadRequestException('Elige generar un PIN nuevo o quitarlo, no ambos');
     }
 
     let roleId: string | undefined;
@@ -104,23 +114,47 @@ export class EmployeesService {
       isActive: dto.isActive,
     };
     if (dto.password) data.passwordHash = await hashPassword(dto.password);
-    if (dto.pin !== undefined) data.pinHash = dto.pin === null ? null : hashPin(dto.pin, this.env.pinPepper);
+    if (dto.removePin) data.pinHash = null;
 
-    try {
-      const employee = await this.prisma.employee.update({ where: { id }, data, include: { role: true } });
+    const { result: employee, pin } = await this.withFreshPin(!!dto.regeneratePin, (pinHash) =>
+      this.prisma.employee.update({
+        where: { id },
+        data: pinHash ? { ...data, pinHash } : data,
+        include: { role: true },
+      }),
+    );
 
-      if (dto.isActive === false || dto.password || roleId) {
-        await this.auth.revokeAllSessions(`employee:${id}`);
-      }
-      await this.audit.log(actor, 'employee.update', 'employee', id, {
-        fields: Object.keys(dto).filter((k) => !['password', 'pin'].includes(k)),
-        passwordChanged: !!dto.password,
-        pinChanged: dto.pin !== undefined,
-      });
-      return toEmployeeView(employee);
-    } catch (error) {
-      throw this.translateUniqueError(error);
+    if (dto.isActive === false || dto.password || roleId) {
+      await this.auth.revokeAllSessions(`employee:${id}`);
     }
+    await this.audit.log(actor, 'employee.update', 'employee', id, {
+      fields: Object.keys(dto).filter((k) => k !== 'password'),
+      passwordChanged: !!dto.password,
+      pinGenerated: !!pin,
+      pinRemoved: !!dto.removePin,
+    });
+    return { ...toEmployeeView(employee), generatedPin: pin };
+  }
+
+  /**
+   * Ejecuta la escritura con un PIN nuevo (si se pidió). Si el PIN generado coincide con
+   * el de otro empleado, se genera otro en silencio: nunca se revela que un PIN existe.
+   */
+  private async withFreshPin<T>(
+    wantPin: boolean,
+    write: (pinHash: string | undefined) => Promise<T>,
+  ): Promise<{ result: T; pin: string | null }> {
+    for (let attempt = 0; attempt < (wantPin ? PIN_ATTEMPTS : 1); attempt++) {
+      const pin = wantPin ? generateEmployeePin() : null;
+      try {
+        const result = await write(pin ? hashPin(pin, this.env.pinPepper) : undefined);
+        return { result, pin };
+      } catch (error) {
+        if (isUniqueViolation(error) && uniqueTarget(error).includes('pinHash')) continue;
+        throw this.translateUniqueError(error);
+      }
+    }
+    throw new ConflictException('No se pudo generar un PIN. Inténtalo de nuevo.');
   }
 
   private async findRole(roleId: string): Promise<Role> {
@@ -139,9 +173,7 @@ export class EmployeesService {
 
   private translateUniqueError(error: unknown): unknown {
     if (isUniqueViolation(error)) {
-      const target = String((error as Prisma.PrismaClientKnownRequestError).meta?.target ?? '');
-      if (target.includes('pinHash')) return new ConflictException('Ese PIN ya lo usa otro empleado');
-      if (target.includes('email')) return new ConflictException('Ese email ya está registrado');
+      if (uniqueTarget(error).includes('email')) return new ConflictException('Ese email ya está registrado');
       return new ConflictException('Dato duplicado');
     }
     return error;

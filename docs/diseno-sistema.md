@@ -827,7 +827,7 @@ Toda cancelación, anulación de ítem, descuento, reembolso y cambio de precio 
 | Identidad | Cómo entra | Uso |
 |---|---|---|
 | Empleado (admin, gerente, repartidor) | Email/teléfono + contraseña → JWT de acceso (15 min) + refresh revocable | Panel admin, app repartidor |
-| Empleado en dispositivo compartido | **PIN de 4–6 dígitos** en un dispositivo POS/KDS registrado | Cambiar de cajero/mesero rápido |
+| Empleado en dispositivo compartido | **PIN de 6 dígitos generado por el sistema** (nadie lo elige ni puede averiguar si otro PIN existe; se muestra una sola vez) en un dispositivo POS/KDS registrado | Cambiar de cajero/mesero rápido |
 | Dispositivo | Código de vinculación de 6 dígitos generado en admin → token propio | Tablets E-Menu, pantallas KDS |
 | Cliente | Invitado, o cuenta con email/teléfono | Web pública |
 

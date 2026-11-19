@@ -3,7 +3,6 @@ import {
   IsEmail,
   IsOptional,
   IsString,
-  Matches,
   MaxLength,
   MinLength,
   ValidateIf,
@@ -34,10 +33,10 @@ export class CreateEmployeeDto {
   @MaxLength(200)
   password?: string;
 
-  /** Para entrar rápido en POS/KDS. Único por restaurante. */
+  /** Genera un PIN de 6 dígitos para entrar rápido en POS/KDS. Se devuelve una sola vez. */
   @IsOptional()
-  @Matches(/^\d{4,6}$/, { message: 'El PIN debe tener entre 4 y 6 dígitos' })
-  pin?: string;
+  @IsBoolean()
+  generatePin?: boolean;
 }
 
 export class UpdateEmployeeDto {
@@ -73,9 +72,12 @@ export class UpdateEmployeeDto {
   @MaxLength(200)
   password?: string;
 
-  /** null para quitar el PIN. */
+  /** Genera un PIN nuevo (el anterior deja de funcionar). Se devuelve una sola vez. */
   @IsOptional()
-  @ValidateIf((_, value) => value !== null)
-  @Matches(/^\d{4,6}$/, { message: 'El PIN debe tener entre 4 y 6 dígitos' })
-  pin?: string | null;
+  @IsBoolean()
+  regeneratePin?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  removePin?: boolean;
 }

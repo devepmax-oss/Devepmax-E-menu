@@ -3,6 +3,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../core/auth/auth_controller.dart';
+import '../features/admin/screens/devices_screen.dart';
+import '../features/admin/screens/employees_screen.dart';
+import '../features/admin/screens/settings_screen.dart';
 import '../features/auth/login_screen.dart';
 import '../features/menu/screens/menu_screen.dart';
 import '../features/menu/screens/menu_setup_screen.dart';
@@ -36,6 +39,9 @@ final routerProvider = Provider<GoRouter>((ref) {
           GoRoute(path: '/menu', builder: (_, __) => const MenuScreen()),
           GoRoute(path: '/modifiers', builder: (_, __) => const ModifierGroupsScreen()),
           GoRoute(path: '/menu-setup', builder: (_, __) => const MenuSetupScreen()),
+          GoRoute(path: '/employees', builder: (_, __) => const EmployeesScreen()),
+          GoRoute(path: '/devices', builder: (_, __) => const DevicesScreen()),
+          GoRoute(path: '/settings', builder: (_, __) => const SettingsScreen()),
         ],
       ),
     ],
