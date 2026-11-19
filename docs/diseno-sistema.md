@@ -106,14 +106,12 @@ Cambios clave respecto a Gopicaderabackend:
 - Idempotencia (`clientRequestId`), numeración diaria, bitácora de auditoría.
 - Marca del restaurante y textos traducibles (es/en).
 
-### Esquema Prisma
-
-> Fuente de verdad: `backend/prisma/schema.prisma` (validado con Prisma 6.15).
+### Esquema Prisma (borrador)
 
 ```prisma
 // ───────────── Configuración ─────────────
 model RestaurantSettings {
-  id                    Int      @id @default(1) // fila única
+  id                    Int      @id @default(1)   // fila única
   name                  String
   legalName             String?
   logoUrl               String?
@@ -128,7 +126,7 @@ model RestaurantSettings {
   zipCode               String?
   lat                   Float?
   lng                   Float?
-  socialLinks           Json? // { instagram, tiktok, ... }
+  socialLinks           Json?                       // { instagram, tiktok, ... }
   timezone              String   @default("America/New_York")
   currency              String   @default("USD")
   locales               String[] @default(["es", "en"])
@@ -136,7 +134,7 @@ model RestaurantSettings {
   acceptsPickup         Boolean  @default(true)
   acceptsDelivery       Boolean  @default(true)
   onlineOrderingPaused  Boolean  @default(false)
-  requireWaiterApproval Boolean  @default(false) // órdenes de tablet esperan OK del mesero
+  requireWaiterApproval Boolean  @default(false)    // órdenes de tablet esperan OK del mesero
   prepTimeMinutes       Int      @default(20)
   tipPresets            Int[]    @default([15, 18, 20])
   receiptFooter         String?
@@ -146,9 +144,9 @@ model RestaurantSettings {
 
 model OpeningHour {
   id        String @id @default(cuid())
-  dayOfWeek Int // 0 = domingo
-  opensAt   String // "10:30"
-  closesAt  String // "01:00" (puede cruzar medianoche)
+  dayOfWeek Int                      // 0 = domingo
+  opensAt   String                   // "10:30"
+  closesAt  String                   // "01:00" (puede cruzar medianoche)
 }
 
 model TaxRate {
@@ -162,8 +160,8 @@ model TaxRate {
 // ───────────── Personas y acceso ─────────────
 model Role {
   id          String     @id @default(cuid())
-  name        String     @unique // Admin, Gerente, Cajero, Mesero, Cocina, Repartidor
-  permissions String[] // códigos, ver sección 5
+  name        String     @unique     // Admin, Gerente, Cajero, Mesero, Cocina, Repartidor
+  permissions String[]               // códigos, ver sección 5
   isSystem    Boolean    @default(false)
   employees   Employee[]
 }
@@ -173,8 +171,8 @@ model Employee {
   name          String
   email         String?        @unique
   phone         String?
-  passwordHash  String? // login completo (admin, gerente, repartidor)
-  pinHash       String? // login rápido en POS/KDS
+  passwordHash  String?                    // login completo (admin, gerente, repartidor)
+  pinHash       String?                    // login rápido en POS/KDS
   roleId        String
   isActive      Boolean        @default(true)
   createdAt     DateTime       @default(now())
@@ -183,14 +181,14 @@ model Employee {
   driverProfile DriverProfile?
 }
 
-model AuthSession {
-  id        String    @id @default(cuid())
-  subject   String // "employee:<id>" | "customer:<id>" | "device:<id>"
-  tokenHash String    @unique
-  userAgent String?
-  expiresAt DateTime
-  revokedAt DateTime?
-  createdAt DateTime  @default(now())
+model AuthSession {               // refresh tokens revocables
+  id         String    @id @default(cuid())
+  subject    String               // "employee:<id>" | "customer:<id>" | "device:<id>"
+  tokenHash  String    @unique
+  userAgent  String?
+  expiresAt  DateTime
+  revokedAt  DateTime?
+  createdAt  DateTime  @default(now())
 }
 
 model Customer {
@@ -220,40 +218,24 @@ model CustomerAddress {
 }
 
 // ───────────── Sala y dispositivos ─────────────
-enum TableStatus {
-  AVAILABLE
-  OCCUPIED
-  RESERVED
-  CLEANING
-}
-
-enum DeviceType {
-  EMENU
-  POS
-  KDS
-  WAITER
-}
-
-enum SessionStatus {
-  OPEN
-  BILL_REQUESTED
-  CLOSED
-}
+enum TableStatus { AVAILABLE OCCUPIED RESERVED CLEANING }
+enum DeviceType  { EMENU POS KDS WAITER }
+enum SessionStatus { OPEN BILL_REQUESTED CLOSED }
 
 model DiningArea {
   id        String        @id @default(cuid())
-  name      String // Salón, Terraza
+  name      String                       // Salón, Terraza
   sortOrder Int           @default(0)
   tables    DiningTable[]
 }
 
 model DiningTable {
   id       String         @id @default(cuid())
-  label    String         @unique // "12"
+  label    String         @unique        // "12"
   areaId   String
   seats    Int            @default(4)
   status   TableStatus    @default(AVAILABLE)
-  posX     Int? // plano visual
+  posX     Int?                           // plano visual
   posY     Int?
   isActive Boolean        @default(true)
   area     DiningArea     @relation(fields: [areaId], references: [id])
@@ -265,10 +247,10 @@ model Device {
   id               String          @id @default(cuid())
   name             String
   type             DeviceType
-  tableId          String? // EMENU
-  stationId        String? // KDS
-  tokenHash        String?         @unique // credencial del dispositivo (revocable)
-  pairingCode      String?         @unique // código de 6 dígitos para vincular
+  tableId          String?                     // EMENU
+  stationId        String?                     // KDS
+  tokenHash        String?         @unique     // credencial del dispositivo (revocable)
+  pairingCode      String?         @unique     // código de 6 dígitos para vincular
   pairingExpiresAt DateTime?
   appVersion       String?
   lastSeenAt       DateTime?
@@ -277,7 +259,7 @@ model Device {
   station          KitchenStation? @relation(fields: [stationId], references: [id])
 }
 
-model TableSession {
+model TableSession {                      // "la mesa está abierta"
   id              String           @id @default(cuid())
   tableId         String
   status          SessionStatus    @default(OPEN)
@@ -291,19 +273,10 @@ model TableSession {
   serviceRequests ServiceRequest[]
 }
 
-enum ServiceRequestType {
-  CALL_WAITER
-  REQUEST_BILL
-  ASSISTANCE
-}
+enum ServiceRequestType   { CALL_WAITER REQUEST_BILL ASSISTANCE }
+enum ServiceRequestStatus { OPEN ACKNOWLEDGED DONE }
 
-enum ServiceRequestStatus {
-  OPEN
-  ACKNOWLEDGED
-  DONE
-}
-
-model ServiceRequest {
+model ServiceRequest {                    // botón "llamar mesero" / "pedir cuenta"
   id             String               @id @default(cuid())
   tableSessionId String
   type           ServiceRequestType
@@ -315,14 +288,11 @@ model ServiceRequest {
 }
 
 // ───────────── Menú ─────────────
-enum SelectionType {
-  SINGLE
-  MULTIPLE
-}
+enum SelectionType { SINGLE MULTIPLE }
 
 model KitchenStation {
   id        String          @id @default(cuid())
-  name      String // Cocina caliente, Bebidas, Postres
+  name      String                       // Cocina caliente, Bebidas, Postres
   color     String?
   sortOrder Int             @default(0)
   isActive  Boolean         @default(true)
@@ -334,7 +304,7 @@ model KitchenStation {
 model Category {
   id            String    @id @default(cuid())
   name          String
-  translations  Json? // { en: { name } }
+  translations  Json?                     // { en: { name } }
   imageUrl      String?
   sortOrder     Int       @default(0)
   isActive      Boolean   @default(true)
@@ -348,14 +318,14 @@ model Product {
   categoryId      String
   name            String
   description     String?
-  translations    Json? // { en: { name, description } }
+  translations    Json?                  // { en: { name, description } }
   price           Decimal                @db.Decimal(10, 2)
   imageUrl        String?
-  stationId       String? // a qué estación va
-  taxRateId       String? // null = impuesto por defecto
+  stationId       String?                // a qué estación va
+  taxRateId       String?                // null = impuesto por defecto
   sortOrder       Int                    @default(0)
-  isActive        Boolean                @default(true) // existe en el menú
-  isAvailable     Boolean                @default(true) // agotado hoy (86)
+  isActive        Boolean                @default(true)   // existe en el menú
+  isAvailable     Boolean                @default(true)   // agotado hoy (86)
   visibleDineIn   Boolean                @default(true)
   visibleOnline   Boolean                @default(true)
   allergens       String[]
@@ -370,7 +340,7 @@ model Product {
 
 model ModifierGroup {
   id            String                 @id @default(cuid())
-  name          String // "Tamaño", "Extras", "Quitar ingredientes"
+  name          String                 // "Tamaño", "Extras", "Quitar ingredientes"
   translations  Json?
   selectionType SelectionType
   minSelect     Int                    @default(0)
@@ -380,13 +350,12 @@ model ModifierGroup {
   products      ProductModifierGroup[]
 }
 
-model ProductModifierGroup {
+model ProductModifierGroup {             // grupos reutilizables
   productId       String
   modifierGroupId String
   sortOrder       Int           @default(0)
   product         Product       @relation(fields: [productId], references: [id], onDelete: Cascade)
   modifierGroup   ModifierGroup @relation(fields: [modifierGroupId], references: [id], onDelete: Cascade)
-
   @@id([productId, modifierGroupId])
 }
 
@@ -403,24 +372,12 @@ model ModifierOption {
 }
 
 // ───────────── Órdenes y cocina ─────────────
-enum OrderChannel {
-  TABLET
-  POS
-  WAITER
-  ONLINE
-}
-
-enum FulfillmentType {
-  DINE_IN
-  TAKEOUT
-  PICKUP
-  DELIVERY
-}
-
+enum OrderChannel    { TABLET POS WAITER ONLINE }
+enum FulfillmentType { DINE_IN TAKEOUT PICKUP DELIVERY }
 enum OrderStatus {
-  PENDING_PAYMENT // online prepago esperando Stripe
-  PENDING_APPROVAL // tablet esperando OK del mesero (si está activado)
-  PLACED // recibida, enviada a cocina
+  PENDING_PAYMENT     // online prepago esperando Stripe
+  PENDING_APPROVAL    // tablet esperando OK del mesero (si está activado)
+  PLACED              // recibida, enviada a cocina
   ACCEPTED
   PREPARING
   READY
@@ -428,27 +385,15 @@ enum OrderStatus {
   COMPLETED
   CANCELLED
 }
-
-enum TicketStatus {
-  NEW
-  ACCEPTED
-  PREPARING
-  READY
-  COMPLETED
-  CANCELLED
-}
-
-enum ItemStatus {
-  ACTIVE
-  VOIDED
-}
+enum TicketStatus { NEW ACCEPTED PREPARING READY COMPLETED CANCELLED }
+enum ItemStatus   { ACTIVE VOIDED }
 
 model Order {
-  id                   String              @id @default(cuid())
-  businessDate         DateTime            @db.Date
-  number               Int // 1, 2, 3… se reinicia cada día
-  publicCode           String              @unique // para seguimiento online
-  clientRequestId      String              @unique // idempotencia
+  id                   String           @id @default(cuid())
+  businessDate         DateTime         @db.Date
+  number               Int                           // 1, 2, 3… se reinicia cada día
+  publicCode           String           @unique      // para seguimiento online
+  clientRequestId      String           @unique      // idempotencia
   channel              OrderChannel
   fulfillmentType      FulfillmentType
   status               OrderStatus
@@ -456,11 +401,11 @@ model Order {
   billId               String
   customerId           String?
   deviceId             String?
-  createdById          String? // empleado
+  createdById          String?                       // empleado
   customerName         String?
   customerPhone        String?
   customerEmail        String?
-  deliveryAddress      Json? // snapshot de la dirección
+  deliveryAddress      Json?                         // snapshot de la dirección
   deliveryInstructions String?
   deliveryZoneId       String?
   scheduledFor         DateTime?
@@ -473,15 +418,14 @@ model Order {
   cancelledAt          DateTime?
   cancelReason         String?
   cancelledById        String?
-  createdAt            DateTime            @default(now())
-  updatedAt            DateTime            @updatedAt
-  tableSession         TableSession?       @relation(fields: [tableSessionId], references: [id])
-  bill                 Bill                @relation(fields: [billId], references: [id])
-  customer             Customer?           @relation(fields: [customerId], references: [id])
+  createdAt            DateTime         @default(now())
+  updatedAt            DateTime         @updatedAt
+  tableSession         TableSession?    @relation(fields: [tableSessionId], references: [id])
+  bill                 Bill             @relation(fields: [billId], references: [id])
+  customer             Customer?        @relation(fields: [customerId], references: [id])
   items                OrderItem[]
   tickets              KitchenTicket[]
   deliveryAssignment   DeliveryAssignment?
-
   @@unique([businessDate, number])
   @@index([status])
 }
@@ -489,18 +433,18 @@ model Order {
 model OrderItem {
   id             String              @id @default(cuid())
   orderId        String
-  billId         String // cambia al dividir la cuenta
+  billId         String                         // cambia al dividir la cuenta
   ticketId       String?
   productId      String?
   stationId      String?
   nameSnapshot   String
-  unitPrice      Decimal             @db.Decimal(10, 2) // precio base
+  unitPrice      Decimal             @db.Decimal(10, 2)   // precio base
   modifiersTotal Decimal             @default(0) @db.Decimal(10, 2)
   quantity       Int
   lineTotal      Decimal             @db.Decimal(10, 2)
-  taxRate        Decimal             @db.Decimal(6, 4) // snapshot
+  taxRate        Decimal             @db.Decimal(6, 4)    // snapshot
   notes          String?
-  seat           Int? // para dividir por asiento
+  seat           Int?                                     // para dividir por asiento
   status         ItemStatus          @default(ACTIVE)
   voidReason     String?
   voidedById     String?
@@ -511,7 +455,7 @@ model OrderItem {
   modifiers      OrderItemModifier[]
 }
 
-model OrderItemModifier {
+model OrderItemModifier {                 // lo que eligió el cliente, congelado
   id                 String    @id @default(cuid())
   orderItemId        String
   modifierOptionId   String?
@@ -521,7 +465,7 @@ model OrderItemModifier {
   orderItem          OrderItem @relation(fields: [orderItemId], references: [id], onDelete: Cascade)
 }
 
-model KitchenTicket {
+model KitchenTicket {                     // una orden genera un ticket por estación
   id          String         @id @default(cuid())
   orderId     String
   stationId   String
@@ -534,51 +478,20 @@ model KitchenTicket {
   order       Order          @relation(fields: [orderId], references: [id], onDelete: Cascade)
   station     KitchenStation @relation(fields: [stationId], references: [id])
   items       OrderItem[]
-
   @@index([stationId, status])
 }
 
-model DailyCounter {
+model DailyCounter {                      // numeración diaria segura
   businessDate    DateTime @id @db.Date
   lastOrderNumber Int      @default(0)
 }
 
 // ───────────── Cuentas, pagos y caja ─────────────
-enum BillStatus {
-  UNPAID
-  PARTIALLY_PAID
-  PAID
-  REFUNDED
-  VOID
-}
-
-enum PaymentMethod {
-  CASH
-  CARD_TERMINAL
-  CARD_ONLINE
-  CARD_QR
-  OTHER
-}
-
-enum PaymentStatus {
-  PENDING
-  SUCCEEDED
-  FAILED
-  CANCELLED
-  REFUNDED
-  PARTIALLY_REFUNDED
-}
-
-enum DiscountType {
-  PERCENT
-  AMOUNT
-}
-
-enum CashMovementType {
-  PAY_IN
-  PAY_OUT
-  DROP
-}
+enum BillStatus    { UNPAID PARTIALLY_PAID PAID REFUNDED VOID }
+enum PaymentMethod { CASH CARD_TERMINAL CARD_ONLINE CARD_QR OTHER }
+enum PaymentStatus { PENDING SUCCEEDED FAILED CANCELLED REFUNDED PARTIALLY_REFUNDED }
+enum DiscountType  { PERCENT AMOUNT }
+enum CashMovementType { PAY_IN PAY_OUT DROP }
 
 model Bill {
   id             String        @id @default(cuid())
@@ -604,13 +517,13 @@ model Bill {
 model Discount {
   id             String       @id @default(cuid())
   billId         String
-  orderItemId    String? // null = a toda la cuenta
+  orderItemId    String?                    // null = a toda la cuenta
   type           DiscountType
   value          Decimal      @db.Decimal(10, 2)
-  amount         Decimal      @db.Decimal(10, 2) // calculado
+  amount         Decimal      @db.Decimal(10, 2)   // calculado
   reason         String
   appliedById    String
-  authorizedById String? // gerente que puso el PIN
+  authorizedById String?                    // gerente que puso el PIN
   createdAt      DateTime     @default(now())
   bill           Bill         @relation(fields: [billId], references: [id])
 }
@@ -644,7 +557,7 @@ model Refund {
   payment        Payment  @relation(fields: [paymentId], references: [id])
 }
 
-model CashShift {
+model CashShift {                         // apertura y cierre de caja
   id           String         @id @default(cuid())
   deviceId     String?
   openedById   String
@@ -672,30 +585,18 @@ model CashMovement {
 }
 
 // ───────────── Delivery (port de Gopicadera) ─────────────
-enum DriverStatus {
-  OFFLINE
-  AVAILABLE
-  BUSY
-  SUSPENDED
-}
-
-enum DeliveryAssignmentStatus {
-  PENDING
-  ACCEPTED
-  PICKED_UP
-  DELIVERED
-  CANCELLED
-}
+enum DriverStatus { OFFLINE AVAILABLE BUSY SUSPENDED }
+enum DeliveryAssignmentStatus { PENDING ACCEPTED PICKED_UP DELIVERED CANCELLED }
 
 model DeliveryZone {
-  id         String   @id @default(cuid())
-  name       String
-  polygon    Json? // GeoJSON; o radio
-  radiusKm   Decimal? @db.Decimal(6, 2)
-  fee        Decimal  @db.Decimal(10, 2)
-  minOrder   Decimal  @default(0) @db.Decimal(10, 2)
-  etaMinutes Int      @default(30)
-  isActive   Boolean  @default(true)
+  id          String   @id @default(cuid())
+  name        String
+  polygon     Json?                       // GeoJSON; o radio
+  radiusKm    Decimal? @db.Decimal(6, 2)
+  fee         Decimal  @db.Decimal(10, 2)
+  minOrder    Decimal  @default(0) @db.Decimal(10, 2)
+  etaMinutes  Int      @default(30)
+  isActive    Boolean  @default(true)
 }
 
 model DriverProfile {
@@ -732,35 +633,116 @@ model NotificationToken {
   id         String   @id @default(cuid())
   token      String   @unique
   platform   String?
-  subject    String // "employee:<id>" | "customer:<id>" | "device:<id>"
+  subject    String               // "employee:<id>" | "customer:<id>" | "device:<id>"
   isActive   Boolean  @default(true)
   lastSeenAt DateTime @default(now())
-
   @@index([subject, isActive])
 }
 
 model AuditLog {
   id         String   @id @default(cuid())
-  actor      String // "employee:<id>" | "device:<id>" | "customer:<id>" | "system"
-  action     String // "order.cancel", "item.void", "discount.apply", "price.change"…
+  actor      String               // "employee:<id>" | "device:<id>" | "customer:<id>" | "system"
+  action     String               // "order.cancel", "item.void", "discount.apply", "price.change"…
   entityType String
   entityId   String
   data       Json?
   createdAt  DateTime @default(now())
-
   @@index([entityType, entityId])
   @@index([createdAt])
 }
 
 model IdempotencyKey {
-  key       String   @id
-  endpoint  String
-  response  Json
-  createdAt DateTime @default(now())
+  key        String   @id
+  endpoint   String
+  response   Json
+  createdAt  DateTime @default(now())
 }
 ```
 
 > Inventario (Fase 6) se añade después: `InventoryItem`, `Recipe` (producto → ingredientes), `StockMovement`. Por ahora `Product.isAvailable` cubre el "agotado".
+
+### Promociones (Fase 2; cupones en Fase 5)
+
+Tipos en la v1 (decididos): **descuento % o $** en productos o categorías, **2x1 / lleva X paga Y**, **combos a precio fijo** y **cupones para la web**. Horarios especiales (happy hour) quedan para después; el modelo ya trae fechas de vigencia y se le pueden sumar franjas horarias.
+
+```prisma
+enum PromotionType {
+  PERCENT_OFF   // 15 % en hamburguesas
+  AMOUNT_OFF    // $2 menos en bebidas
+  BUY_X_GET_Y   // 2x1 = compra 1, lleva 1 gratis (el más barato sale gratis)
+  COMBO_PRICE   // hamburguesa + acompañamiento + bebida = $15
+}
+
+model Promotion {
+  id             String          @id @default(cuid())
+  name           String          // "2x1 en tacos"
+  description    String?
+  translations   Json?
+  type           PromotionType
+  value          Decimal?        @db.Decimal(10, 2) // % o $ según el tipo
+  buyQuantity    Int?            // BUY_X_GET_Y
+  getQuantity    Int?
+  comboPrice     Decimal?        @db.Decimal(10, 2) // COMBO_PRICE
+  appliesDineIn  Boolean         @default(true)
+  appliesOnline  Boolean         @default(true)
+  requiresCoupon Boolean         @default(false)
+  startsAt       DateTime?
+  endsAt         DateTime?
+  priority       Int             @default(0)
+  isActive       Boolean         @default(true)
+  targets        PromotionTarget[]   // productos o categorías que participan
+  comboSlots     PromotionComboSlot[] // "elige 1 hamburguesa", "elige 1 bebida"
+  coupons        Coupon[]
+}
+
+model PromotionTarget {
+  id          String  @id @default(cuid())
+  promotionId String
+  productId   String?
+  categoryId  String?
+}
+
+model PromotionComboSlot {        // cada "hueco" del combo y qué productos lo llenan
+  id          String @id @default(cuid())
+  promotionId String
+  name        String // "Bebida"
+  quantity    Int    @default(1)
+  productIds  String[]
+  categoryIds String[]
+}
+
+model Coupon {
+  id                 String    @id @default(cuid())
+  code               String    @unique // BIENVENIDO10 (se guarda en mayúsculas)
+  promotionId        String
+  maxUses            Int?
+  maxUsesPerCustomer Int?
+  usesCount          Int       @default(0)
+  minOrderTotal      Decimal?  @db.Decimal(10, 2)
+  startsAt           DateTime?
+  endsAt             DateTime?
+  isActive           Boolean   @default(true)
+}
+
+model CouponRedemption {
+  id         String   @id @default(cuid())
+  couponId   String
+  orderId    String
+  customerId String?
+  createdAt  DateTime @default(now())
+}
+```
+
+**Reglas del motor de precios** (siempre en el servidor):
+- Al crear o modificar una orden se evalúan las promociones activas y vigentes para su canal; el resultado se guarda como `Discount` con `promotionId` (y `couponId` si aplica), así queda el detalle en la cuenta, el recibo y los reportes.
+- Una línea recibe como máximo una promoción automática (la de mayor ahorro; empate → mayor `priority`). Las promociones no se acumulan salvo un cupón sobre el total.
+- **Combos**: los productos siguen siendo líneas separadas (cada uno va a su estación de cocina); el descuento es la diferencia entre la suma de las líneas y `comboPrice`.
+- **2x1**: se descuenta el artículo más barato de cada grupo que cumple la regla.
+- Los descuentos manuales del cajero (con PIN de gerente) siguen existiendo aparte.
+- Toda creación o cambio de promoción y cupón queda en `AuditLog`.
+
+### Estadísticas de ventas e ingresos (Fase 6)
+Pantalla única en la app Staff (rol con `reports.view`): ventas e ingresos por día, semana y mes con comparación contra el periodo anterior; ingresos por canal (mesa, POS, online, delivery); productos y categorías más vendidos; horas pico; ticket promedio (global y por mesa); tiempo promedio de preparación por estación; cancelaciones y descuentos (manuales, promociones y cupones, con su costo); propinas; métodos de pago. Filtros por rango de fechas y exportación a CSV/Excel.
 
 ---
 
@@ -886,11 +868,11 @@ Toda cancelación, anulación de ítem, descuento, reembolso y cambio de precio 
 |---|---|---|
 | **0. Preparación** | Monorepo `Devepmax-E-menu` con apps y web copiadas (respaldo en git). Esqueleto de backend NestJS, paquetes Flutter compartidos, Docker con PostgreSQL local, CI. | Base de trabajo ordenada |
 | **1. Fundamentos** | NestJS + Prisma con el esquema nuevo. Auth (empleados, roles, permisos, PIN, dispositivos con vinculación). Ajustes + marca. Auditoría. OpenAPI → clientes Dart y TS. Menú: categorías, productos, modificadores reutilizables, estaciones, imágenes, agotado. Admin de menú en app Staff (portado). Renombrar apps (`com.devepmax.emenu.*`) y configuración Firebase por instancia. | Sistema central seguro con menú administrable |
-| **2. Motor de órdenes + canal online** | Órdenes, ítems con modificadores, tickets por estación, máquina de estados, idempotencia, numeración diaria, cuentas. Gateway Socket.IO con rooms y resync. Port de carrito, checkout Stripe y repartidores. Web apuntando a la API nueva en **gopicadera.online**. | Pedidos online de punta a punta sobre el motor nuevo |
+| **2. Motor de órdenes + canal online** | Órdenes, ítems con modificadores, tickets por estación, máquina de estados, idempotencia, numeración diaria, cuentas. **Motor de precios con promociones** (descuento %/$, 2x1, combos) y pantalla de promociones en la app Staff. Gateway Socket.IO con rooms y resync. Port de carrito, checkout Stripe y repartidores. Web apuntando a la API nueva en **gopicadera.online**. | Pedidos online de punta a punta sobre el motor nuevo |
 | **3. Sala: E-Menu, KDS y meseros** | Áreas, mesas, plano visual, sesiones. App E-Menu (kiosco Android, bilingüe, fotos, modificadores, seguimiento, llamar mesero, pedir cuenta). KDS por estación con temporizadores y alertas. Modo mesero. | Las mesas piden solas y cocina opera por estaciones |
 | **4. POS y caja** | Mesas, órdenes manuales, cuentas, dividir, descuentos con PIN, propinas, efectivo, **Stripe Terminal**, **pago por QR desde la mesa**, recibos impresos (ESC/POS) y digitales, reembolsos, turnos y cierre de caja. | **Piloto en el restaurante** |
-| **5. Online+** | Seguimiento en vivo en la web, cuentas de cliente, historial y "repetir pedido", zonas y costos de delivery, pausar pedidos online, órdenes programadas, marca y contenido desde la API, SEO por producto, reseñas desde Google. | Experiencia online superior a la competencia |
-| **6. Reportes e inventario** | Ventas por día/semana/mes, por canal, por producto, más vendidos, horas pico, ticket promedio por mesa, tiempo de preparación por estación, cancelaciones, métodos de pago. Inventario básico. | Dueño decide con datos |
+| **5. Online+** | **Cupones para la web**, seguimiento en vivo en la web, cuentas de cliente, historial y "repetir pedido", zonas y costos de delivery, pausar pedidos online, órdenes programadas, marca y contenido desde la API, SEO por producto, reseñas desde Google. | Experiencia online superior a la competencia |
+| **6. Estadísticas e inventario** | **Pantalla de estadísticas de ventas e ingresos** (ver sección 3): por día/semana/mes, por canal, por producto, más vendidos, horas pico, ticket promedio por mesa, tiempo de preparación por estación, cancelaciones, costo de promociones y cupones, propinas, métodos de pago, exportación. Inventario básico. | Dueño decide con datos |
 | **7. Endurecimiento y lanzamiento** | Pruebas de carga y concurrencia, pruebas de desconexión, revisión de seguridad, monitoreo, backups probados, script de instalación para nuevos restaurantes, publicación en tiendas. | Listo para vender a más restaurantes |
 
 Pruebas, seguridad y revisión de UX se hacen **en cada fase**, no solo en la 7.
@@ -911,3 +893,4 @@ Pruebas, seguridad y revisión de UX se hacen **en cada fase**, no solo en la 7.
 ## 8. Pendiente de decidir
 - **Lector Stripe Terminal** (p. ej. WisePOS E o S700) — antes de la Fase 4.
 - **Hosting:** seguir en Railway o mover; PostgreSQL en Supabase o gestionado — antes de la Fase 2.
+- **Happy hour** (promociones por día y hora): fuera de la v1; el modelo de promociones lo admite después.
