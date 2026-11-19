@@ -35,6 +35,17 @@ async function main(): Promise<void> {
     create: { id: 1, name: restaurantName },
   });
 
+  if ((await prisma.kitchenStation.count()) === 0) {
+    await prisma.kitchenStation.create({ data: { name: 'Cocina', color: '#EF4444' } });
+    console.log('Estación creada: Cocina');
+  }
+
+  if ((await prisma.taxRate.count()) === 0) {
+    // Se ajusta luego en el panel con la tasa real del condado.
+    await prisma.taxRate.create({ data: { name: 'Sales tax', rate: 0, isDefault: true } });
+    console.log('Impuesto creado: Sales tax (0 %). Ajusta la tasa en el panel.');
+  }
+
   const adminRole = await prisma.role.findUniqueOrThrow({ where: { name: ADMIN_ROLE_NAME } });
   const hasAdmin = await prisma.employee.count({ where: { roleId: adminRole.id, isActive: true } });
   const email = process.env.SEED_ADMIN_EMAIL?.trim().toLowerCase();

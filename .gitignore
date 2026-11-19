@@ -37,3 +37,6 @@ key.properties
 .DS_Store
 Thumbs.db
 *.log
+
+# Imágenes subidas en desarrollo
+backend/uploads/

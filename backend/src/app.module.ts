@@ -4,11 +4,22 @@ import { AuditModule } from './modules/audit/audit.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { DevicesModule } from './modules/devices/devices.module';
 import { EmployeesModule } from './modules/employees/employees.module';
+import { MenuModule } from './modules/menu/menu.module';
 import { SettingsModule } from './modules/settings/settings.module';
 import { PrismaModule } from './prisma/prisma.module';
+import { StorageModule } from './storage/storage.module';
 
 @Module({
-  imports: [PrismaModule, AuditModule, AuthModule, EmployeesModule, DevicesModule, SettingsModule],
+  imports: [
+    PrismaModule,
+    StorageModule,
+    AuditModule,
+    AuthModule,
+    EmployeesModule,
+    DevicesModule,
+    SettingsModule,
+    MenuModule,
+  ],
   controllers: [HealthController],
 })
 export class AppModule {}
