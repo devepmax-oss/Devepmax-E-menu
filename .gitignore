@@ -1,0 +1,39 @@
+# Dependencias y builds
+node_modules/
+dist/
+.next/
+out/
+build/
+coverage/
+*.tsbuildinfo
+
+# Flutter / Dart
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+**/flutter/ephemeral/
+**/Pods/
+**/.symlinks/
+
+# Android
+local.properties
+.gradle/
+*.jks
+*.keystore
+key.properties
+
+# Secretos (nunca al repo)
+.env
+.env.*
+!.env.example
+*credentials*.json
+*.pem
+
+# IDE / SO
+.idea/
+*.iml
+.vscode/*
+!.vscode/extensions.json
+.DS_Store
+Thumbs.db
+*.log

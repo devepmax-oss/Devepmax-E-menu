@@ -1,0 +1,12 @@
+// Devepmax E-Menu — esquema de base de datos.
+// Fase 0: solo configuración. Los modelos se agregan en la Fase 1
+// a partir de docs/diseno-sistema.md (sección 3).
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
