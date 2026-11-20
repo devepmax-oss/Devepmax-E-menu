@@ -21,6 +21,7 @@ export interface PricedModifier {
 
 export interface PricedLine {
   productId: string;
+  categoryId: string;
   stationId: string | null;
   nameSnapshot: string;
   unitPrice: Decimal;
@@ -93,6 +94,7 @@ export class PricingService {
       const unitPrice = money(product.price);
       return {
         productId: product.id,
+        categoryId: product.categoryId,
         stationId: product.stationId,
         nameSnapshot: product.name,
         unitPrice,

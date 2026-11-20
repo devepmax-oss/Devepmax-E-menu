@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/ui/feedback.dart';
+import '../../promotions/data/promotions_api.dart';
 import '../data/menu_models.dart';
 import '../menu_controller.dart';
 import '../widgets/common.dart';
@@ -39,7 +40,10 @@ class _MenuScreenState extends ConsumerState<MenuScreen> {
           IconButton(
             tooltip: 'Actualizar',
             icon: const Icon(Icons.refresh_rounded),
-            onPressed: () => _run(_controller.reload),
+            onPressed: () {
+              ref.invalidate(promotionsProvider);
+              _run(_controller.reload);
+            },
           ),
           const SizedBox(width: 8),
         ],
@@ -148,6 +152,8 @@ class _MenuScreenState extends ConsumerState<MenuScreen> {
 
   Widget _buildProducts(AdminMenu menu, Category category) {
     final theme = Theme.of(context);
+    // Si el usuario no puede ver promociones (o falla la carga), simplemente no hay etiquetas.
+    final promotions = ref.watch(promotionsProvider).value ?? const <Promotion>[];
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -190,6 +196,7 @@ class _MenuScreenState extends ConsumerState<MenuScreen> {
                   itemCount: category.products.length,
                   itemBuilder: (context, index) => _ProductCard(
                     product: category.products[index],
+                    promotions: activePromotionsFor(promotions, category.products[index]),
                     station: menu.stations.firstWhereOrNull((s) => s.id == category.products[index].stationId),
                     onTap: () => openProductEditor(
                       context,
@@ -209,12 +216,14 @@ class _MenuScreenState extends ConsumerState<MenuScreen> {
 class _ProductCard extends StatelessWidget {
   const _ProductCard({
     required this.product,
+    required this.promotions,
     required this.station,
     required this.onTap,
     required this.onAvailabilityChanged,
   });
 
   final Product product;
+  final List<Promotion> promotions;
   final Station? station;
   final VoidCallback onTap;
   final ValueChanged<bool> onAvailabilityChanged;
@@ -231,9 +240,20 @@ class _ProductCard extends StatelessWidget {
           children: [
             AspectRatio(
               aspectRatio: 4 / 3,
-              child: Opacity(
-                opacity: product.isAvailable && product.isActive ? 1 : 0.45,
-                child: ProductImage(url: product.imageUrl),
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  Opacity(
+                    opacity: product.isAvailable && product.isActive ? 1 : 0.45,
+                    child: ProductImage(url: product.imageUrl),
+                  ),
+                  if (promotions.isNotEmpty)
+                    Positioned(
+                      top: 8,
+                      left: 8,
+                      child: _PromotionBadge(promotions: promotions),
+                    ),
+                ],
               ),
             ),
             Expanded(
@@ -274,6 +294,40 @@ class _ProductCard extends StatelessWidget {
                   Switch(value: product.isAvailable, onChanged: onAvailabilityChanged),
                 ],
               ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Etiqueta roja sobre la foto del producto. Al pasar el mouse muestra
+/// el nombre de cada promoción que le aplica.
+class _PromotionBadge extends StatelessWidget {
+  const _PromotionBadge({required this.promotions});
+  final List<Promotion> promotions;
+
+  @override
+  Widget build(BuildContext context) {
+    final extra = promotions.length > 1 ? ' +${promotions.length - 1}' : '';
+    return Tooltip(
+      message: promotions.map((p) => 'Promo: ${p.name}').join('\n'),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+        decoration: BoxDecoration(
+          color: Colors.red.shade600,
+          borderRadius: BorderRadius.circular(999),
+          boxShadow: const [BoxShadow(color: Colors.black26, blurRadius: 4, offset: Offset(0, 1))],
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.local_offer_rounded, size: 14, color: Colors.white),
+            const SizedBox(width: 4),
+            Text(
+              '${promotionBadge(promotions.first)}$extra',
+              style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 13),
             ),
           ],
         ),

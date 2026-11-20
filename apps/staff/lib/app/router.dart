@@ -10,6 +10,7 @@ import '../features/auth/login_screen.dart';
 import '../features/menu/screens/menu_screen.dart';
 import '../features/menu/screens/menu_setup_screen.dart';
 import '../features/menu/screens/modifier_groups_screen.dart';
+import '../features/promotions/screens/promotions_screen.dart';
 import '../features/shell/admin_shell.dart';
 
 final routerProvider = Provider<GoRouter>((ref) {
@@ -39,6 +40,7 @@ final routerProvider = Provider<GoRouter>((ref) {
           GoRoute(path: '/menu', builder: (_, __) => const MenuScreen()),
           GoRoute(path: '/modifiers', builder: (_, __) => const ModifierGroupsScreen()),
           GoRoute(path: '/menu-setup', builder: (_, __) => const MenuSetupScreen()),
+          GoRoute(path: '/promotions', builder: (_, __) => const PromotionsScreen()),
           GoRoute(path: '/employees', builder: (_, __) => const EmployeesScreen()),
           GoRoute(path: '/devices', builder: (_, __) => const DevicesScreen()),
           GoRoute(path: '/settings', builder: (_, __) => const SettingsScreen()),

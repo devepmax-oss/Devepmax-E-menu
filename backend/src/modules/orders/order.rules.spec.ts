@@ -72,10 +72,20 @@ describe('precios', () => {
     expect(totals.total.toString()).toBe('16.33');
   });
 
-  it('el descuento reduce la base del impuesto', () => {
-    const totals = computeTotals([{ lineTotal: '20.00', taxRate: '0.1' }], { discountTotal: '5.00' });
+  it('el descuento de la cuenta reduce la base del impuesto', () => {
+    const totals = computeTotals([{ lineTotal: '20.00', taxRate: '0.1' }], { billDiscount: '5.00' });
     expect(totals.taxTotal.toString()).toBe('1.5');
     expect(totals.total.toString()).toBe('16.5');
+  });
+
+  it('el descuento de una línea solo reduce la base de esa línea', () => {
+    const totals = computeTotals([
+      { lineTotal: '10.00', taxRate: '0.1', discount: '10.00' },
+      { lineTotal: '10.00', taxRate: '0' },
+    ]);
+    expect(totals.discountTotal.toString()).toBe('10');
+    expect(totals.taxTotal.toString()).toBe('0');
+    expect(totals.total.toString()).toBe('10');
   });
 
   it('genera códigos públicos legibles', () => {

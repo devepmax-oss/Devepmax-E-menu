@@ -2,7 +2,14 @@ import { Body, Controller, ForbiddenException, Get, HttpCode, Param, Patch, Post
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { Actor } from '../../common/auth/actor';
 import { CurrentActor, RequirePermissions } from '../../common/auth/decorators';
-import { CancelOrderDto, CreateOrderDto, KitchenQueryDto, OrdersQueryDto, UpdateTicketDto } from './dto/order.dto';
+import {
+  CancelOrderDto,
+  CreateOrderDto,
+  KitchenQueryDto,
+  OrdersQueryDto,
+  QuoteOrderDto,
+  UpdateTicketDto,
+} from './dto/order.dto';
 import { KitchenService } from './kitchen.service';
 import { OrdersService } from './orders.service';
 
@@ -23,6 +30,16 @@ export class OrdersController {
       throw new ForbiddenException('Permiso requerido: orders.create');
     }
     return this.orders.create(actor, dto);
+  }
+
+  /** Precios, promociones y totales de un carrito, sin crear la orden. */
+  @Post('quote')
+  @HttpCode(200)
+  quote(@CurrentActor() actor: Actor, @Body() dto: QuoteOrderDto) {
+    if (actor.kind === 'employee' && !actor.permissions.has('orders.create')) {
+      throw new ForbiddenException('Permiso requerido: orders.create');
+    }
+    return this.orders.quote(dto);
   }
 
   @RequirePermissions('orders.create')

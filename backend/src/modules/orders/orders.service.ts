@@ -11,8 +11,10 @@ import { isUniqueViolation } from '../../prisma/errors';
 import { PrismaService } from '../../prisma/prisma.service';
 import { DomainEventsService } from '../../realtime/domain-events.service';
 import { AuditService } from '../audit/audit.service';
+import { Allocation } from '../promotions/promotion.engine';
+import { PromotionsService } from '../promotions/promotions.service';
 import { SettingsService } from '../settings/settings.service';
-import { CreateOrderDto } from './dto/order.dto';
+import { CreateOrderDto, QuoteOrderDto } from './dto/order.dto';
 import {
   businessDateFor,
   computeTotals,
@@ -20,12 +22,12 @@ import {
   generatePublicCode,
   kitchenStarted,
 } from './order.rules';
-import { PricingService } from './pricing.service';
+import { PricedLine, PricingService } from './pricing.service';
 
 type Tx = Prisma.TransactionClient;
 
 export const ORDER_INCLUDE = {
-  items: { orderBy: { id: 'asc' }, include: { modifiers: true } },
+  items: { orderBy: { id: 'asc' }, include: { modifiers: true, discounts: true } },
   tickets: { orderBy: { createdAt: 'asc' }, include: { station: true } },
   bill: true,
   tableSession: { include: { table: true } },
@@ -54,6 +56,7 @@ export function toOrderView(order: OrderWithRelations) {
     completedAt: order.completedAt,
     cancelledAt: order.cancelledAt,
     cancelReason: order.cancelReason,
+    promotions: summarizePromotions(order.items.filter((i) => i.status === 'ACTIVE').flatMap((i) => i.discounts)),
     items: order.items.map((item) => ({
       id: item.id,
       productId: item.productId,
@@ -62,6 +65,7 @@ export function toOrderView(order: OrderWithRelations) {
       unitPrice: item.unitPrice,
       modifiersTotal: item.modifiersTotal,
       lineTotal: item.lineTotal,
+      discount: item.discounts.reduce((sum, d) => sum.plus(d.amount), new Prisma.Decimal(0)),
       notes: item.notes,
       seat: item.seat,
       status: item.status,
@@ -93,11 +97,38 @@ export function toOrderView(order: OrderWithRelations) {
 
 export type OrderView = ReturnType<typeof toOrderView>;
 
+/** Promociones aplicadas, agrupadas (nombre y ahorro total). */
+function summarizePromotions(discounts: { promotionId: string | null; reason: string; amount: Prisma.Decimal }[]) {
+  const byKey = new Map<string, { promotionId: string | null; name: string; amount: Prisma.Decimal }>();
+  for (const d of discounts) {
+    const key = d.promotionId ?? `manual:${d.reason}`;
+    const current = byKey.get(key);
+    byKey.set(key, {
+      promotionId: d.promotionId,
+      name: d.reason,
+      amount: (current?.amount ?? new Prisma.Decimal(0)).plus(d.amount),
+    });
+  }
+  return [...byKey.values()];
+}
+
+/** Descuento por línea según las asignaciones del motor de promociones. */
+function discountsByLine(allocations: Allocation[]): Map<number, Prisma.Decimal> {
+  const result = new Map<number, Prisma.Decimal>();
+  for (const allocation of allocations) {
+    for (const [line, amount] of allocation.perLine) {
+      result.set(line, (result.get(line) ?? new Prisma.Decimal(0)).plus(amount));
+    }
+  }
+  return result;
+}
+
 @Injectable()
 export class OrdersService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly pricing: PricingService,
+    private readonly promotions: PromotionsService,
     private readonly settings: SettingsService,
     private readonly audit: AuditService,
     private readonly events: DomainEventsService,
@@ -116,6 +147,7 @@ export class OrdersService {
     }
 
     const lines = await this.pricing.priceLines(this.prisma, 'dine_in', dto.items);
+    const allocations = await this.promotions.applyToLines('dine_in', lines);
     const status: OrderStatus = channel === 'TABLET' && settings.requireWaiterApproval ? 'PENDING_APPROVAL' : 'PLACED';
 
     let orderId: string;
@@ -146,25 +178,10 @@ export class OrdersService {
               customerName: dto.customerName?.trim() || null,
               customerPhone: dto.customerPhone?.trim() || null,
               notes: dto.notes?.trim() || null,
-              items: {
-                create: lines.map((line) => ({
-                  billId,
-                  productId: line.productId,
-                  stationId: line.stationId,
-                  nameSnapshot: line.nameSnapshot,
-                  unitPrice: line.unitPrice,
-                  modifiersTotal: line.modifiersTotal,
-                  quantity: line.quantity,
-                  lineTotal: line.lineTotal,
-                  taxRate: line.taxRate,
-                  notes: line.notes,
-                  seat: line.seat,
-                  modifiers: { create: line.modifiers },
-                })),
-              },
             },
           });
 
+          await this.createItems(tx, order.id, billId, lines, allocations);
           if (status === 'PLACED') await this.placeInTx(tx, order.id);
           await this.recomputeBill(tx, billId);
           return order.id;
@@ -188,6 +205,33 @@ export class OrdersService {
     this.events.emit('order.created', view);
     if (view.tickets.length) this.events.emit('ticket.created', { orderId, ticketIds: view.tickets.map((t) => t.id) });
     return view;
+  }
+
+  /**
+   * Cotiza sin crear la orden: precios, promociones y totales tal como quedarían.
+   * Lo usan el carrito de la tablet, el POS y la web.
+   */
+  async quote(dto: QuoteOrderDto, channel: 'dine_in' | 'online' = 'dine_in') {
+    const lines = await this.pricing.priceLines(this.prisma, channel, dto.items);
+    const allocations = await this.promotions.applyToLines(channel, lines);
+    const perLine = discountsByLine(allocations);
+    const totals = computeTotals(
+      lines.map((line, i) => ({ lineTotal: line.lineTotal, taxRate: line.taxRate, discount: perLine.get(i) })),
+    );
+    return {
+      lines: lines.map((line, i) => ({
+        productId: line.productId,
+        name: line.nameSnapshot,
+        quantity: line.quantity,
+        unitPrice: line.unitPrice,
+        modifiersTotal: line.modifiersTotal,
+        lineTotal: line.lineTotal,
+        discount: perLine.get(i) ?? new Prisma.Decimal(0),
+        modifiers: line.modifiers.map((m) => ({ group: m.groupNameSnapshot, option: m.optionNameSnapshot, priceAdjustment: m.priceAdjustment })),
+      })),
+      promotions: allocations.map((a) => ({ promotionId: a.promotionId, name: a.name, amount: a.amount })),
+      totals,
+    };
   }
 
   // ───────── Consultar ─────────
@@ -303,6 +347,46 @@ export class OrdersService {
 
   // ───────── Internos ─────────
 
+  /** Crea las líneas, sus modificadores y los descuentos de promociones. */
+  private async createItems(tx: Tx, orderId: string, billId: string, lines: PricedLine[], allocations: Allocation[]) {
+    const itemIds: string[] = [];
+    for (const line of lines) {
+      const item = await tx.orderItem.create({
+        data: {
+          orderId,
+          billId,
+          productId: line.productId,
+          stationId: line.stationId,
+          nameSnapshot: line.nameSnapshot,
+          unitPrice: line.unitPrice,
+          modifiersTotal: line.modifiersTotal,
+          quantity: line.quantity,
+          lineTotal: line.lineTotal,
+          taxRate: line.taxRate,
+          notes: line.notes,
+          seat: line.seat,
+          modifiers: { create: line.modifiers },
+        },
+      });
+      itemIds.push(item.id);
+    }
+    for (const allocation of allocations) {
+      for (const [line, amount] of allocation.perLine) {
+        await tx.discount.create({
+          data: {
+            billId,
+            orderItemId: itemIds[line],
+            type: 'AMOUNT',
+            value: amount,
+            amount,
+            reason: allocation.name,
+            promotionId: allocation.promotionId,
+          },
+        });
+      }
+    }
+  }
+
   /** Envía la orden a cocina: un ticket por estación. */
   private async placeInTx(tx: Tx, orderId: string): Promise<void> {
     const items = await tx.orderItem.findMany({ where: { orderId, status: 'ACTIVE' } });
@@ -348,11 +432,20 @@ export class OrdersService {
       where: { id: billId },
       include: { items: { where: { status: 'ACTIVE' } }, discounts: true, payments: { where: { status: 'SUCCEEDED' } } },
     });
-    const totals = computeTotals(bill.items, {
-      discountTotal: bill.discounts.reduce((sum, d) => sum.plus(d.amount), new Prisma.Decimal(0)),
-      deliveryFee: bill.deliveryFee,
-      tipTotal: bill.tipTotal,
-    });
+    const activeIds = new Set(bill.items.map((i) => i.id));
+    const perItem = new Map<string, Prisma.Decimal>();
+    let billDiscount = new Prisma.Decimal(0);
+    for (const d of bill.discounts) {
+      if (!d.orderItemId) billDiscount = billDiscount.plus(d.amount);
+      // Los descuentos de líneas anuladas dejan de contar.
+      else if (activeIds.has(d.orderItemId)) {
+        perItem.set(d.orderItemId, (perItem.get(d.orderItemId) ?? new Prisma.Decimal(0)).plus(d.amount));
+      }
+    }
+    const totals = computeTotals(
+      bill.items.map((i) => ({ lineTotal: i.lineTotal, taxRate: i.taxRate, discount: perItem.get(i.id) })),
+      { billDiscount, deliveryFee: bill.deliveryFee, tipTotal: bill.tipTotal },
+    );
     const isEmpty = bill.items.length === 0 && bill.payments.length === 0;
     await tx.bill.update({
       where: { id: billId },

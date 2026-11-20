@@ -6,6 +6,7 @@ import { DevicesModule } from './modules/devices/devices.module';
 import { EmployeesModule } from './modules/employees/employees.module';
 import { MenuModule } from './modules/menu/menu.module';
 import { OrdersModule } from './modules/orders/orders.module';
+import { PromotionsModule } from './modules/promotions/promotions.module';
 import { SettingsModule } from './modules/settings/settings.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { DomainEventsModule } from './realtime/domain-events.service';
@@ -23,6 +24,7 @@ import { StorageModule } from './storage/storage.module';
     SettingsModule,
     MenuModule,
     OrdersModule,
+    PromotionsModule,
   ],
   controllers: [HealthController],
 })

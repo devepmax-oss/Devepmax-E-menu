@@ -99,21 +99,31 @@ export function lineTotal(unitPrice: Decimal.Value, modifiersTotal: Decimal.Valu
 export interface TotalsLine {
   lineTotal: Decimal.Value;
   taxRate: Decimal.Value;
+  /** Descuento de promociones sobre esta línea. */
+  discount?: Decimal.Value;
 }
 
 /**
- * Totales de una cuenta. Los descuentos reducen la base imponible de forma proporcional.
- * El impuesto se redondea una sola vez al final (como en una caja registradora).
+ * Totales de una cuenta. Los descuentos por línea (promociones) reducen la base imponible de
+ * esa línea; los descuentos sobre toda la cuenta, de forma proporcional. El impuesto se redondea
+ * una sola vez al final (como en una caja registradora).
  */
 export function computeTotals(
   lines: TotalsLine[],
-  extras: { discountTotal?: Decimal.Value; deliveryFee?: Decimal.Value; tipTotal?: Decimal.Value } = {},
+  extras: { billDiscount?: Decimal.Value; deliveryFee?: Decimal.Value; tipTotal?: Decimal.Value } = {},
 ) {
   const subtotal = money(lines.reduce((sum, l) => sum.plus(l.lineTotal), new Decimal(0)));
-  const discountTotal = money(Decimal.min(new Decimal(extras.discountTotal ?? 0), subtotal));
-  const factor = subtotal.isZero() ? new Decimal(0) : subtotal.minus(discountTotal).div(subtotal);
-  const rawTax = lines.reduce((sum, l) => sum.plus(new Decimal(l.lineTotal).times(l.taxRate)), new Decimal(0));
+  const netLines = lines.map((l) => {
+    const discount = Decimal.min(new Decimal(l.discount ?? 0), new Decimal(l.lineTotal));
+    return { net: new Decimal(l.lineTotal).minus(discount), discount, taxRate: l.taxRate };
+  });
+  const lineDiscounts = money(netLines.reduce((sum, l) => sum.plus(l.discount), new Decimal(0)));
+  const afterLines = subtotal.minus(lineDiscounts);
+  const billDiscount = money(Decimal.min(new Decimal(extras.billDiscount ?? 0), afterLines));
+  const factor = afterLines.isZero() ? new Decimal(0) : afterLines.minus(billDiscount).div(afterLines);
+  const rawTax = netLines.reduce((sum, l) => sum.plus(l.net.times(l.taxRate)), new Decimal(0));
   const taxTotal = money(rawTax.times(factor));
+  const discountTotal = money(lineDiscounts.plus(billDiscount));
   const deliveryFee = money(extras.deliveryFee ?? 0);
   const tipTotal = money(extras.tipTotal ?? 0);
   const total = money(subtotal.minus(discountTotal).plus(taxTotal).plus(deliveryFee).plus(tipTotal));

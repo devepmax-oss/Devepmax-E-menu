@@ -50,6 +50,15 @@ export class CreateOrderDto {
   items: OrderLineDto[];
 }
 
+export class QuoteOrderDto {
+  @IsArray()
+  @ArrayMinSize(1)
+  @ArrayMaxSize(100)
+  @ValidateNested({ each: true })
+  @Type(() => OrderLineDto)
+  items: OrderLineDto[];
+}
+
 export class CancelOrderDto {
   @IsString() @MinLength(3) @MaxLength(300) reason: string;
 }

@@ -73,7 +73,7 @@ model Employee {
   email         String?        @unique
   phone         String?
   passwordHash  String? // login completo (admin, gerente, repartidor)
-  pinHash       String? @unique // HMAC del PIN (login rápido en POS/KDS)
+  pinHash       String?        @unique // HMAC del PIN (login rápido en POS/KDS)
   roleId        String
   isActive      Boolean        @default(true)
   createdAt     DateTime       @default(now())
@@ -408,6 +408,7 @@ model OrderItem {
   bill           Bill                @relation(fields: [billId], references: [id])
   ticket         KitchenTicket?      @relation(fields: [ticketId], references: [id])
   modifiers      OrderItemModifier[]
+  discounts      Discount[]
 }
 
 model OrderItemModifier {
@@ -508,10 +509,18 @@ model Discount {
   value          Decimal      @db.Decimal(10, 2)
   amount         Decimal      @db.Decimal(10, 2) // calculado
   reason         String
-  appliedById    String
+  appliedById    String? // null = aplicado automáticamente (promoción)
   authorizedById String? // gerente que puso el PIN
+  promotionId    String?
+  couponId       String?
   createdAt      DateTime     @default(now())
   bill           Bill         @relation(fields: [billId], references: [id])
+  orderItem      OrderItem?   @relation(fields: [orderItemId], references: [id], onDelete: Cascade)
+  promotion      Promotion?   @relation(fields: [promotionId], references: [id], onDelete: SetNull)
+  coupon         Coupon?      @relation(fields: [couponId], references: [id], onDelete: SetNull)
+
+  @@index([billId])
+  @@index([promotionId])
 }
 
 model Payment {
@@ -656,4 +665,90 @@ model IdempotencyKey {
   endpoint  String
   response  Json
   createdAt DateTime @default(now())
+}
+
+// ───────────── Promociones ─────────────
+enum PromotionType {
+  PERCENT_OFF // 15 % en hamburguesas
+  AMOUNT_OFF // $2 menos por unidad
+  BUY_X_GET_Y // 2x1: compra 1, lleva 1 gratis (sale gratis el más barato)
+  COMBO_PRICE // hamburguesa + acompañamiento + bebida = precio fijo
+}
+
+model Promotion {
+  id             String               @id @default(cuid())
+  name           String
+  description    String?
+  translations   Json?
+  type           PromotionType
+  value          Decimal?             @db.Decimal(10, 2) // % o $ según el tipo
+  buyQuantity    Int?
+  getQuantity    Int?
+  comboPrice     Decimal?             @db.Decimal(10, 2)
+  appliesDineIn  Boolean              @default(true)
+  appliesOnline  Boolean              @default(true)
+  requiresCoupon Boolean              @default(false)
+  startsAt       DateTime?
+  endsAt         DateTime?
+  priority       Int                  @default(0)
+  isActive       Boolean              @default(true)
+  createdAt      DateTime             @default(now())
+  updatedAt      DateTime             @updatedAt
+  targets        PromotionTarget[]
+  comboSlots     PromotionComboSlot[]
+  coupons        Coupon[]
+  discounts      Discount[]
+
+  @@index([isActive])
+}
+
+model PromotionTarget {
+  id          String    @id @default(cuid())
+  promotionId String
+  productId   String?
+  categoryId  String?
+  promotion   Promotion @relation(fields: [promotionId], references: [id], onDelete: Cascade)
+
+  @@index([promotionId])
+}
+
+model PromotionComboSlot {
+  id          String    @id @default(cuid())
+  promotionId String
+  name        String // "Bebida"
+  quantity    Int       @default(1)
+  productIds  String[]
+  categoryIds String[]
+  sortOrder   Int       @default(0)
+  promotion   Promotion @relation(fields: [promotionId], references: [id], onDelete: Cascade)
+
+  @@index([promotionId])
+}
+
+model Coupon {
+  id                 String             @id @default(cuid())
+  code               String             @unique // en mayúsculas
+  promotionId        String
+  maxUses            Int?
+  maxUsesPerCustomer Int?
+  usesCount          Int                @default(0)
+  minOrderTotal      Decimal?           @db.Decimal(10, 2)
+  startsAt           DateTime?
+  endsAt             DateTime?
+  isActive           Boolean            @default(true)
+  createdAt          DateTime           @default(now())
+  promotion          Promotion          @relation(fields: [promotionId], references: [id], onDelete: Cascade)
+  redemptions        CouponRedemption[]
+  discounts          Discount[]
+}
+
+model CouponRedemption {
+  id         String   @id @default(cuid())
+  couponId   String
+  orderId    String
+  customerId String?
+  createdAt  DateTime @default(now())
+  coupon     Coupon   @relation(fields: [couponId], references: [id], onDelete: Cascade)
+
+  @@unique([couponId, orderId])
 }
