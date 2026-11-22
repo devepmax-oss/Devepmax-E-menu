@@ -301,6 +301,16 @@ class _OrderCard extends ConsumerWidget {
                   ),
                 ),
               if (items.length > 4) Text('+${items.length - 4} más', style: text.bodySmall),
+              if (order.fulfillmentType == 'DELIVERY') ...[
+                const SizedBox(height: 8),
+                order.delivery == null
+                    ? const DmPill('Sin repartidor', tone: DmTone.warning, icon: Icons.delivery_dining_rounded)
+                    : DmPill(
+                        '${order.delivery!.driverName} · ${deliveryStatusLabels[order.delivery!.status] ?? order.delivery!.status}',
+                        tone: order.delivery!.status == 'PENDING' ? DmTone.warning : DmTone.info,
+                        icon: Icons.delivery_dining_rounded,
+                      ),
+              ],
               if (order.tickets.isNotEmpty) ...[
                 const SizedBox(height: 10),
                 Wrap(spacing: 6, runSpacing: 6, children: [
@@ -608,6 +618,10 @@ class _OrderDetail extends ConsumerWidget {
                   ]),
                 ),
               ],
+              if (order.fulfillmentType == 'DELIVERY') ...[
+                const SizedBox(height: 12),
+                _DriverSection(order: order),
+              ],
               if (order.notes != null && order.notes!.isNotEmpty) ...[
                 const SizedBox(height: 12),
                 DmPanel(
@@ -770,6 +784,128 @@ class _CancelDialogState extends State<_CancelDialog> {
           child: const Text('Cancelar orden'),
         ),
       ],
+    );
+  }
+}
+
+// ───────────────────────── Repartidor ─────────────────────────
+
+/// Quién lleva el pedido y botones para asignar, cambiar o quitar el repartidor.
+class _DriverSection extends ConsumerStatefulWidget {
+  const _DriverSection({required this.order});
+  final OrderView order;
+
+  @override
+  ConsumerState<_DriverSection> createState() => _DriverSectionState();
+}
+
+class _DriverSectionState extends ConsumerState<_DriverSection> {
+  bool _busy = false;
+
+  Future<void> _assign() async {
+    final driver = await showDialog<DriverOption>(context: context, builder: (_) => _AssignDriverDialog(current: widget.order.delivery?.driverId));
+    if (driver == null || !mounted) return;
+    await _run(() => ref.read(ordersApiProvider).assignDriver(widget.order.id, driver.id), 'Asignado a ${driver.name}');
+  }
+
+  Future<void> _unassign() => _run(() => ref.read(ordersApiProvider).unassignDriver(widget.order.id), 'Repartidor quitado');
+
+  Future<void> _run(Future<OrderView> Function() action, String done) async {
+    setState(() => _busy = true);
+    try {
+      final updated = await action();
+      ref.read(ordersBoardProvider.notifier).apply(updated);
+      if (mounted) showSuccess(context, done);
+    } catch (error) {
+      if (mounted) showError(context, error);
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final t = BrandTokens.of(context);
+    final text = Theme.of(context).textTheme;
+    final order = widget.order;
+    final d = order.delivery;
+    final canDispatch = ref.watch(authControllerProvider).value?.employee.can('delivery.dispatch') ?? false;
+    final editable = canDispatch && !order.isFinished && d?.status != 'PICKED_UP';
+
+    return DmPanel(
+      padding: const EdgeInsets.all(12),
+      child: Row(children: [
+        Icon(Icons.delivery_dining_rounded, size: 22, color: d == null ? t.warning : t.accentText),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text('Repartidor', style: text.labelMedium),
+            Text(d?.driverName ?? 'Sin asignar', style: text.titleSmall),
+            if (d != null) Text(deliveryStatusLabels[d.status] ?? d.status, style: text.bodySmall),
+          ]),
+        ),
+        if (_busy)
+          const SizedBox.square(dimension: 20, child: CircularProgressIndicator(strokeWidth: 2))
+        else if (editable) ...[
+          if (d != null)
+            IconButton(tooltip: 'Quitar repartidor', icon: const Icon(Icons.person_remove_rounded), onPressed: _unassign),
+          FilledButton.tonal(onPressed: _assign, child: Text(d == null ? 'Asignar' : 'Cambiar')),
+        ],
+      ]),
+    );
+  }
+}
+
+class _AssignDriverDialog extends ConsumerWidget {
+  const _AssignDriverDialog({this.current});
+  final String? current;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final t = BrandTokens.of(context);
+    final text = Theme.of(context).textTheme;
+    return AlertDialog(
+      title: const Text('Asignar repartidor'),
+      content: SizedBox(
+        width: 420,
+        child: FutureBuilder<List<DriverOption>>(
+          future: ref.read(ordersApiProvider).drivers(),
+          builder: (context, snap) {
+            if (snap.hasError) return Text('No se pudo cargar la lista: ${snap.error}');
+            if (!snap.hasData) return const SizedBox(height: 120, child: Center(child: CircularProgressIndicator()));
+            final drivers = [...snap.data!]..sort((a, b) {
+                if (a.available != b.available) return a.available ? -1 : 1;
+                return a.activeDeliveries.compareTo(b.activeDeliveries);
+              });
+            if (drivers.isEmpty) {
+              return Text(
+                'Todavía no hay repartidores. Crea un empleado con el rol Repartidor (con email y contraseña) en Empleados.',
+                style: text.bodyMedium,
+              );
+            }
+            return Column(mainAxisSize: MainAxisSize.min, children: [
+              for (final d in drivers)
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  enabled: d.status != 'SUSPENDED' && d.id != current,
+                  leading: CircleAvatar(
+                    backgroundColor: t.surface3,
+                    child: Text(d.name.characters.first.toUpperCase(), style: text.titleMedium?.copyWith(color: t.accentText)),
+                  ),
+                  title: Text(d.name),
+                  subtitle: Text([
+                    switch (d.status) { 'AVAILABLE' => 'Disponible', 'SUSPENDED' => 'Suspendido', _ => 'Desconectado' },
+                    if (d.activeDeliveries > 0) '${d.activeDeliveries} en curso',
+                    if (d.id == current) 'ya asignado',
+                  ].join(' · ')),
+                  trailing: Icon(Icons.circle, size: 12, color: d.available ? t.success : t.faint),
+                  onTap: () => Navigator.pop(context, d),
+                ),
+            ]);
+          },
+        ),
+      ),
+      actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cerrar'))],
     );
   }
 }

@@ -18,6 +18,7 @@
     "smoke:promotions": "tsx scripts/smoke-promotions.ts",
     "smoke:realtime": "tsx scripts/smoke-realtime.ts",
     "smoke:online": "tsx scripts/smoke-online.ts",
+    "smoke:delivery": "tsx scripts/smoke-delivery.ts",
     "demo:orders": "tsx scripts/demo-orders.ts"
   },
   "dependencies": {

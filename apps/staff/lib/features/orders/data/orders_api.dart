@@ -36,6 +36,27 @@ class OrdersApi {
   Future<OrderView> complete(String id) => _call(() async =>
       OrderView.fromJson((await _dio.post<Map<String, dynamic>>('/orders/$id/complete')).data!));
 
+  /// Repartidores con su estado y cuántas entregas llevan.
+  Future<List<DriverOption>> drivers() => _call(() async {
+        final response = await _dio.get<List<dynamic>>('/delivery/drivers');
+        return response.data!.map((d) => DriverOption.fromJson(d as Map<String, dynamic>)).toList();
+      });
+
+  Future<OrderView> assignDriver(String orderId, String driverId) => _call(() async => OrderView.fromJson(
+      (await _dio.post<Map<String, dynamic>>('/delivery/orders/$orderId/assign', data: {'driverId': driverId})).data!));
+
+  Future<OrderView> unassignDriver(String orderId) => _call(() async =>
+      OrderView.fromJson((await _dio.delete<Map<String, dynamic>>('/delivery/orders/$orderId/assign')).data!));
+
+  /// Zona de delivery: envío, pedido mínimo y tiempo de entrega.
+  Future<Map<String, dynamic>> deliveryZone() =>
+      _call(() async => (await _dio.get<Map<String, dynamic>>('/delivery/zone')).data!);
+
+  Future<Map<String, dynamic>> saveDeliveryZone({required double fee, required double minOrder, required int etaMinutes}) =>
+      _call(() async => (await _dio.put<Map<String, dynamic>>('/delivery/zone',
+              data: {'fee': fee, 'minOrder': minOrder, 'etaMinutes': etaMinutes}))
+          .data!);
+
   /// Cocina: mueve un ticket (NEW → PREPARING → READY). La orden llega actualizada por tiempo real.
   Future<void> moveTicket(String ticketId, String status) => _call(() async {
         await _dio.patch<Map<String, dynamic>>('/kitchen/tickets/$ticketId', data: {'status': status});
@@ -134,4 +155,9 @@ final todayOrdersProvider = FutureProvider<List<OrderView>>((ref) async {
 /// tablero (se entregó o se canceló mientras el panel estaba abierto, o se abrió desde "Hoy").
 final orderByIdProvider = FutureProvider.autoDispose.family<OrderView, String>(
   (ref, id) => ref.watch(ordersApiProvider).get(id),
+);
+
+/// Zona de delivery (envío, mínimo, tiempo).
+final deliveryZoneProvider = FutureProvider.autoDispose<Map<String, dynamic>>(
+  (ref) => ref.watch(ordersApiProvider).deliveryZone(),
 );

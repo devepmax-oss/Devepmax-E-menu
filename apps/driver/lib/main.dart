@@ -1,57 +1,77 @@
-import 'package:firebase_core/firebase_core.dart';
-import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:devepmax_ui/devepmax_ui.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import 'screens/home/driver_shell_screen.dart';
-import 'services/driver_notification_service.dart';
+import 'core/auth/auth_controller.dart';
+import 'features/auth/login_screen.dart';
+import 'features/deliveries/data/deliveries_api.dart';
+import 'features/deliveries/screens/home_screen.dart';
 
-@pragma('vm:entry-point')
-Future<void> firebaseMessagingBackgroundHandler(
-  RemoteMessage message,
-) async {
-  await Firebase.initializeApp();
-
-  debugPrint(
-    'FCM background message: ${message.messageId} '
-    '${message.data}',
-  );
-}
-
-Future<void> main() async {
+void main() {
   WidgetsFlutterBinding.ensureInitialized();
-
-  // Firebase debe inicializarse antes de acceder a FirebaseMessaging.instance.
-  await Firebase.initializeApp();
-
-  // Registra el procesamiento de mensajes cuando la app está
-  // en segundo plano o cerrada.
-  FirebaseMessaging.onBackgroundMessage(
-    firebaseMessagingBackgroundHandler,
-  );
-
-  // Ahora el servicio puede acceder de forma segura a Firebase Messaging.
-  await DriverNotificationService.instance.initialize();
-
-  runApp(const DriverApp());
+  runApp(const ProviderScope(child: DriverApp()));
 }
 
-class DriverApp extends StatelessWidget {
+class DriverApp extends ConsumerWidget {
   const DriverApp({super.key});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    // Marca del restaurante (Ajustes): colores, fondo y tipografía.
+    final brand = ref.watch(brandProvider).value;
     return MaterialApp(
-      title: 'GoPicadera Driver',
+      title: brand?['name'] != null ? '${brand!['name']} · Repartidor' : 'Repartidor',
       debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: const Color(0xFFFF4D4F),
+      theme: buildBrandTheme(BrandConfig.fromJson(brand)),
+      home: const _Root(),
+    );
+  }
+}
+
+/// Login, o la app si la sesión es de un repartidor.
+class _Root extends ConsumerWidget {
+  const _Root();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final session = ref.watch(authControllerProvider);
+    return session.when(
+      loading: () => const Scaffold(body: Center(child: CircularProgressIndicator())),
+      error: (_, __) => const LoginScreen(),
+      data: (s) {
+        if (s == null) return const LoginScreen();
+        if (!s.employee.can('delivery.own')) return const _NotADriver();
+        return const HomeScreen();
+      },
+    );
+  }
+}
+
+class _NotADriver extends ConsumerWidget {
+  const _NotADriver();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final text = Theme.of(context).textTheme;
+    return Scaffold(
+      body: Center(
+        child: Padding(
+          padding: const EdgeInsets.all(32),
+          child: Column(mainAxisSize: MainAxisSize.min, children: [
+            const Icon(Icons.no_accounts_rounded, size: 56),
+            const SizedBox(height: 16),
+            Text('Esta app es para repartidores', style: text.headlineSmall, textAlign: TextAlign.center),
+            const SizedBox(height: 8),
+            Text('Tu cuenta no tiene el rol Repartidor. Pídele al encargado que te lo asigne en Empleados.',
+                style: text.bodyMedium, textAlign: TextAlign.center),
+            const SizedBox(height: 24),
+            FilledButton(
+              onPressed: () => ref.read(authControllerProvider.notifier).logout(),
+              child: const Text('Cerrar sesión'),
+            ),
+          ]),
         ),
-        scaffoldBackgroundColor: const Color(0xFFF5F7FB),
-        useMaterial3: true,
-        fontFamily: 'Roboto',
       ),
-      home: const DriverShellScreen(),
     );
   }
 }

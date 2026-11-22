@@ -164,6 +164,9 @@ export interface PublicOrder {
   }[];
   promotions: { name: string; amount: Money }[];
   totals: Totals & { amountPaid: Money; paid: boolean };
+  driver: { firstName: string; vehicle: string | null; phone: string | null } | null;
+  driverLocation: { lat: number; lng: number; at: string | null } | null;
+  destination: { lat: number; lng: number } | null;
 }
 
 export interface CreatedOrder {

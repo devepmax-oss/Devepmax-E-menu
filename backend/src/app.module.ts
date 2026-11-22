@@ -1,3 +1,4 @@
+import { DeliveryModule } from './modules/delivery/delivery.module';
 import { OnlineModule } from './modules/online/online.module';
 import { PaymentsModule } from './modules/payments/payments.module';
 import { Module } from '@nestjs/common';
@@ -30,6 +31,7 @@ import { StorageModule } from './storage/storage.module';
     PromotionsModule,
     RealtimeModule,
     PaymentsModule,
+    DeliveryModule,
     OnlineModule,
   ],
   controllers: [HealthController],

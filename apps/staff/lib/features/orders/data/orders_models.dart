@@ -102,6 +102,53 @@ class OrderTicket {
   }
 }
 
+const deliveryStatusLabels = <String, String>{
+  'PENDING': 'Esperando que acepte',
+  'ACCEPTED': 'Aceptó',
+  'PICKED_UP': 'En camino',
+  'DELIVERED': 'Entregado',
+};
+
+/// Repartidor asignado a un pedido de delivery.
+class OrderDelivery {
+  const OrderDelivery({required this.status, required this.driverId, required this.driverName, this.driverPhone});
+  final String status;
+  final String driverId;
+  final String driverName;
+  final String? driverPhone;
+
+  static OrderDelivery? fromJson(Object? json) {
+    if (json is! Map) return null;
+    final driver = (json['driver'] as Map?) ?? const {};
+    return OrderDelivery(
+      status: json['status'] as String? ?? 'PENDING',
+      driverId: driver['id'] as String? ?? '',
+      driverName: driver['name'] as String? ?? 'Repartidor',
+      driverPhone: driver['phone'] as String?,
+    );
+  }
+}
+
+/// Repartidor para el diálogo de asignar.
+class DriverOption {
+  const DriverOption({required this.id, required this.name, required this.status, required this.activeDeliveries, this.phone});
+  final String id;
+  final String name;
+  final String status;
+  final int activeDeliveries;
+  final String? phone;
+
+  bool get available => status == 'AVAILABLE';
+
+  factory DriverOption.fromJson(OrderJson j) => DriverOption(
+        id: j['id'] as String,
+        name: j['name'] as String,
+        status: j['status'] as String? ?? 'OFFLINE',
+        activeDeliveries: j['activeDeliveries'] as int? ?? 0,
+        phone: j['phone'] as String?,
+      );
+}
+
 class OrderPromotion {
   const OrderPromotion(this.name, this.amount);
   final String name;
@@ -126,6 +173,7 @@ class OrderView {
     this.customerEmail,
     this.deliveryAddress,
     this.deliveryInstructions,
+    this.delivery,
     this.notes,
     this.cancelReason,
     required this.items,
@@ -161,6 +209,7 @@ class OrderView {
   /// Dirección de entrega (delivery): street, city, state, zipCode.
   final Map<String, dynamic>? deliveryAddress;
   final String? deliveryInstructions;
+  final OrderDelivery? delivery;
   final String? notes;
   final String? cancelReason;
   final List<OrderItem> items;
@@ -225,6 +274,7 @@ class OrderView {
       customerEmail: j['customerEmail'] as String?,
       deliveryAddress: j['deliveryAddress'] is Map ? Map<String, dynamic>.from(j['deliveryAddress'] as Map) : null,
       deliveryInstructions: j['deliveryInstructions'] as String?,
+      delivery: OrderDelivery.fromJson(j['delivery']),
       notes: j['notes'] as String?,
       cancelReason: j['cancelReason'] as String?,
       items: ((j['items'] as List?) ?? const []).map((i) => OrderItem.fromJson(i as OrderJson)).toList(),

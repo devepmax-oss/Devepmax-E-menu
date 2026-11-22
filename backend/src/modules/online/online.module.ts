@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { DeliveryModule } from '../delivery/delivery.module';
 import { OrdersModule } from '../orders/orders.module';
 import { PaymentsModule } from '../payments/payments.module';
 import { PromotionsModule } from '../promotions/promotions.module';
@@ -7,7 +8,7 @@ import { OnlineController } from './online.controller';
 import { OnlineService } from './online.service';
 
 @Module({
-  imports: [OrdersModule, PaymentsModule, PromotionsModule, SettingsModule],
+  imports: [DeliveryModule, OrdersModule, PaymentsModule, PromotionsModule, SettingsModule],
   controllers: [OnlineController],
   providers: [OnlineService],
 })

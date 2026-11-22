@@ -11,6 +11,7 @@ import { computeTotals } from '../orders/order.rules';
 import { OrdersService } from '../orders/orders.service';
 import { PricingService } from '../orders/pricing.service';
 import { toPublicOrderView } from '../orders/public-order.view';
+import { DeliveryService } from '../delivery/delivery.service';
 import { PaymentsService } from '../payments/payments.service';
 import { StripeService } from '../payments/stripe.service';
 import { PromotionsService } from '../promotions/promotions.service';
@@ -34,6 +35,7 @@ export class OnlineService {
     private readonly orders: OrdersService,
     private readonly payments: PaymentsService,
     private readonly stripe: StripeService,
+    private readonly delivery: DeliveryService,
   ) {}
 
   /** Todo lo que la web necesita para arrancar: marca, horario, canales, envío y pagos. */
@@ -148,6 +150,13 @@ export class OnlineService {
       },
       'system',
     );
+
+    // Ubicar la dirección en el mapa en segundo plano (no retrasa el pedido).
+    if (delivery && address) {
+      void this.delivery
+        .locateOrder(order.id, { street: address.street, city: address.city, state: address.state, zipCode: address.zipCode })
+        .catch(() => undefined);
+    }
 
     const payment =
       order.status === 'PENDING_PAYMENT'

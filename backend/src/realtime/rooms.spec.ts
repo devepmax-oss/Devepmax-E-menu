@@ -141,3 +141,14 @@ describe('seguimiento público', () => {
     expect(normalizeTrackCode(42)).toBeUndefined();
   });
 });
+
+describe('repartidores', () => {
+  it('las entregas van solo al repartidor asignado', () => {
+    expect(roomsForEvent(event('delivery.updated', { driverEmployeeId: 'e9' }))).toEqual([Rooms.employee('e9')]);
+    expect(roomsForEvent(event('delivery.removed', {}))).toEqual([]);
+  });
+
+  it('la ubicación va al seguimiento del pedido y al personal', () => {
+    expect(roomsForEvent(event('driver.location', { publicCode: 'ABC' }))).toEqual([Rooms.order('ABC'), Rooms.pos, Rooms.admin]);
+  });
+});

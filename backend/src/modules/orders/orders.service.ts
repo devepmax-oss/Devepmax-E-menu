@@ -54,6 +54,7 @@ export const ORDER_INCLUDE = {
   tickets: { orderBy: { createdAt: 'asc' }, include: { station: true } },
   bill: true,
   tableSession: { include: { table: true } },
+  deliveryAssignment: { include: { driver: { include: { employee: { select: { id: true, name: true, phone: true } } } } } },
 } satisfies Prisma.OrderInclude;
 
 type OrderWithRelations = Prisma.OrderGetPayload<{ include: typeof ORDER_INCLUDE }>;
@@ -110,6 +111,7 @@ export function toOrderView(order: OrderWithRelations) {
       status: t.status,
       station: { id: t.station.id, name: t.station.name, color: t.station.color },
     })),
+    delivery: toDeliveryInfo(order.deliveryAssignment),
     bill: {
       id: order.bill.id,
       status: order.bill.status,
@@ -126,6 +128,34 @@ export function toOrderView(order: OrderWithRelations) {
 }
 
 export type OrderView = ReturnType<typeof toOrderView>;
+
+type AssignmentWithDriver = NonNullable<OrderWithRelations['deliveryAssignment']>;
+
+/** Repartidor asignado (null si no hay o si la asignación se canceló). */
+function toDeliveryInfo(a: AssignmentWithDriver | null) {
+  if (!a || a.status === 'CANCELLED') return null;
+  const d = a.driver;
+  return {
+    assignmentId: a.id,
+    status: a.status,
+    assignedAt: a.createdAt,
+    acceptedAt: a.acceptedAt,
+    pickedUpAt: a.pickedUpAt,
+    deliveredAt: a.deliveredAt,
+    driver: {
+      id: d.id,
+      employeeId: d.employee.id,
+      name: d.employee.name,
+      phone: d.employee.phone,
+      vehicleType: d.vehicleType,
+      vehicleColor: d.vehicleColor,
+      vehiclePlate: d.vehiclePlate,
+      lastLat: d.lastLat,
+      lastLng: d.lastLng,
+      lastSeenAt: d.lastSeenAt,
+    },
+  };
+}
 
 /** Promociones aplicadas, agrupadas (nombre y ahorro total). */
 function summarizePromotions(discounts: { promotionId: string | null; reason: string; amount: Prisma.Decimal }[]) {
@@ -376,13 +406,20 @@ export class OrdersService {
     await this.prisma.$transaction(async (tx) => {
       const order = await tx.order.findUnique({ where: { id } });
       if (!order) throw new NotFoundException('Orden no encontrada');
-      if (order.status !== 'READY') throw new ConflictException('Solo se pueden entregar órdenes que estén listas');
+      if (order.status !== 'READY' && order.status !== 'OUT_FOR_DELIVERY') {
+        throw new ConflictException('Solo se pueden entregar órdenes que estén listas');
+      }
       const now = new Date();
       await tx.kitchenTicket.updateMany({
         where: { orderId: id, status: { in: ['READY'] } },
         data: { status: 'COMPLETED', completedAt: now },
       });
       await tx.order.update({ where: { id }, data: { status: 'COMPLETED', completedAt: now } });
+      // Si lo entrega el local (sin pasar por la app del repartidor), la asignación queda cerrada.
+      await tx.deliveryAssignment.updateMany({
+        where: { orderId: id, status: { in: ['PENDING', 'ACCEPTED', 'PICKED_UP'] } },
+        data: { status: 'DELIVERED', deliveredAt: now },
+      });
     });
     await this.audit.log(actor, 'order.complete', 'order', id);
     return this.publishUpdate(id);

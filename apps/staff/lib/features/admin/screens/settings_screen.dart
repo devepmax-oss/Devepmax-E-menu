@@ -6,6 +6,7 @@ import 'package:image_picker/image_picker.dart';
 
 import '../../../core/ui/feedback.dart';
 import '../../menu/widgets/common.dart';
+import '../../orders/data/orders_api.dart';
 import '../data/admin_api.dart';
 import '../data/admin_models.dart';
 
@@ -293,6 +294,7 @@ class _SettingsFormState extends ConsumerState<_SettingsForm> {
                     _switch('Las órdenes de las tablets esperan aprobación del mesero', _approval, (v) => _approval = v),
                     _switch('Web en mantenimiento', _maintenance, (v) => _maintenance = v),
                   ]),
+                  if (_delivery) const _DeliveryZoneCard(),
                   _section('Operación', null, [
                     _row([
                       _field(_prep, 'Tiempo de preparación (min)', digits: true),
@@ -505,6 +507,139 @@ class _SettingsFormState extends ConsumerState<_SettingsForm> {
         if (email && value.isNotEmpty && !value.contains('@')) return 'Email inválido';
         return null;
       },
+    );
+  }
+}
+
+/// Envío, pedido mínimo y tiempo de entrega del delivery. Se guarda aparte del resto.
+class _DeliveryZoneCard extends ConsumerStatefulWidget {
+  const _DeliveryZoneCard();
+
+  @override
+  ConsumerState<_DeliveryZoneCard> createState() => _DeliveryZoneCardState();
+}
+
+class _DeliveryZoneCardState extends ConsumerState<_DeliveryZoneCard> {
+  final _key = GlobalKey<FormState>();
+  final _fee = TextEditingController();
+  final _min = TextEditingController();
+  final _eta = TextEditingController();
+  bool _loaded = false;
+  bool _saving = false;
+
+  @override
+  void dispose() {
+    _fee.dispose();
+    _min.dispose();
+    _eta.dispose();
+    super.dispose();
+  }
+
+  String _money(Object? v) {
+    final n = double.tryParse('${v ?? 0}') ?? 0;
+    return n == n.roundToDouble() ? n.toStringAsFixed(0) : n.toStringAsFixed(2);
+  }
+
+  Future<void> _save() async {
+    if (!_key.currentState!.validate()) return;
+    setState(() => _saving = true);
+    try {
+      await ref.read(ordersApiProvider).saveDeliveryZone(
+            fee: double.parse(_fee.text.trim()),
+            minOrder: double.parse(_min.text.trim()),
+            etaMinutes: int.parse(_eta.text.trim()),
+          );
+      ref.invalidate(deliveryZoneProvider);
+      if (mounted) showSuccess(context, 'Zona de delivery guardada');
+    } catch (error) {
+      if (mounted) showError(context, error);
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  String? _amount(String? v, {double max = 1000}) {
+    final n = double.tryParse((v ?? '').trim());
+    if (n == null || n < 0) return 'Escribe un monto';
+    if (n > max) return 'Máximo ${max.toStringAsFixed(0)}';
+    return null;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final zone = ref.watch(deliveryZoneProvider);
+    final text = Theme.of(context).textTheme;
+    return Card(
+      margin: const EdgeInsets.only(bottom: 16),
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: zone.when(
+          loading: () => const SizedBox(height: 80, child: Center(child: CircularProgressIndicator())),
+          error: (e, _) => Text('No se pudo cargar la zona de delivery: $e'),
+          data: (z) {
+            if (!_loaded) {
+              _loaded = true;
+              _fee.text = _money(z['fee']);
+              _min.text = _money(z['minOrder']);
+              _eta.text = '${z['etaMinutes'] ?? 35}';
+            }
+            final configured = z['configured'] == true;
+            return Form(
+              key: _key,
+              child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                Text('Delivery', style: text.titleMedium),
+                Text(
+                  configured ? 'Lo que paga el cliente por el envío y cuánto tarda en llegar.' : 'Todavía sin configurar: el envío sale gratis.',
+                  style: text.bodySmall,
+                ),
+                const SizedBox(height: 12),
+                Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Expanded(
+                    child: TextFormField(
+                      controller: _fee,
+                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                      decoration: const InputDecoration(labelText: 'Costo de envío (\$)', border: OutlineInputBorder()),
+                      validator: (v) => _amount(v, max: 100),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: TextFormField(
+                      controller: _min,
+                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                      decoration: const InputDecoration(labelText: 'Pedido mínimo (\$)', border: OutlineInputBorder()),
+                      validator: _amount,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: TextFormField(
+                      controller: _eta,
+                      keyboardType: TextInputType.number,
+                      inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                      decoration: const InputDecoration(labelText: 'Tiempo de entrega (min)', border: OutlineInputBorder()),
+                      validator: (v) {
+                        final n = int.tryParse((v ?? '').trim());
+                        return n == null || n < 5 || n > 240 ? 'Entre 5 y 240' : null;
+                      },
+                    ),
+                  ),
+                ]),
+                const SizedBox(height: 12),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: FilledButton.tonal(
+                    onPressed: _saving ? null : _save,
+                    child: _saving
+                        ? const SizedBox.square(dimension: 18, child: CircularProgressIndicator(strokeWidth: 2))
+                        : const Text('Guardar delivery'),
+                  ),
+                ),
+              ]),
+            );
+          },
+        ),
+      ),
     );
   }
 }

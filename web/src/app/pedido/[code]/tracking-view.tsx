@@ -1,14 +1,18 @@
 'use client';
 
 import { Bike, Check, ChefHat, ChevronLeft, CircleAlert, Clock, MapPin, PackageCheck, Phone, Receipt, Share2, ShoppingBag, Store, Wallet, type LucideIcon } from 'lucide-react';
+import dynamic from 'next/dynamic';
 import Link from 'next/link';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { io } from 'socket.io-client';
 import { Button, Notice, Pill } from '@/components/ui';
 import { api, API_ORIGIN } from '@/lib/api';
 import { cart } from '@/lib/cart';
 import { clockTime, money, plural, toNumber } from '@/lib/format';
 import type { OnlineConfig, PublicOrder, PublicStage } from '@/lib/types';
+
+// El mapa solo existe en el navegador (Leaflet usa window).
+const LiveMap = dynamic(() => import('./live-map').then((m) => m.LiveMap), { ssr: false });
 
 const newer = (a: PublicOrder, b: PublicOrder) => new Date(a.updatedAt).getTime() >= new Date(b.updatedAt).getTime();
 
@@ -47,11 +51,15 @@ export function TrackingView({ config, initial, fromPayment }: { config: OnlineC
   const [now, setNow] = useState(() => Date.now());
   const [shared, setShared] = useState<string | null>(null);
   const [checking, setChecking] = useState(false);
+  const [location, setLocation] = useState(initial.driverLocation);
   const code = initial.publicCode;
   const currency = config.currency;
   const confirmedOnce = useRef(false);
 
-  const apply = useCallback((next: PublicOrder) => setOrder((prev) => (newer(next, prev) ? next : prev)), []);
+  const apply = useCallback((next: PublicOrder) => {
+    setOrder((prev) => (newer(next, prev) ? next : prev));
+    if (next.driverLocation) setLocation(next.driverLocation);
+  }, []);
   const refresh = useCallback(() => api.order(code).then(apply).catch(() => undefined), [code, apply]);
 
   // En vivo: el servidor manda cada cambio de este pedido (y nada más).
@@ -64,6 +72,7 @@ export function TrackingView({ config, initial, fromPayment }: { config: OnlineC
     socket.on('disconnect', () => setLive(false));
     socket.on('connect_error', () => setLive(false));
     socket.on('order.public', (data: PublicOrder) => apply(data));
+    socket.on('driver.location', (d: { lat: number; lng: number; at: string }) => setLocation({ lat: d.lat, lng: d.lng, at: d.at }));
     return () => {
       socket.close();
     };
@@ -120,11 +129,26 @@ export function TrackingView({ config, initial, fromPayment }: { config: OnlineC
   const address = [config.address.line, config.address.city].filter(Boolean).join(', ');
   const mapsUrl = address ? `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(`${config.name} ${address}`)}` : null;
   const due = toNumber(order.totals.total) - toNumber(order.totals.amountPaid);
+  const storeLat = Number(config.address.lat);
+  const storeLng = Number(config.address.lng);
+  const store = config.address.lat && config.address.lng && Number.isFinite(storeLat) && Number.isFinite(storeLng) ? { lat: storeLat, lng: storeLng } : null;
+  const showMap = order.stage === 'on_the_way' && (!!location || !!order.destination);
+  const driverPoint = useMemo(() => (location ? { lat: location.lat, lng: location.lng } : null), [location]);
 
   return (
     <div className="mx-auto flex min-h-dvh w-full max-w-xl flex-col">
       {/* Cabecera con el estado */}
-      <div className="relative flex h-[300px] shrink-0 items-center justify-center overflow-hidden sm:h-[340px]">
+      <div className={`relative flex shrink-0 items-center justify-center overflow-hidden ${showMap ? 'h-[420px] sm:h-[460px]' : 'h-[300px] sm:h-[340px]'}`}>
+        {showMap ? (
+          <>
+            <LiveMap driver={driverPoint} destination={order.destination} store={store} />
+            <span className="absolute bottom-12 left-4 z-[500] rounded-full border border-line-strong bg-bg/85 px-3 py-1.5 font-heading text-lg font-extrabold backdrop-blur">#{order.number}</span>
+            {!location ? (
+              <span className="absolute right-4 bottom-12 z-[500] rounded-full border border-line-strong bg-bg/85 px-3 py-1.5 text-xs font-semibold text-soft backdrop-blur">Esperando la ubicación del repartidor…</span>
+            ) : null}
+          </>
+        ) : (
+          <>
         <div aria-hidden className={`absolute inset-0 ${order.stage === 'cancelled' ? 'bg-surface-2' : 'bg-gradient-to-br from-brand/35 via-surface to-accent/25'}`} />
         <div aria-hidden className="absolute -top-24 -right-24 size-72 rounded-full bg-brand/20 blur-3xl" />
         <div aria-hidden className="absolute -bottom-28 -left-20 size-72 rounded-full bg-accent/15 blur-3xl" />
@@ -135,11 +159,13 @@ export function TrackingView({ config, initial, fromPayment }: { config: OnlineC
           </span>
           <span className="font-heading text-5xl font-extrabold tracking-tight">#{order.number}</span>
         </div>
-        <Link href="/" aria-label="Volver al menú" className="press absolute top-4 left-4 flex size-11 items-center justify-center rounded-full border border-line-strong bg-bg/80 text-ink backdrop-blur">
+          </>
+        )}
+        <Link href="/" aria-label="Volver al menú" className="press absolute top-4 left-4 z-[500] flex size-11 items-center justify-center rounded-full border border-line-strong bg-bg/80 text-ink backdrop-blur">
           <ChevronLeft aria-hidden className="size-5" />
         </Link>
         {active ? (
-          <span className="absolute top-5 right-4 flex items-center gap-1.5 rounded-full border border-line-strong bg-bg/80 px-3 py-1.5 text-xs font-bold tracking-wide backdrop-blur">
+          <span className="absolute top-5 right-4 z-[500] flex items-center gap-1.5 rounded-full border border-line-strong bg-bg/80 px-3 py-1.5 text-xs font-bold tracking-wide backdrop-blur">
             <span aria-hidden className={`size-2 rounded-full ${live ? 'live bg-[#FF5A4E]' : 'bg-muted'}`} />
             {live ? 'EN VIVO' : 'CONECTANDO'}
           </span>
@@ -147,7 +173,7 @@ export function TrackingView({ config, initial, fromPayment }: { config: OnlineC
       </div>
 
       {/* Hoja inferior */}
-      <section className="relative -mt-8 flex flex-1 flex-col gap-5 rounded-t-[30px] border-t border-line bg-surface px-5 pt-3 pb-10 shadow-[0_-20px_40px_rgba(0,0,0,0.25)]">
+      <section className="relative z-[600] -mt-8 flex flex-1 flex-col gap-5 rounded-t-[30px] border-t border-line bg-surface px-5 pt-3 pb-10 shadow-[0_-20px_40px_rgba(0,0,0,0.25)]">
         <span aria-hidden className="h-[5px] w-10 self-center rounded-full bg-surface-3" />
 
         <div className="flex flex-col gap-1" aria-live="polite">
@@ -216,7 +242,26 @@ export function TrackingView({ config, initial, fromPayment }: { config: OnlineC
           </div>
         ) : null}
 
-        {delivery && config.phone && order.stage !== 'completed' ? (
+        {delivery && order.driver && order.stage !== 'completed' && order.stage !== 'cancelled' ? (
+          <div className="flex items-center gap-3 rounded-[20px] bg-surface-2 p-3">
+            <span className="flex size-12 shrink-0 items-center justify-center rounded-full bg-brand-soft font-heading text-xl font-extrabold text-accent-text">
+              {order.driver.firstName.slice(0, 1).toUpperCase()}
+            </span>
+            <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+              <span className="font-bold">{order.driver.firstName}</span>
+              <span className="truncate text-[13px] text-muted">
+                {order.stage === 'on_the_way' ? 'Va hacia ti' : 'Recogerá tu pedido'} · {order.driver.vehicle ?? `Repartidor de ${config.name}`}
+              </span>
+            </div>
+            {order.driver.phone ? (
+              <a href={`tel:${order.driver.phone}`} aria-label={`Llamar a ${order.driver.firstName}`} className="press flex size-[46px] items-center justify-center rounded-full bg-brand text-on-brand">
+                <Phone aria-hidden className="size-5" />
+              </a>
+            ) : null}
+          </div>
+        ) : null}
+
+        {delivery && !order.driver && config.phone && order.stage !== 'completed' && order.stage !== 'cancelled' ? (
           <div className="flex items-center gap-3 rounded-[20px] bg-surface-2 p-3">
             <span className="flex size-12 shrink-0 items-center justify-center rounded-full bg-brand-soft text-brand-text">
               <Bike aria-hidden className="size-5" />

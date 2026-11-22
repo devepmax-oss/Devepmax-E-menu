@@ -1,5 +1,5 @@
-name: gopicadera_driver
-description: App nativa del restaurante para recibir pedidos
+name: devepmax_driver
+description: Devepmax E-Menu — app del repartidor.
 publish_to: 'none'
 version: 1.0.0+1
 
@@ -9,49 +9,27 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
+  devepmax_ui:
+    path: ../packages/ui
 
   cupertino_icons: ^1.0.8
-  http: ^1.2.2
-  provider: ^6.1.2
-  socket_io_client: ^3.0.2
-  flutter_riverpod: ^3.3.1
-  go_router: ^17.1.0
-  dio: ^5.9.2
-  intl: ^0.20.2
-  equatable: ^2.0.8
-  collection: ^1.19.1
-  shared_preferences: ^2.5.4
-  flutter_secure_storage: ^10.0.0
   audioplayers: ^6.6.0
-  flutter_animate: ^4.5.2
-  firebase_core: ^2.30.0
-  firebase_messaging: ^14.7.10
-  flutter_local_notifications: ^17.0.0
-  web_socket_channel: ^3.0.3
-  image_picker: ^1.2.1
-  file_picker: ^8.1.2
-  just_audio: ^0.9.36
-  esc_pos_utils_plus: ^2.0.4
-  esc_pos_printer_plus: ^0.1.1
-  url_launcher: ^6.3.2
+  dio: ^5.9.2
+  flutter_riverpod: ^3.3.1
+  flutter_secure_storage: ^10.0.0
   geolocator: ^14.0.2
-  flutter_native_splash: ^2.4.8
- 
+  intl: ^0.20.2
+  socket_io_client: ^3.1.2
+  url_launcher: ^6.3.2
+  # Más adelante (con Firebase por instalación): firebase_core, firebase_messaging
 
 dev_dependencies:
-  flutter_launcher_icons: ^0.14.4
   flutter_test:
     sdk: flutter
   flutter_lints: ^5.0.0
+
 flutter:
   uses-material-design: true
-
   assets:
     - assets/images/
     - assets/sounds/
-
-flutter_native_splash:
-  color: "#ffffff"        # Color de fondo
-  image: assets/images/logo.png   # Logo que quieres mostrar
-  android: true            # Generar splash para Android
-  ios: true                # Generar splash para iOS

@@ -93,6 +93,17 @@ export function roomsForEvent(event: DomainEvent): string[] {
     case 'product.availability':
     case 'option.availability':
       return [Rooms.menu];
+    case 'delivery.updated':
+    case 'delivery.removed': {
+      // Solo al repartidor de esa entrega.
+      const { driverEmployeeId } = event.payload as { driverEmployeeId?: string };
+      return driverEmployeeId ? [Rooms.employee(driverEmployeeId)] : [];
+    }
+    case 'driver.location': {
+      // Quien sigue ese pedido (solo ve la posición) y el personal.
+      const { publicCode } = event.payload as { publicCode?: string };
+      return publicCode ? [Rooms.order(publicCode), Rooms.pos, Rooms.admin] : [Rooms.pos, Rooms.admin];
+    }
     default:
       return [];
   }
