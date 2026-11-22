@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { Actor, EmployeeActor } from '../../common/auth/actor';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
+import { DomainEventsService } from '../../realtime/domain-events.service';
 import {
   CreateModifierGroupDto,
   CreateModifierOptionDto,
@@ -29,6 +30,7 @@ export class ModifiersService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
+    private readonly events: DomainEventsService,
   ) {}
 
   list() {
@@ -154,6 +156,8 @@ export class ModifiersService {
       'modifier_option',
       id,
     );
-    return { id: option.id, isAvailable: option.isAvailable };
+    const view = { id: option.id, isAvailable: option.isAvailable };
+    this.events.emit('option.availability', view);
+    return view;
   }
 }

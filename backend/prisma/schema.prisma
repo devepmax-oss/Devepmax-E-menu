@@ -431,6 +431,7 @@ model KitchenTicket {
   startedAt   DateTime?
   readyAt     DateTime?
   completedAt DateTime?
+  updatedAt   DateTime       @default(now()) @updatedAt // tiempo real: el cliente descarta eventos viejos
   order       Order          @relation(fields: [orderId], references: [id], onDelete: Cascade)
   station     KitchenStation @relation(fields: [stationId], references: [id])
   items       OrderItem[]

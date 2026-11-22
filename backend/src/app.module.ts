@@ -10,6 +10,7 @@ import { PromotionsModule } from './modules/promotions/promotions.module';
 import { SettingsModule } from './modules/settings/settings.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { DomainEventsModule } from './realtime/domain-events.service';
+import { RealtimeModule } from './realtime/realtime.module';
 import { StorageModule } from './storage/storage.module';
 
 @Module({
@@ -25,6 +26,7 @@ import { StorageModule } from './storage/storage.module';
     MenuModule,
     OrdersModule,
     PromotionsModule,
+    RealtimeModule,
   ],
   controllers: [HealthController],
 })

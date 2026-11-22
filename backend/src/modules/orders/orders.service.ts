@@ -23,6 +23,7 @@ import {
   kitchenStarted,
 } from './order.rules';
 import { PricedLine, PricingService } from './pricing.service';
+import { TICKET_INCLUDE, latest, toTicketView } from './ticket.view';
 
 type Tx = Prisma.TransactionClient;
 
@@ -46,6 +47,8 @@ export function toOrderView(order: OrderWithRelations) {
     channel: order.channel,
     fulfillmentType: order.fulfillmentType,
     status: order.status,
+    /** Versión para tiempo real: el cambio más reciente entre la orden, su cuenta y sus tickets. */
+    updatedAt: latest(order.updatedAt, order.bill.updatedAt, ...order.tickets.map((t) => t.updatedAt)),
     table: order.tableSession ? { id: order.tableSession.table.id, label: order.tableSession.table.label } : null,
     customerName: order.customerName,
     customerPhone: order.customerPhone,
@@ -91,6 +94,7 @@ export function toOrderView(order: OrderWithRelations) {
       tipTotal: order.bill.tipTotal,
       total: order.bill.total,
       amountPaid: order.bill.amountPaid,
+      updatedAt: order.bill.updatedAt,
     },
   };
 }
@@ -203,7 +207,8 @@ export class OrdersService {
       total: view.bill.total.toString(),
     });
     this.events.emit('order.created', view);
-    if (view.tickets.length) this.events.emit('ticket.created', { orderId, ticketIds: view.tickets.map((t) => t.id) });
+    this.emitBill(view);
+    await this.emitTickets(orderId, 'ticket.created');
     return view;
   }
 
@@ -337,12 +342,26 @@ export class OrdersService {
     });
   }
 
+  /**
+   * Difunde en tiempo real el estado actual de la orden, su cuenta y todos sus tickets.
+   * Se llama después de cada cambio (ya confirmado en la base de datos).
+   */
   async publishUpdate(id: string, ticketsCreated = false): Promise<OrderView> {
     const view = await this.getView(id);
     this.events.emit('order.updated', view);
-    this.events.emit('bill.updated', view.bill);
-    if (ticketsCreated) this.events.emit('ticket.created', { orderId: id, ticketIds: view.tickets.map((t) => t.id) });
+    this.emitBill(view);
+    await this.emitTickets(id, ticketsCreated ? 'ticket.created' : 'ticket.updated');
     return view;
+  }
+
+  private emitBill(view: OrderView): void {
+    this.events.emit('bill.updated', { ...view.bill, orderId: view.id, tableId: view.table?.id ?? null });
+  }
+
+  /** Cada pantalla de cocina recibe el ticket completo de su estación (no tiene que pedirlo aparte). */
+  private async emitTickets(orderId: string, name: 'ticket.created' | 'ticket.updated'): Promise<void> {
+    const tickets = await this.prisma.kitchenTicket.findMany({ where: { orderId }, include: TICKET_INCLUDE });
+    for (const ticket of tickets) this.events.emit(name, toTicketView(ticket));
   }
 
   // ───────── Internos ─────────

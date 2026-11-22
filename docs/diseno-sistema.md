@@ -816,8 +816,10 @@ Toda cancelación, anulación de ítem, descuento, reembolso y cambio de precio 
 - **Rooms de Socket.IO:** `pos`, `waiters`, `kitchen:<stationId>`, `table:<tableId>`, `order:<publicCode>`, `drivers`, `driver:<id>`, `admin`.
 - **Eventos:** `order.created`, `order.updated`, `ticket.created`, `ticket.updated`, `bill.updated`, `payment.succeeded`, `table.updated`, `service_request.created`, `product.availability`, `driver.location`, `settings.updated`.
 - Cada evento lleva `updatedAt`; el cliente ignora eventos más viejos que lo que ya tiene.
-- **Al reconectar**, cada app pide una foto completa de su ámbito (`GET /sync/kitchen?stationId=…`, `/sync/pos`, `/sync/table/:id`) y reemplaza su estado.
-- El socket se autentica con el mismo token que la API; el servidor decide a qué rooms se une cada quien.
+- **Al conectarse y en cada reconexión** el servidor manda `ready`: la app pide la foto completa de su ámbito (`GET /orders?scope=active`, `GET /kitchen/tickets`; mesa en la Fase 3) y reemplaza su estado. Órdenes, tickets y cuentas traen `updatedAt` (la versión más reciente entre orden, cuenta y tickets).
+- El socket se autentica con el mismo token que la API (`io(url, { auth: { token } })`, ruta `/socket.io`); el servidor decide a qué rooms se une cada quien. Sin token válido no hay conexión.
+- Si vence el token de un empleado, el servidor manda `session.expired` y desconecta; la app renueva el token y se reconecta. Revocar o cambiar un dispositivo, o cambiar el rol de un empleado, desconecta sus sockets al instante.
+- Implementado en la Fase 2 · bloque 3 (`backend/src/realtime/`), con prueba `npm run smoke:realtime`.
 
 ---
 

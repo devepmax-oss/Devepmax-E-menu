@@ -7,7 +7,13 @@ export type DomainEventName =
   | 'order.updated'
   | 'ticket.created'
   | 'ticket.updated'
-  | 'bill.updated';
+  | 'bill.updated'
+  | 'product.availability'
+  | 'option.availability'
+  // Internos: no se difunden; el gateway desconecta los sockets afectados
+  // para que vuelvan a entrar con sus permisos y rooms actualizados.
+  | 'device.changed'
+  | 'employee.changed';
 
 export interface DomainEvent<T = unknown> {
   name: DomainEventName;

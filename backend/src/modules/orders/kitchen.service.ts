@@ -1,51 +1,11 @@
 import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
-import { Prisma, TicketStatus } from '@prisma/client';
+import { TicketStatus } from '@prisma/client';
 import { Actor } from '../../common/auth/actor';
 import { PrismaService } from '../../prisma/prisma.service';
-import { DomainEventsService } from '../../realtime/domain-events.service';
 import { AuditService } from '../audit/audit.service';
 import { canMoveTicket } from './order.rules';
 import { OrdersService } from './orders.service';
-
-const TICKET_INCLUDE = {
-  station: true,
-  items: { where: { status: 'ACTIVE' }, orderBy: { id: 'asc' }, include: { modifiers: true } },
-  order: { include: { tableSession: { include: { table: true } } } },
-} satisfies Prisma.KitchenTicketInclude;
-
-type TicketWithRelations = Prisma.KitchenTicketGetPayload<{ include: typeof TICKET_INCLUDE }>;
-
-export function toTicketView(ticket: TicketWithRelations) {
-  const { order } = ticket;
-  return {
-    id: ticket.id,
-    status: ticket.status,
-    createdAt: ticket.createdAt,
-    acceptedAt: ticket.acceptedAt,
-    startedAt: ticket.startedAt,
-    readyAt: ticket.readyAt,
-    station: { id: ticket.station.id, name: ticket.station.name, color: ticket.station.color },
-    order: {
-      id: order.id,
-      number: order.number,
-      channel: order.channel,
-      fulfillmentType: order.fulfillmentType,
-      status: order.status,
-      table: order.tableSession?.table.label ?? null,
-      customerName: order.customerName,
-      notes: order.notes,
-      scheduledFor: order.scheduledFor,
-    },
-    items: ticket.items.map((item) => ({
-      id: item.id,
-      name: item.nameSnapshot,
-      quantity: item.quantity,
-      notes: item.notes,
-      seat: item.seat,
-      modifiers: item.modifiers.map((m) => ({ group: m.groupNameSnapshot, option: m.optionNameSnapshot })),
-    })),
-  };
-}
+import { TICKET_INCLUDE, toTicketView } from './ticket.view';
 
 const ACTIVE_TICKETS: TicketStatus[] = ['NEW', 'ACCEPTED', 'PREPARING', 'READY'];
 
@@ -62,7 +22,6 @@ export class KitchenService {
     private readonly prisma: PrismaService,
     private readonly orders: OrdersService,
     private readonly audit: AuditService,
-    private readonly events: DomainEventsService,
   ) {}
 
   /** Tickets en curso. Una pantalla de cocina solo ve los de su estación. */
@@ -96,10 +55,9 @@ export class KitchenService {
     });
 
     await this.audit.log(actor, 'ticket.status', 'ticket', id, { status });
-    const view = toTicketView(ticketView);
-    this.events.emit('ticket.updated', view);
-    await this.orders.publishUpdate(view.order.id);
-    return view;
+    // publishUpdate difunde la orden y todos sus tickets (incluido este).
+    await this.orders.publishUpdate(ticketView.orderId);
+    return toTicketView(ticketView);
   }
 
   /** Dispositivos de cocina: solo su estación. Empleados: la que pidan (o todas). */

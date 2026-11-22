@@ -1,4 +1,4 @@
-import { Body, Controller, Get, HttpCode, Param, Patch, Post } from '@nestjs/common';
+import { Body, Controller, Delete, Get, HttpCode, Param, Patch, Post } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { EmployeeActor } from '../../common/auth/actor';
 import { AllowActors, CurrentActor, RequirePermissions } from '../../common/auth/decorators';
@@ -39,5 +39,11 @@ export class DevicesController {
   @HttpCode(200)
   revoke(@CurrentActor() actor: EmployeeActor, @Param('id') id: string) {
     return this.devices.revoke(actor, id);
+  }
+
+  @Delete(':id')
+  @HttpCode(204)
+  remove(@CurrentActor() actor: EmployeeActor, @Param('id') id: string) {
+    return this.devices.remove(actor, id);
   }
 }

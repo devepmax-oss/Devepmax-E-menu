@@ -13,6 +13,7 @@ import { isUniqueViolation } from '../../prisma/errors';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { AuthService } from '../auth/auth.service';
+import { DomainEventsService } from '../../realtime/domain-events.service';
 import { CreateEmployeeDto, UpdateEmployeeDto } from './dto/employee.dto';
 
 type EmployeeWithRole = Employee & { role: Role };
@@ -46,6 +47,7 @@ export class EmployeesService {
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
     private readonly auth: AuthService,
+    private readonly events: DomainEventsService,
   ) {}
 
   async list() {
@@ -126,6 +128,8 @@ export class EmployeesService {
 
     if (dto.isActive === false || dto.password || roleId) {
       await this.auth.revokeAllSessions(`employee:${id}`);
+      // Sus pantallas abiertas se reconectan con los permisos nuevos (o quedan fuera).
+      this.events.emit('employee.changed', { employeeId: id });
     }
     await this.audit.log(actor, 'employee.update', 'employee', id, {
       fields: Object.keys(dto).filter((k) => k !== 'password'),

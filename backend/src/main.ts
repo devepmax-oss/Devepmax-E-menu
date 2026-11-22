@@ -7,6 +7,7 @@ import { AppModule } from './app.module';
 import { resolve } from 'node:path';
 import { loadEnv } from './config/env';
 import { LOCAL_UPLOADS_ROUTE } from './storage/local.driver';
+import { AppSocketIoAdapter } from './realtime/socket-io.adapter';
 
 async function bootstrap(): Promise<void> {
   const env = loadEnv();
@@ -17,6 +18,8 @@ async function bootstrap(): Promise<void> {
     new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }),
   );
   app.enableCors({ origin: env.corsOrigins, credentials: true });
+  // Tiempo real en la misma dirección y puerto que la API (ruta /socket.io).
+  app.useWebSocketAdapter(new AppSocketIoAdapter(app, env.corsOrigins));
   app.enableShutdownHooks();
 
   // En desarrollo las imágenes se sirven desde el propio backend.
@@ -42,6 +45,7 @@ async function bootstrap(): Promise<void> {
   await app.listen(env.port);
   console.log(`Devepmax E-Menu backend escuchando en http://localhost:${env.port}/api/v1`);
   console.log(`Documentación: http://localhost:${env.port}/api/docs`);
+  console.log(`Tiempo real (Socket.IO): ws://localhost:${env.port}/socket.io`);
 }
 
 void bootstrap();

@@ -4,6 +4,7 @@ import { EmployeeActor } from '../../common/auth/actor';
 import { generatePairingCode } from '../../common/crypto';
 import { isUniqueViolation } from '../../prisma/errors';
 import { PrismaService } from '../../prisma/prisma.service';
+import { DomainEventsService } from '../../realtime/domain-events.service';
 import { AuditService } from '../audit/audit.service';
 
 const PAIRING_CODE_TTL_MS = 15 * 60_000;
@@ -29,6 +30,7 @@ export class DevicesService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
+    private readonly events: DomainEventsService,
   ) {}
 
   async list() {
@@ -71,6 +73,8 @@ export class DevicesService {
       },
     });
     await this.audit.log(actor, 'device.update', 'device', id, { fields: Object.keys(dto) });
+    // Mesa, estación o estado cambiaron: el dispositivo se reconecta con sus rooms nuevas.
+    this.events.emit('device.changed', { deviceId: id });
     return toDeviceView(device);
   }
 
@@ -82,6 +86,7 @@ export class DevicesService {
       this.prisma.device.update({ where: { id }, data: { tokenHash: null, ...pairing } }),
     );
     await this.audit.log(actor, 'device.pairing_code', 'device', id);
+    this.events.emit('device.changed', { deviceId: id });
     return toDeviceView(device);
   }
 
@@ -92,7 +97,16 @@ export class DevicesService {
       data: { tokenHash: null, pairingCode: null, pairingExpiresAt: null },
     });
     await this.audit.log(actor, 'device.revoke', 'device', id);
+    this.events.emit('device.changed', { deviceId: id });
     return toDeviceView(device);
+  }
+
+  /** Borra un dispositivo que ya no se usa. Las órdenes que creó conservan su historial. */
+  async remove(actor: EmployeeActor, id: string): Promise<void> {
+    const device = await this.findOrFail(id);
+    await this.prisma.device.delete({ where: { id } });
+    await this.audit.log(actor, 'device.delete', 'device', id, { name: device.name, type: device.type });
+    this.events.emit('device.changed', { deviceId: id });
   }
 
   private async findOrFail(id: string): Promise<Device> {

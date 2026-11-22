@@ -4,6 +4,7 @@ import { Actor, EmployeeActor } from '../../common/auth/actor';
 import { PrismaService } from '../../prisma/prisma.service';
 import { ImageService } from '../../storage/image.service';
 import { AuditService } from '../audit/audit.service';
+import { DomainEventsService } from '../../realtime/domain-events.service';
 import { CreateProductDto, UpdateProductDto } from './dto/menu.dto';
 import { found, TRANSLATION_FIELDS, translationsInput } from './menu.helpers';
 
@@ -22,6 +23,7 @@ export class ProductsService {
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
     private readonly images: ImageService,
+    private readonly events: DomainEventsService,
   ) {}
 
   async get(id: string) {
@@ -106,7 +108,9 @@ export class ProductsService {
     found(await this.prisma.product.findUnique({ where: { id } }), 'Producto no encontrado');
     const product = await this.prisma.product.update({ where: { id }, data: { isAvailable } });
     await this.audit.log(actor, isAvailable ? 'product.available' : 'product.sold_out', 'product', id);
-    return { id: product.id, isAvailable: product.isAvailable };
+    const view = { id: product.id, isAvailable: product.isAvailable, updatedAt: product.updatedAt };
+    this.events.emit('product.availability', view);
+    return view;
   }
 
   async reorder(actor: EmployeeActor, categoryId: string, ids: string[]) {
