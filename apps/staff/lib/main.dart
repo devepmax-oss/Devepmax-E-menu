@@ -4,7 +4,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'app/router.dart';
 import 'features/admin/data/admin_api.dart';
-import 'features/menu/widgets/common.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -16,15 +15,12 @@ class StaffApp extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    // Colores de la marca del restaurante (Ajustes); valores por defecto mientras cargan.
+    // Marca del restaurante (Ajustes): colores, fondo y tipografía. Mientras carga, la de fábrica.
     final brand = ref.watch(publicSettingsProvider).value;
     return MaterialApp.router(
       title: (brand?['name'] as String?) ?? 'Devepmax E-Menu',
       debugShowCheckedModeBanner: false,
-      theme: buildBrandTheme(
-        primary: colorFromHex(brand?['primaryColor'] as String?, fallback: const Color(0xFFFF6A3D)),
-        accent: colorFromHex(brand?['accentColor'] as String?, fallback: const Color(0xFFFACC15)),
-      ),
+      theme: buildBrandTheme(BrandConfig.fromJson(brand)),
       routerConfig: ref.watch(routerProvider),
     );
   }

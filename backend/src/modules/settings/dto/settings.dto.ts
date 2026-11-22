@@ -20,6 +20,7 @@ import {
   MinLength,
   ValidateNested,
 } from 'class-validator';
+import { FONT_PAIRS, THEME_MODES } from '../brand';
 
 const HEX_COLOR = /^#[0-9a-fA-F]{6}$/;
 const TIME = /^([01]\d|2[0-3]):[0-5]\d$/;
@@ -31,6 +32,10 @@ export class UpdateSettingsDto {
   @IsOptional() @IsUrl() logoUrl?: string;
   @IsOptional() @Matches(HEX_COLOR, { message: 'Color en formato #RRGGBB' }) primaryColor?: string;
   @IsOptional() @Matches(HEX_COLOR, { message: 'Color en formato #RRGGBB' }) accentColor?: string;
+  /** Fondo de las pantallas: dark (oscuro) o light (claro). */
+  @IsOptional() @IsIn(THEME_MODES) themeMode?: string;
+  /** Combinación tipográfica: ver FONT_PAIRS. */
+  @IsOptional() @IsIn(FONT_PAIRS) fontPair?: string;
   @IsOptional() @IsString() @MaxLength(30) phone?: string;
   @IsOptional() @IsString() @MaxLength(30) whatsapp?: string;
   @IsOptional() @IsEmail() email?: string;

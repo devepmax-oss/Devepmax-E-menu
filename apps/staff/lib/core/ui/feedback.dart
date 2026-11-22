@@ -17,7 +17,10 @@ double parseMoney(Object? value) {
 void showError(BuildContext context, Object error) {
   if (!context.mounted) return;
   ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-    content: Text(ApiException.from(error).message),
+    content: Text(
+      ApiException.from(error).message,
+      style: TextStyle(color: Theme.of(context).colorScheme.onError, fontWeight: FontWeight.w600),
+    ),
     backgroundColor: Theme.of(context).colorScheme.error,
   ));
 }
@@ -41,7 +44,10 @@ Future<bool> confirm(
       actions: [
         TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancelar')),
         FilledButton(
-          style: FilledButton.styleFrom(backgroundColor: Theme.of(context).colorScheme.error),
+          style: FilledButton.styleFrom(
+            backgroundColor: Theme.of(context).colorScheme.error,
+            foregroundColor: Theme.of(context).colorScheme.onError,
+          ),
           onPressed: () => Navigator.pop(context, true),
           child: Text(confirmLabel),
         ),

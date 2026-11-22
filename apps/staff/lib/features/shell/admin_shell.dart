@@ -1,8 +1,10 @@
+import 'package:devepmax_ui/devepmax_ui.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/auth/auth_controller.dart';
+import '../admin/data/admin_api.dart';
 
 class _Destination {
   const _Destination(this.path, this.label, this.icon, this.permission);
@@ -52,16 +54,21 @@ class AdminShell extends ConsumerWidget {
       );
     }
 
+    final brand = BrandConfig.fromJson(ref.watch(publicSettingsProvider).value);
+    final t = BrandTokens.of(context);
+    final initial = (employee?.name.isNotEmpty ?? false) ? employee!.name[0].toUpperCase() : '?';
+
     return Scaffold(
       body: Row(
         children: [
           NavigationRail(
             selectedIndex: selected < 0 ? 0 : selected,
             labelType: NavigationRailLabelType.all,
+            groupAlignment: -0.85,
             onDestinationSelected: (i) => context.go(destinations[i].path),
             leading: Padding(
-              padding: const EdgeInsets.symmetric(vertical: 12),
-              child: Icon(Icons.restaurant_rounded, color: Theme.of(context).colorScheme.primary, size: 32),
+              padding: const EdgeInsets.only(top: 16, bottom: 20),
+              child: Tooltip(message: brand.name, child: BrandMark(name: brand.name, logoUrl: brand.logoUrl, height: 52)),
             ),
             trailing: Expanded(
               child: Align(
@@ -74,14 +81,25 @@ class AdminShell extends ConsumerWidget {
                       if (employee != null)
                         Tooltip(
                           message: '${employee.name} · ${employee.roleName}',
-                          child: CircleAvatar(
-                            child: Text(employee.name.isEmpty ? '?' : employee.name[0].toUpperCase()),
+                          child: Container(
+                            width: 48,
+                            height: 48,
+                            alignment: Alignment.center,
+                            decoration: BoxDecoration(
+                              color: t.surface2,
+                              shape: BoxShape.circle,
+                              border: Border.all(color: t.lineStrong, width: 2),
+                            ),
+                            child: Text(
+                              initial,
+                              style: brandFont(t.headingFamily, weight: t.headingWeight, size: 20, color: t.accentText),
+                            ),
                           ),
                         ),
                       const SizedBox(height: 8),
                       IconButton(
                         tooltip: 'Cerrar sesión',
-                        icon: const Icon(Icons.logout_rounded),
+                        icon: Icon(Icons.logout_rounded, color: t.muted),
                         onPressed: () => ref.read(authControllerProvider.notifier).logout(),
                       ),
                     ],
@@ -91,10 +109,14 @@ class AdminShell extends ConsumerWidget {
             ),
             destinations: [
               for (final d in destinations)
-                NavigationRailDestination(icon: Icon(d.icon), label: Text(d.label)),
+                NavigationRailDestination(
+                  icon: Icon(d.icon),
+                  label: Text(d.label, textAlign: TextAlign.center),
+                  padding: const EdgeInsets.symmetric(vertical: 4),
+                ),
             ],
           ),
-          const VerticalDivider(width: 1),
+          VerticalDivider(width: 1, color: t.line),
           Expanded(child: child),
         ],
       ),

@@ -44,6 +44,8 @@ export class SettingsService {
       logoUrl: settings.logoUrl,
       primaryColor: settings.primaryColor,
       accentColor: settings.accentColor,
+      themeMode: settings.themeMode,
+      fontPair: settings.fontPair,
       phone: settings.phone,
       whatsapp: settings.whatsapp,
       email: settings.email,

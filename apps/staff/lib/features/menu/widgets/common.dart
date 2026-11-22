@@ -1,3 +1,4 @@
+import 'package:devepmax_ui/devepmax_ui.dart';
 import 'package:flutter/material.dart';
 
 import '../../../core/api/api_exception.dart';
@@ -13,17 +14,7 @@ class StatusChip extends StatelessWidget {
   final Color? color;
 
   @override
-  Widget build(BuildContext context) {
-    final c = color ?? Theme.of(context).colorScheme.outline;
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-      decoration: BoxDecoration(
-        color: c.withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(999),
-      ),
-      child: Text(label, style: TextStyle(fontSize: 12, color: c, fontWeight: FontWeight.w600)),
-    );
-  }
+  Widget build(BuildContext context) => DmPill(label, color: color);
 }
 
 class EmptyState extends StatelessWidget {

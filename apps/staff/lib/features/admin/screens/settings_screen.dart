@@ -1,3 +1,4 @@
+import 'package:devepmax_ui/devepmax_ui.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -19,7 +20,7 @@ const _timezones = <String, String>{
   'Pacific/Honolulu': 'Hawái',
   'America/Puerto_Rico': 'Puerto Rico',
 };
-const _brandColors = ['#FF6A3D', '#EF4444', '#F59E0B', '#16A34A', '#0EA5E9', '#2563EB', '#7C3AED', '#111111'];
+const _brandColors = ['#FF7A1A', '#FFC247', '#E2483D', '#E8B230', '#2F6B4F', '#2BB673', '#2563EB', '#7C3AED', '#1F1A14'];
 
 class SettingsScreen extends ConsumerWidget {
   const SettingsScreen({super.key});
@@ -75,8 +76,10 @@ class _SettingsFormState extends ConsumerState<_SettingsForm> {
     return TextEditingController(text: i < presets.length ? '${presets[i]}' : '');
   });
 
-  late String _primary = _s['primaryColor'] as String? ?? '#FF6A3D';
-  late String _accent = _s['accentColor'] as String? ?? '#FACC15';
+  late String _primary = _s['primaryColor'] as String? ?? '#FF7A1A';
+  late String _accent = _s['accentColor'] as String? ?? '#FFC247';
+  late String _mode = _s['themeMode'] as String? ?? 'dark';
+  late String _fontPair = _s['fontPair'] as String? ?? 'bricolage-inter';
   late String _timezone = _s['timezone'] as String? ?? 'America/New_York';
   late bool _dineIn = _s['acceptsDineIn'] as bool? ?? true;
   late bool _pickup = _s['acceptsPickup'] as bool? ?? true;
@@ -108,6 +111,8 @@ class _SettingsFormState extends ConsumerState<_SettingsForm> {
       'name': _name.text.trim(),
       'primaryColor': _primary,
       'accentColor': _accent,
+      'themeMode': _mode,
+      'fontPair': _fontPair,
       'phone': _phone.text.trim(),
       'whatsapp': _whatsapp.text.trim(),
       if (email.isNotEmpty) 'email': email,
@@ -242,10 +247,37 @@ class _SettingsFormState extends ConsumerState<_SettingsForm> {
                         ]),
                       ),
                     ]),
-                    const SizedBox(height: 16),
+                  ]),
+                  _section('Apariencia', 'Así se ven la app, las tablets y la web. Revisa la vista previa antes de guardar.', [
+                    Text('Fondo', style: Theme.of(context).textTheme.titleSmall),
+                    const SizedBox(height: 8),
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: SegmentedButton<String>(
+                        segments: const [
+                          ButtonSegment(value: 'dark', label: Text('Oscuro'), icon: Icon(Icons.dark_mode_rounded)),
+                          ButtonSegment(value: 'light', label: Text('Claro'), icon: Icon(Icons.light_mode_rounded)),
+                        ],
+                        selected: {_mode},
+                        onSelectionChanged: (v) => setState(() => _mode = v.first),
+                      ),
+                    ),
+                    const SizedBox(height: 20),
+                    Text('Tipografía', style: Theme.of(context).textTheme.titleSmall),
+                    const SizedBox(height: 8),
+                    Wrap(spacing: 10, runSpacing: 10, children: [for (final p in fontPairs) _fontOption(p)]),
+                    const SizedBox(height: 20),
                     _colorPicker('Color principal', _primary, (c) => setState(() => _primary = c)),
-                    const SizedBox(height: 12),
+                    Padding(
+                      padding: const EdgeInsets.only(left: 140, top: 4, bottom: 12),
+                      child: Text('Botones y acciones', style: Theme.of(context).textTheme.bodySmall),
+                    ),
                     _colorPicker('Color de acento', _accent, (c) => setState(() => _accent = c)),
+                    Padding(
+                      padding: const EdgeInsets.only(left: 140, top: 4, bottom: 20),
+                      child: Text('Promociones y etiquetas', style: Theme.of(context).textTheme.bodySmall),
+                    ),
+                    _preview(),
                   ]),
                   _section('Contacto y dirección', null, [
                     _row([_field(_phone, 'Teléfono'), _field(_whatsapp, 'WhatsApp'), _field(_email, 'Email', email: true)]),
@@ -306,6 +338,91 @@ class _SettingsFormState extends ConsumerState<_SettingsForm> {
     ]);
   }
 
+  Widget _fontOption(FontPairOption pair) {
+    final t = BrandTokens.of(context);
+    final selected = pair.key == _fontPair;
+    return InkWell(
+      borderRadius: BorderRadius.circular(16),
+      onTap: () => setState(() => _fontPair = pair.key),
+      child: Container(
+        width: 200,
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: selected ? t.primarySoft : t.surface2,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: selected ? t.primary : t.line, width: selected ? 2 : 1),
+        ),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text('Aa', style: fontPairHeading(pair.key, size: 30, color: t.text)),
+          const SizedBox(height: 6),
+          Text(pair.label, style: Theme.of(context).textTheme.labelLarge),
+          Text('${pair.heading} + ${pair.body}', style: Theme.of(context).textTheme.bodySmall),
+        ]),
+      ),
+    );
+  }
+
+  /// Vista previa con la marca tal como quedaría al guardar.
+  Widget _preview() {
+    final config = BrandConfig(
+      name: _name.text.trim().isEmpty ? 'Tu restaurante' : _name.text.trim(),
+      logoUrl: _s['logoUrl'] as String?,
+      primary: colorFromHex(_primary, fallback: const Color(0xFFFF7A1A)),
+      accent: colorFromHex(_accent, fallback: const Color(0xFFFFC247)),
+      mode: _mode == 'light' ? BrandMode.light : BrandMode.dark,
+      fontPair: _fontPair,
+    );
+    return Theme(
+      data: buildBrandTheme(config),
+      child: Builder(builder: (context) {
+        final t = BrandTokens.of(context);
+        final text = Theme.of(context).textTheme;
+        return Container(
+          padding: const EdgeInsets.all(20),
+          decoration: BoxDecoration(
+            color: t.bg,
+            borderRadius: BorderRadius.circular(22),
+            border: Border.all(color: t.line),
+          ),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Row(children: [
+              BrandMark(name: config.name, logoUrl: config.logoUrl, height: 40),
+              const SizedBox(width: 12),
+              Expanded(child: Text(config.name, style: text.headlineSmall, overflow: TextOverflow.ellipsis)),
+              const DmPill('Vista previa'),
+            ]),
+            const SizedBox(height: 16),
+            DmPanel(
+              child: Row(children: [
+                Expanded(
+                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    Row(children: [
+                      Flexible(child: Text('Plato de ejemplo', style: text.titleLarge)),
+                      const SizedBox(width: 8),
+                      const DmPill('2x1', tone: DmTone.accent),
+                    ]),
+                    const SizedBox(height: 4),
+                    Text('Así se ven las descripciones de tus platos.', style: text.bodyMedium?.copyWith(color: t.muted)),
+                  ]),
+                ),
+                const SizedBox(width: 12),
+                Text(r'$14.50', style: text.titleLarge),
+              ]),
+            ),
+            const SizedBox(height: 14),
+            Wrap(spacing: 10, runSpacing: 10, crossAxisAlignment: WrapCrossAlignment.center, children: [
+              FilledButton(onPressed: () {}, child: const Text('Enviar a cocina')),
+              OutlinedButton(onPressed: () {}, child: const Text('Llamar al mesero')),
+              const DmPill('Listo', tone: DmTone.success),
+              const DmPill('Atención', tone: DmTone.warning),
+              const DmPill('Atrasado', tone: DmTone.danger),
+            ]),
+          ]),
+        );
+      }),
+    );
+  }
+
   Widget _colorPicker(String label, String value, ValueChanged<String> onChanged) {
     return Row(children: [
       SizedBox(width: 140, child: Text(label)),
@@ -316,7 +433,7 @@ class _SettingsFormState extends ConsumerState<_SettingsForm> {
             child: CircleAvatar(
               radius: 16,
               backgroundColor: colorFromHex(c),
-              child: value.toUpperCase() == c ? const Icon(Icons.check_rounded, color: Colors.white, size: 18) : null,
+              child: value.toUpperCase() == c ? Icon(Icons.check_rounded, color: readableOn(colorFromHex(c)), size: 18) : null,
             ),
           ),
       ]),

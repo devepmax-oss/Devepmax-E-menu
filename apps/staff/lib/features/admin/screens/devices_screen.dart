@@ -1,3 +1,4 @@
+import 'package:devepmax_ui/devepmax_ui.dart';
 import 'dart:async';
 
 import 'package:collection/collection.dart';
@@ -164,12 +165,12 @@ class _DeviceCard extends StatelessWidget {
       final seen = device.lastSeenAt;
       status = StatusChip(
         seen == null ? 'Vinculado' : 'Vinculado · visto ${DateFormat.MMMd().add_jm().format(seen)}',
-        color: Colors.green.shade700,
+        color: BrandTokens.of(context).success,
       );
     } else if (device.hasValidCode) {
       status = StatusChip(
         'Esperando vinculación · código ${device.pairingCode} (vence ${DateFormat.jm().format(device.pairingExpiresAt!)})',
-        color: Colors.orange.shade800,
+        color: BrandTokens.of(context).warning,
       );
     } else {
       status = const StatusChip('Sin vincular · genera un código');

@@ -16,8 +16,10 @@ model RestaurantSettings {
   name                  String
   legalName             String?
   logoUrl               String?
-  primaryColor          String   @default("#111111")
-  accentColor           String   @default("#FACC15")
+  primaryColor          String   @default("#FF7A1A") // botones y acciones
+  accentColor           String   @default("#FFC247") // promociones y etiquetas
+  themeMode             String   @default("dark") // dark | light (ver settings/brand.ts)
+  fontPair              String   @default("bricolage-inter") // combinación tipográfica (ver settings/brand.ts)
   phone                 String?
   whatsapp              String?
   email                 String?

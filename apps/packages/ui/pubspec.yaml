@@ -1,6 +1,6 @@
 name: devepmax_ui
-description: Devepmax E-Menu — tema y componentes visuales compartidos (marca del restaurante dinámica).
-version: 0.1.0
+description: Devepmax E-Menu — sistema de diseño compartido (marca del restaurante configurable).
+version: 0.2.0
 publish_to: none
 
 environment:
@@ -10,6 +10,7 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
+  google_fonts: ^6.2.1
 
 dev_dependencies:
   flutter_lints: ^5.0.0

@@ -1,19 +1,11 @@
-/// Devepmax E-Menu — UI compartida.
+/// Devepmax E-Menu — sistema de diseño compartido.
+///
+/// Cada restaurante define su marca en Ajustes (logo, color principal y de acento,
+/// fondo claro u oscuro y tipografía). [buildBrandTheme] convierte esa marca en el
+/// tema de la app cuidando el contraste; [BrandTokens] da los colores resueltos.
 library;
 
-import 'package:flutter/material.dart';
-
-/// Construye el tema a partir de los colores de marca del restaurante
-/// (vendrán de `RestaurantSettings` en el backend).
-ThemeData buildBrandTheme({
-  required Color primary,
-  required Color accent,
-  Brightness brightness = Brightness.light,
-}) {
-  final scheme = ColorScheme.fromSeed(
-    seedColor: primary,
-    secondary: accent,
-    brightness: brightness,
-  );
-  return ThemeData(colorScheme: scheme, useMaterial3: true);
-}
+export 'src/brand.dart';
+export 'src/theme.dart';
+export 'src/tokens.dart';
+export 'src/widgets.dart';

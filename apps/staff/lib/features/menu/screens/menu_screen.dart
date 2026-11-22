@@ -1,3 +1,4 @@
+import 'package:devepmax_ui/devepmax_ui.dart';
 import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -287,7 +288,7 @@ class _ProductCard extends StatelessWidget {
                       product.isAvailable ? 'Disponible' : 'Agotado',
                       style: TextStyle(
                         fontWeight: FontWeight.w600,
-                        color: product.isAvailable ? Colors.green.shade700 : theme.colorScheme.error,
+                        color: product.isAvailable ? BrandTokens.of(context).success : BrandTokens.of(context).danger,
                       ),
                     ),
                   ),
@@ -310,24 +311,25 @@ class _PromotionBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final t = BrandTokens.of(context);
     final extra = promotions.length > 1 ? ' +${promotions.length - 1}' : '';
     return Tooltip(
       message: promotions.map((p) => 'Promo: ${p.name}').join('\n'),
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
         decoration: BoxDecoration(
-          color: Colors.red.shade600,
+          color: t.accent,
           borderRadius: BorderRadius.circular(999),
           boxShadow: const [BoxShadow(color: Colors.black26, blurRadius: 4, offset: Offset(0, 1))],
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(Icons.local_offer_rounded, size: 14, color: Colors.white),
+            Icon(Icons.local_offer_rounded, size: 14, color: t.onAccent),
             const SizedBox(width: 4),
             Text(
               '${promotionBadge(promotions.first)}$extra',
-              style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 13),
+              style: TextStyle(color: t.onAccent, fontWeight: FontWeight.w800, fontSize: 13),
             ),
           ],
         ),
