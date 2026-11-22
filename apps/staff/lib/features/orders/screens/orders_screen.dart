@@ -314,11 +314,16 @@ class _OrderCard extends ConsumerWidget {
               const SizedBox(height: 14),
               Row(children: [
                 Text(formatMoney(order.total), style: text.titleLarge),
+                if (order.isPaid) ...[
+                  const SizedBox(width: 8),
+                  const DmPill('Pagado', tone: DmTone.success),
+                ],
                 const Spacer(),
                 if (order.status == 'PENDING_APPROVAL' && (employee?.can('orders.approve') ?? false))
                   _ActionButton(label: 'Aprobar', run: (api) => api.approve(order.id)),
                 if (order.status == 'READY' && (employee?.can('orders.create') ?? false))
                   _ActionButton(label: 'Entregar', run: (api) => api.complete(order.id)),
+                if (employee?.can('kitchen.operate') ?? false) _KitchenButton(order: order),
               ]),
             ]),
           ),
@@ -346,6 +351,7 @@ class _ActionButtonState extends ConsumerState<_ActionButton> {
     try {
       final updated = await widget.run(ref.read(ordersApiProvider));
       ref.read(ordersBoardProvider.notifier).apply(updated);
+      ref.invalidate(orderByIdProvider(updated.id));
     } catch (error) {
       if (mounted) showError(context, error);
     } finally {
@@ -361,6 +367,63 @@ class _ActionButtonState extends ConsumerState<_ActionButton> {
           ? const SizedBox.square(dimension: 18, child: CircularProgressIndicator(strokeWidth: 2))
           : Text(widget.label),
     );
+  }
+}
+
+/// Siguiente paso de cocina para toda la orden: "Empezar" (los tickets nuevos pasan a
+/// preparando) o "Listo" (los que se preparan pasan a listos). Sirve mientras no haya
+/// pantalla de cocina, o para restaurantes pequeños que no la usan.
+class _KitchenButton extends ConsumerStatefulWidget {
+  const _KitchenButton({required this.order, this.expanded = false});
+  final OrderView order;
+  final bool expanded;
+
+  @override
+  ConsumerState<_KitchenButton> createState() => _KitchenButtonState();
+}
+
+class _KitchenButtonState extends ConsumerState<_KitchenButton> {
+  bool _busy = false;
+
+  ({String label, String to, List<OrderTicket> tickets})? _next() {
+    if (!const {'PLACED', 'ACCEPTED', 'PREPARING'}.contains(widget.order.status)) return null;
+    final waiting = widget.order.tickets.where((t) => t.status == 'NEW' || t.status == 'ACCEPTED').toList();
+    if (waiting.isNotEmpty) return (label: 'Empezar', to: 'PREPARING', tickets: waiting);
+    final cooking = widget.order.tickets.where((t) => t.status == 'PREPARING').toList();
+    if (cooking.isNotEmpty) return (label: 'Listo', to: 'READY', tickets: cooking);
+    return null;
+  }
+
+  Future<void> _go(({String label, String to, List<OrderTicket> tickets}) next) async {
+    setState(() => _busy = true);
+    try {
+      final api = ref.read(ordersApiProvider);
+      for (final ticket in next.tickets) {
+        await api.moveTicket(ticket.id, next.to);
+      }
+      // El tiempo real trae la orden actualizada; esto es respaldo por si el socket está caído.
+      await ref.read(ordersBoardProvider.notifier).refresh();
+    } catch (error) {
+      if (mounted) showError(context, error);
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final next = _next();
+    if (next == null) return const SizedBox.shrink();
+    final child = _busy
+        ? const SizedBox.square(dimension: 18, child: CircularProgressIndicator(strokeWidth: 2))
+        : Row(mainAxisSize: MainAxisSize.min, children: [
+            Icon(next.to == 'READY' ? Icons.check_rounded : Icons.local_fire_department_rounded, size: 18),
+            const SizedBox(width: 6),
+            Text(widget.expanded ? (next.to == 'READY' ? 'Marcar lista' : 'Empezar a preparar') : next.label),
+          ]);
+    return next.to == 'READY'
+        ? FilledButton(onPressed: _busy ? null : () => _go(next), child: child)
+        : FilledButton.tonal(onPressed: _busy ? null : () => _go(next), child: child);
   }
 }
 
@@ -476,7 +539,9 @@ class _OrderDetail extends ConsumerWidget {
     final text = Theme.of(context).textTheme;
     // Si la orden cambia mientras el panel está abierto, se ve al instante.
     final live = ref.watch(ordersBoardProvider).value?.orders.where((o) => o.id == orderId).firstOrNull;
-    final order = live ?? initial;
+    // Si ya no está en el tablero (entregada o cancelada), se trae la versión final del servidor.
+    final fetched = live == null ? ref.watch(orderByIdProvider(orderId)).value : null;
+    final order = live ?? fetched ?? initial;
     final employee = ref.watch(authControllerProvider).value?.employee;
     final time = DateFormat.jm();
 
@@ -505,6 +570,10 @@ class _OrderDetail extends ConsumerWidget {
                     _StatusPill(status: order.status),
                     DmPill(channelLabels[order.channel] ?? order.channel),
                     DmPill('Código ${order.publicCode}'),
+                    if (order.isPaid)
+                      const DmPill('Pagado', tone: DmTone.success, icon: Icons.check_rounded)
+                    else if (order.channel == 'ONLINE' && order.status != 'PENDING_PAYMENT')
+                      const DmPill('Paga al recoger', tone: DmTone.warning),
                   ]),
                 ]),
               ),
@@ -520,6 +589,25 @@ class _OrderDetail extends ConsumerWidget {
                 style: text.bodySmall,
               ),
               if (order.customerPhone != null) Text('Tel. ${order.customerPhone}', style: text.bodySmall),
+              if (order.customerEmail != null && order.customerEmail!.isNotEmpty) Text(order.customerEmail!, style: text.bodySmall),
+              if (order.addressText != null) ...[
+                const SizedBox(height: 12),
+                DmPanel(
+                  padding: const EdgeInsets.all(12),
+                  child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    Icon(Icons.location_on_rounded, size: 20, color: t.accentText),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                        Text('Entregar en', style: text.labelMedium),
+                        Text(order.addressText!, style: text.titleSmall),
+                        if (order.deliveryInstructions != null && order.deliveryInstructions!.isNotEmpty)
+                          Text(order.deliveryInstructions!, style: text.bodySmall?.copyWith(color: t.warning)),
+                      ]),
+                    ),
+                  ]),
+                ),
+              ],
               if (order.notes != null && order.notes!.isNotEmpty) ...[
                 const SizedBox(height: 12),
                 DmPanel(
@@ -570,7 +658,10 @@ class _OrderDetail extends ConsumerWidget {
               totalRow('Subtotal', order.subtotal),
               for (final p in order.promotions) totalRow(p.name, -p.amount, color: t.accentText),
               totalRow('Impuesto', order.taxTotal),
+              if (order.deliveryFee > 0) totalRow('Envío', order.deliveryFee),
+              if (order.tipTotal > 0) totalRow('Propina', order.tipTotal),
               totalRow('Total', order.total, bold: true),
+              if (order.amountPaid > 0) totalRow(order.isPaid ? 'Pagado' : 'Abonado', order.amountPaid, color: t.success),
               if (order.tickets.isNotEmpty) ...[
                 const SizedBox(height: 20),
                 Text('Cocina', style: text.titleLarge),
@@ -601,6 +692,7 @@ class _OrderDetail extends ConsumerWidget {
                   _ActionButton(label: 'Aprobar y enviar a cocina', run: (api) => api.approve(order.id)),
                 if (order.status == 'READY' && (employee?.can('orders.create') ?? false))
                   _ActionButton(label: 'Marcar entregada', run: (api) => api.complete(order.id)),
+                if (employee?.can('kitchen.operate') ?? false) _KitchenButton(order: order, expanded: true),
               ]),
             ),
         ]),
@@ -615,6 +707,7 @@ class _OrderDetail extends ConsumerWidget {
       final updated = await ref.read(ordersApiProvider).cancel(order.id, reason);
       ref.read(ordersBoardProvider.notifier).apply(updated);
       ref.invalidate(todayOrdersProvider);
+      ref.invalidate(orderByIdProvider(order.id));
       if (context.mounted) {
         Navigator.pop(context);
         showSuccess(context, 'Orden #${order.number} cancelada');

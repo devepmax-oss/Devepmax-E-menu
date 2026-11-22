@@ -123,6 +123,9 @@ class OrderView {
     this.tableLabel,
     this.customerName,
     this.customerPhone,
+    this.customerEmail,
+    this.deliveryAddress,
+    this.deliveryInstructions,
     this.notes,
     this.cancelReason,
     required this.items,
@@ -132,6 +135,9 @@ class OrderView {
     required this.discountTotal,
     required this.taxTotal,
     required this.total,
+    required this.deliveryFee,
+    required this.tipTotal,
+    required this.amountPaid,
     required this.billStatus,
   });
 
@@ -150,6 +156,11 @@ class OrderView {
   final String? tableLabel;
   final String? customerName;
   final String? customerPhone;
+  final String? customerEmail;
+
+  /// Dirección de entrega (delivery): street, city, state, zipCode.
+  final Map<String, dynamic>? deliveryAddress;
+  final String? deliveryInstructions;
   final String? notes;
   final String? cancelReason;
   final List<OrderItem> items;
@@ -159,7 +170,21 @@ class OrderView {
   final double discountTotal;
   final double taxTotal;
   final double total;
+  final double deliveryFee;
+  final double tipTotal;
+  final double amountPaid;
   final String billStatus;
+
+  bool get isPaid => billStatus == 'PAID';
+
+  /// "123 Main St, Miami, FL 33101"
+  String? get addressText {
+    final a = deliveryAddress;
+    if (a == null) return null;
+    final line2 = [a['state'], a['zipCode']].whereType<String>().where((s) => s.isNotEmpty).join(' ');
+    final parts = [a['street'], a['city'], line2].whereType<String>().where((s) => s.trim().isNotEmpty).toList();
+    return parts.isEmpty ? null : parts.join(', ');
+  }
 
   bool get isFinished => finishedStatuses.contains(status);
   List<OrderItem> get activeItems => items.where((i) => i.isActive).toList();
@@ -197,6 +222,9 @@ class OrderView {
       tableLabel: table?['label'] as String?,
       customerName: j['customerName'] as String?,
       customerPhone: j['customerPhone'] as String?,
+      customerEmail: j['customerEmail'] as String?,
+      deliveryAddress: j['deliveryAddress'] is Map ? Map<String, dynamic>.from(j['deliveryAddress'] as Map) : null,
+      deliveryInstructions: j['deliveryInstructions'] as String?,
       notes: j['notes'] as String?,
       cancelReason: j['cancelReason'] as String?,
       items: ((j['items'] as List?) ?? const []).map((i) => OrderItem.fromJson(i as OrderJson)).toList(),
@@ -208,6 +236,9 @@ class OrderView {
       discountTotal: parseMoney(bill['discountTotal']),
       taxTotal: parseMoney(bill['taxTotal']),
       total: parseMoney(bill['total']),
+      deliveryFee: parseMoney(bill['deliveryFee']),
+      tipTotal: parseMoney(bill['tipTotal']),
+      amountPaid: parseMoney(bill['amountPaid']),
       billStatus: bill['status'] as String? ?? 'OPEN',
     );
   }

@@ -27,11 +27,19 @@ class OrdersApi {
         return response.data!.map((o) => OrderView.fromJson(o as Map<String, dynamic>)).toList();
       });
 
+  Future<OrderView> get(String id) => _call(() async =>
+      OrderView.fromJson((await _dio.get<Map<String, dynamic>>('/orders/$id')).data!));
+
   Future<OrderView> approve(String id) => _call(() async =>
       OrderView.fromJson((await _dio.post<Map<String, dynamic>>('/orders/$id/approve')).data!));
 
   Future<OrderView> complete(String id) => _call(() async =>
       OrderView.fromJson((await _dio.post<Map<String, dynamic>>('/orders/$id/complete')).data!));
+
+  /// Cocina: mueve un ticket (NEW → PREPARING → READY). La orden llega actualizada por tiempo real.
+  Future<void> moveTicket(String ticketId, String status) => _call(() async {
+        await _dio.patch<Map<String, dynamic>>('/kitchen/tickets/$ticketId', data: {'status': status});
+      });
 
   Future<OrderView> cancel(String id, String reason) => _call(() async => OrderView.fromJson(
       (await _dio.post<Map<String, dynamic>>('/orders/$id/cancel', data: {'reason': reason})).data!));
@@ -121,3 +129,9 @@ final todayOrdersProvider = FutureProvider<List<OrderView>>((ref) async {
   final orders = await ref.watch(ordersApiProvider).list('today');
   return orders..sort((a, b) => b.createdAt.compareTo(a.createdAt));
 });
+
+/// Una orden por id, pedida al servidor. El detalle la usa cuando la orden ya no está en el
+/// tablero (se entregó o se canceló mientras el panel estaba abierto, o se abrió desde "Hoy").
+final orderByIdProvider = FutureProvider.autoDispose.family<OrderView, String>(
+  (ref, id) => ref.watch(ordersApiProvider).get(id),
+);
