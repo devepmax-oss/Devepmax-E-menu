@@ -17,6 +17,7 @@ class _Destination {
 }
 
 const _allDestinations = [
+  _Destination('/orders', 'Órdenes', Icons.receipt_long_rounded, 'orders.create'),
   _Destination('/menu', 'Menú', Icons.restaurant_menu_rounded, 'menu.manage'),
   _Destination('/modifiers', 'Modificadores', Icons.tune_rounded, 'menu.manage'),
   _Destination('/menu-setup', 'Cocina e impuestos', Icons.soup_kitchen_rounded, 'menu.manage'),
@@ -61,60 +62,70 @@ class AdminShell extends ConsumerWidget {
     return Scaffold(
       body: Row(
         children: [
-          NavigationRail(
-            selectedIndex: selected < 0 ? 0 : selected,
-            labelType: NavigationRailLabelType.all,
-            groupAlignment: -0.85,
-            onDestinationSelected: (i) => context.go(destinations[i].path),
-            leading: Padding(
-              padding: const EdgeInsets.only(top: 16, bottom: 20),
-              child: Tooltip(message: brand.name, child: BrandMark(name: brand.name, logoUrl: brand.logoUrl, height: 52)),
-            ),
-            trailing: Expanded(
-              child: Align(
-                alignment: Alignment.bottomCenter,
-                child: Padding(
-                  padding: const EdgeInsets.only(bottom: 16),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      if (employee != null)
-                        Tooltip(
-                          message: '${employee.name} · ${employee.roleName}',
-                          child: Container(
-                            width: 48,
-                            height: 48,
-                            alignment: Alignment.center,
-                            decoration: BoxDecoration(
-                              color: t.surface2,
-                              shape: BoxShape.circle,
-                              border: Border.all(color: t.lineStrong, width: 2),
-                            ),
-                            child: Text(
-                              initial,
-                              style: brandFont(t.headingFamily, weight: t.headingWeight, size: 20, color: t.accentText),
-                            ),
+          // Si la pantalla no es tan alta, la barra se desplaza en vez de cortarse.
+          LayoutBuilder(
+            builder: (context, constraints) => SingleChildScrollView(
+              child: ConstrainedBox(
+                constraints: BoxConstraints(minHeight: constraints.maxHeight),
+                child: IntrinsicHeight(
+                  child: NavigationRail(
+                    selectedIndex: selected < 0 ? 0 : selected,
+                    labelType: NavigationRailLabelType.all,
+                    groupAlignment: -0.85,
+                    onDestinationSelected: (i) => context.go(destinations[i].path),
+                    leading: Padding(
+                      padding: const EdgeInsets.only(top: 16, bottom: 20),
+                      child: Tooltip(message: brand.name, child: BrandMark(name: brand.name, logoUrl: brand.logoUrl, height: 52)),
+                    ),
+                    trailing: Expanded(
+                      child: Align(
+                        alignment: Alignment.bottomCenter,
+                        child: Padding(
+                          padding: const EdgeInsets.only(bottom: 16),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              if (employee != null)
+                                Tooltip(
+                                  message: '${employee.name} · ${employee.roleName}',
+                                  child: Container(
+                                    width: 48,
+                                    height: 48,
+                                    alignment: Alignment.center,
+                                    decoration: BoxDecoration(
+                                      color: t.surface2,
+                                      shape: BoxShape.circle,
+                                      border: Border.all(color: t.lineStrong, width: 2),
+                                    ),
+                                    child: Text(
+                                      initial,
+                                      style: brandFont(t.headingFamily, weight: t.headingWeight, size: 20, color: t.accentText),
+                                    ),
+                                  ),
+                                ),
+                              const SizedBox(height: 8),
+                              IconButton(
+                                tooltip: 'Cerrar sesión',
+                                icon: Icon(Icons.logout_rounded, color: t.muted),
+                                onPressed: () => ref.read(authControllerProvider.notifier).logout(),
+                              ),
+                            ],
                           ),
                         ),
-                      const SizedBox(height: 8),
-                      IconButton(
-                        tooltip: 'Cerrar sesión',
-                        icon: Icon(Icons.logout_rounded, color: t.muted),
-                        onPressed: () => ref.read(authControllerProvider.notifier).logout(),
                       ),
+                    ),
+                    destinations: [
+                      for (final d in destinations)
+                        NavigationRailDestination(
+                          icon: Icon(d.icon),
+                          label: Text(d.label, textAlign: TextAlign.center),
+                          padding: const EdgeInsets.symmetric(vertical: 2),
+                        ),
                     ],
                   ),
                 ),
               ),
             ),
-            destinations: [
-              for (final d in destinations)
-                NavigationRailDestination(
-                  icon: Icon(d.icon),
-                  label: Text(d.label, textAlign: TextAlign.center),
-                  padding: const EdgeInsets.symmetric(vertical: 4),
-                ),
-            ],
           ),
           VerticalDivider(width: 1, color: t.line),
           Expanded(child: child),

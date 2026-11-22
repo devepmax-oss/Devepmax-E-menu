@@ -21,8 +21,9 @@ dependencies:
   image_picker: ^1.2.1
   intl: ^0.20.2
   flutter_native_splash: ^2.4.8
+  socket_io_client: ^3.1.2
   # Se agregan en su fase, con versiones actuales:
-  #   Fase 2: socket_io_client, firebase_core, firebase_messaging, sonidos
+  #   Fase 2: firebase_core, firebase_messaging, sonidos
   #   Fase 4: impresión ESC/POS
 
 dev_dependencies:

@@ -16,7 +16,8 @@
     "db:seed": "prisma db seed",
     "smoke:orders": "tsx scripts/smoke-orders.ts",
     "smoke:promotions": "tsx scripts/smoke-promotions.ts",
-    "smoke:realtime": "tsx scripts/smoke-realtime.ts"
+    "smoke:realtime": "tsx scripts/smoke-realtime.ts",
+    "demo:orders": "tsx scripts/demo-orders.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.700.0",

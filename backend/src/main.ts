@@ -1,5 +1,5 @@
 import 'reflect-metadata';
-import { ValidationPipe } from '@nestjs/common';
+import { Logger, ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { NestExpressApplication } from '@nestjs/platform-express';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
@@ -8,6 +8,12 @@ import { resolve } from 'node:path';
 import { loadEnv } from './config/env';
 import { LOCAL_UPLOADS_ROUTE } from './storage/local.driver';
 import { AppSocketIoAdapter } from './realtime/socket-io.adapter';
+
+// Un error asíncrono no atrapado no debe tumbar el servidor del restaurante:
+// se registra con su detalle y el servidor sigue atendiendo.
+process.on('unhandledRejection', (reason) => {
+  new Logger('Proceso').error(`Error no atrapado: ${reason instanceof Error ? reason.stack : String(reason)}`);
+});
 
 async function bootstrap(): Promise<void> {
   const env = loadEnv();

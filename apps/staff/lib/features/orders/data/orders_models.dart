@@ -1,0 +1,211 @@
+import '../../../core/ui/feedback.dart';
+
+/// Respuesta JSON de la API.
+typedef OrderJson = Map<String, dynamic>;
+
+/// Estados de una orden, en el orden en que avanzan.
+const finishedStatuses = {'COMPLETED', 'CANCELLED'};
+
+const orderStatusLabels = <String, String>{
+  'PENDING_PAYMENT': 'Esperando pago',
+  'PENDING_APPROVAL': 'Por aprobar',
+  'PLACED': 'Recibida',
+  'ACCEPTED': 'Aceptada',
+  'PREPARING': 'Preparando',
+  'READY': 'Lista',
+  'OUT_FOR_DELIVERY': 'En camino',
+  'COMPLETED': 'Entregada',
+  'CANCELLED': 'Cancelada',
+};
+
+const ticketStatusLabels = <String, String>{
+  'NEW': 'Nuevo',
+  'ACCEPTED': 'Aceptado',
+  'PREPARING': 'Preparando',
+  'READY': 'Listo',
+  'COMPLETED': 'Entregado',
+  'CANCELLED': 'Cancelado',
+};
+
+const channelLabels = <String, String>{
+  'TABLET': 'Mesa',
+  'POS': 'Caja',
+  'WAITER': 'Mesero',
+  'ONLINE': 'Web',
+};
+
+const fulfillmentLabels = <String, String>{
+  'DINE_IN': 'En el local',
+  'TAKEOUT': 'Para llevar',
+  'PICKUP': 'Pickup',
+  'DELIVERY': 'Delivery',
+};
+
+class OrderModifier {
+  const OrderModifier(this.group, this.option);
+  final String group;
+  final String option;
+}
+
+class OrderItem {
+  const OrderItem({
+    required this.id,
+    required this.name,
+    required this.quantity,
+    required this.lineTotal,
+    required this.discount,
+    required this.status,
+    this.notes,
+    required this.modifiers,
+  });
+
+  final String id;
+  final String name;
+  final int quantity;
+  final double lineTotal;
+  final double discount;
+  final String status;
+  final String? notes;
+  final List<OrderModifier> modifiers;
+
+  bool get isActive => status == 'ACTIVE';
+
+  factory OrderItem.fromJson(OrderJson j) => OrderItem(
+        id: j['id'] as String,
+        name: j['name'] as String,
+        quantity: j['quantity'] as int,
+        lineTotal: parseMoney(j['lineTotal']),
+        discount: parseMoney(j['discount']),
+        status: j['status'] as String? ?? 'ACTIVE',
+        notes: j['notes'] as String?,
+        modifiers: ((j['modifiers'] as List?) ?? const [])
+            .map((m) => OrderModifier((m as OrderJson)['group'] as String, m['option'] as String))
+            .toList(),
+      );
+}
+
+class OrderTicket {
+  const OrderTicket({required this.id, required this.status, required this.stationName, this.stationColor});
+  final String id;
+  final String status;
+  final String stationName;
+  final String? stationColor;
+
+  factory OrderTicket.fromJson(OrderJson j) {
+    final station = (j['station'] as OrderJson?) ?? const {};
+    return OrderTicket(
+      id: j['id'] as String,
+      status: j['status'] as String,
+      stationName: station['name'] as String? ?? 'Cocina',
+      stationColor: station['color'] as String?,
+    );
+  }
+}
+
+class OrderPromotion {
+  const OrderPromotion(this.name, this.amount);
+  final String name;
+  final double amount;
+}
+
+class OrderView {
+  const OrderView({
+    required this.id,
+    required this.number,
+    required this.publicCode,
+    required this.channel,
+    required this.fulfillmentType,
+    required this.status,
+    required this.updatedAt,
+    required this.createdAt,
+    this.placedAt,
+    this.readyAt,
+    this.tableLabel,
+    this.customerName,
+    this.customerPhone,
+    this.notes,
+    this.cancelReason,
+    required this.items,
+    required this.tickets,
+    required this.promotions,
+    required this.subtotal,
+    required this.discountTotal,
+    required this.taxTotal,
+    required this.total,
+    required this.billStatus,
+  });
+
+  final String id;
+  final int number;
+  final String publicCode;
+  final String channel;
+  final String fulfillmentType;
+  final String status;
+
+  /// Versión para tiempo real: se ignora un aviso más viejo que lo que ya se tiene.
+  final DateTime updatedAt;
+  final DateTime createdAt;
+  final DateTime? placedAt;
+  final DateTime? readyAt;
+  final String? tableLabel;
+  final String? customerName;
+  final String? customerPhone;
+  final String? notes;
+  final String? cancelReason;
+  final List<OrderItem> items;
+  final List<OrderTicket> tickets;
+  final List<OrderPromotion> promotions;
+  final double subtotal;
+  final double discountTotal;
+  final double taxTotal;
+  final double total;
+  final String billStatus;
+
+  bool get isFinished => finishedStatuses.contains(status);
+  List<OrderItem> get activeItems => items.where((i) => i.isActive).toList();
+  int get itemCount => activeItems.fold(0, (sum, i) => sum + i.quantity);
+
+  /// "Mesa 7", "Para llevar · Luis", "Delivery"…
+  String get where {
+    if (tableLabel != null) return 'Mesa $tableLabel';
+    final kind = fulfillmentLabels[fulfillmentType] ?? fulfillmentType;
+    final name = customerName?.trim();
+    return name == null || name.isEmpty ? kind : '$kind · $name';
+  }
+
+  /// Desde que la cocina recibió la orden (o desde que se creó).
+  DateTime get startedAt => placedAt ?? createdAt;
+
+  factory OrderView.fromJson(OrderJson j) {
+    final bill = (j['bill'] as OrderJson?) ?? const {};
+    final table = j['table'] as OrderJson?;
+    DateTime? date(Object? v) => v == null ? null : DateTime.tryParse(v as String)?.toLocal();
+    return OrderView(
+      id: j['id'] as String,
+      number: j['number'] as int,
+      publicCode: j['publicCode'] as String? ?? '',
+      channel: j['channel'] as String,
+      fulfillmentType: j['fulfillmentType'] as String,
+      status: j['status'] as String,
+      updatedAt: date(j['updatedAt']) ?? DateTime.fromMillisecondsSinceEpoch(0),
+      createdAt: date(j['createdAt']) ?? DateTime.now(),
+      placedAt: date(j['placedAt']),
+      readyAt: date(j['readyAt']),
+      tableLabel: table?['label'] as String?,
+      customerName: j['customerName'] as String?,
+      customerPhone: j['customerPhone'] as String?,
+      notes: j['notes'] as String?,
+      cancelReason: j['cancelReason'] as String?,
+      items: ((j['items'] as List?) ?? const []).map((i) => OrderItem.fromJson(i as OrderJson)).toList(),
+      tickets: ((j['tickets'] as List?) ?? const []).map((t) => OrderTicket.fromJson(t as OrderJson)).toList(),
+      promotions: ((j['promotions'] as List?) ?? const [])
+          .map((p) => OrderPromotion((p as OrderJson)['name'] as String? ?? 'Promoción', parseMoney(p['amount'])))
+          .toList(),
+      subtotal: parseMoney(bill['subtotal']),
+      discountTotal: parseMoney(bill['discountTotal']),
+      taxTotal: parseMoney(bill['taxTotal']),
+      total: parseMoney(bill['total']),
+      billStatus: bill['status'] as String? ?? 'OPEN',
+    );
+  }
+}
