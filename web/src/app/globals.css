@@ -1,52 +1,81 @@
 @import "tailwindcss";
 
-@custom-variant dark (&:where(.dark, .dark *));
+/* Los colores salen de la marca del restaurante (ver lib/brand.ts). */
+@theme inline {
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-surface-3: var(--surface-3);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+  --color-ink: var(--ink);
+  --color-soft: var(--soft);
+  --color-muted: var(--muted);
+  --color-danger: var(--danger);
+  --color-success: var(--success);
+  --color-brand: var(--brand);
+  --color-on-brand: var(--on-brand);
+  --color-brand-text: var(--brand-text);
+  --color-brand-soft: var(--brand-soft);
+  --color-accent: var(--accent);
+  --color-on-accent: var(--on-accent);
+  --color-accent-text: var(--accent-text);
+  --font-heading: var(--font-heading);
+  --font-body: var(--font-body);
+  --shadow-float: var(--shadow);
+}
 
-html,
+html {
+  background: var(--bg);
+  color: var(--ink);
+  -webkit-tap-highlight-color: transparent;
+}
+
 body {
   margin: 0;
-  padding: 0;
+  min-height: 100dvh;
+  font-family: var(--font-body), system-ui, sans-serif;
+  background: var(--bg);
+  color: var(--ink);
+  -webkit-font-smoothing: antialiased;
 }
 
-* {
-  box-sizing: border-box;
+h1, h2, h3, .font-heading {
+  font-family: var(--font-heading), var(--font-body), system-ui, sans-serif;
+  letter-spacing: -0.02em;
 }
 
-body {
-  font-family: Arial, Helvetica, sans-serif;
+a { color: var(--accent-text); }
+
+:focus-visible {
+  outline: 3px solid var(--accent);
+  outline-offset: 2px;
 }
 
-@keyframes flowZoom {
-  0% {
-    transform: scale(1);
-  }
-  50% {
-    transform: scale(1.045);
-  }
-  100% {
-    transform: scale(1);
-  }
-}
+.no-scrollbar { scrollbar-width: none; }
+.no-scrollbar::-webkit-scrollbar { display: none; }
 
-.animate-flow-zoom {
-  display: inline-block;
-  transform-origin: center center;
-  animation: flowZoom 4.8s ease-in-out infinite;
-  will-change: transform;
-}
+.press { transition: transform 0.12s ease, filter 0.2s ease, background-color 0.2s ease; }
+.press:active { transform: scale(0.96); }
+.press:disabled { cursor: not-allowed; filter: grayscale(0.4); opacity: 0.55; }
+.press:disabled:active { transform: none; }
 
-@keyframes cartPop {
-  0% {
-    transform: scale(1);
-  }
-  35% {
-    transform: scale(1.18);
-  }
-  100% {
-    transform: scale(1);
-  }
-}
+@keyframes bump { 0% { transform: scale(1); } 40% { transform: scale(1.06); } 100% { transform: scale(1); } }
+.bump { animation: bump 0.35s ease; }
 
-.animate-cart-pop {
-  animation: cartPop 0.45s ease;
+@keyframes live { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
+.live { animation: live 1.4s ease-in-out infinite; }
+
+@keyframes sheet-in { from { transform: translateY(24px); opacity: 0; } to { transform: none; opacity: 1; } }
+.sheet-in { animation: sheet-in 0.22s cubic-bezier(0.2, 0.8, 0.2, 1); }
+
+@keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
+.fade-in { animation: fade-in 0.2s ease; }
+
+@keyframes spin { to { transform: rotate(360deg); } }
+.spin { animation: spin 0.9s linear infinite; }
+
+@media (prefers-reduced-motion: reduce) {
+  .bump, .live, .sheet-in, .fade-in { animation: none; }
+  .press:active { transform: none; }
 }

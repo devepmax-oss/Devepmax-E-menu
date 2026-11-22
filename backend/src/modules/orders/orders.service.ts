@@ -329,7 +329,12 @@ export class OrdersService {
     const settings = await this.settings.get();
     const where: Prisma.OrderWhereInput =
       scope === 'active'
-        ? { status: { notIn: FINISHED } }
+        ? {
+            status: { notIn: FINISHED },
+            // Un pedido web que no se pagó en 30 min se considera abandonado y no estorba en la pantalla.
+            // Si el pago llega después, pasa a cocina y vuelve a aparecer.
+            NOT: { status: 'PENDING_PAYMENT', createdAt: { lt: new Date(Date.now() - 30 * 60_000) } },
+          }
         : { businessDate: businessDateFor(new Date(), settings.timezone) };
     const orders = await this.prisma.order.findMany({
       where,

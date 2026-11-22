@@ -1,121 +1,49 @@
-import { Category, ProductDetail } from './types';
+import type { CreatedOrder, OnlineConfig, OrderLineInput, PublicMenu, PublicOrder, PublicPromotion, Quote } from './types';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL;
+/** URL del backend. En el navegador y en el servidor de Next se usa la misma. */
+export const API_URL = (process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3000/api/v1').replace(/\/+$/, '');
 
-if (!API_URL) {
-  throw new Error('NEXT_PUBLIC_API_URL is not defined');
-}
+/** Origen del backend (para Socket.IO). */
+export const API_ORIGIN = API_URL.replace(/\/api\/v\d+$/, '');
 
-export async function getMenu(): Promise<Category[]> {
-  const res = await fetch(`${API_URL}/api/products`, {
-    cache: 'no-store',
-  });
-
-  if (!res.ok) {
-    throw new Error('Failed to fetch menu');
+export class ApiError extends Error {
+  constructor(
+    message: string,
+    readonly status: number,
+  ) {
+    super(message);
   }
-
-  return res.json();
 }
 
-export async function getProduct(id: string): Promise<ProductDetail> {
-  const res = await fetch(`${API_URL}/api/products/${id}`, {
-    cache: 'no-store',
-  });
-
-  if (!res.ok) {
-    throw new Error('Failed to fetch product');
+async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  let response: Response;
+  try {
+    response = await fetch(`${API_URL}${path}`, {
+      ...init,
+      headers: { 'Content-Type': 'application/json', ...(init?.headers ?? {}) },
+      cache: 'no-store',
+    });
+  } catch {
+    throw new ApiError('No pudimos conectar con el restaurante. Revisa tu conexión e intenta de nuevo.', 0);
   }
-
-  return res.json();
-}
-
-export async function getCart(sessionId: string) {
-  const res = await fetch(`${API_URL}/api/cart/${sessionId}`, {
-    cache: 'no-store',
-  });
-
-  if (!res.ok) {
-    throw new Error('Failed to fetch cart');
+  const text = await response.text();
+  const data = text ? JSON.parse(text) : null;
+  if (!response.ok) {
+    const raw = data?.message;
+    const message = Array.isArray(raw) ? raw[0] : typeof raw === 'string' ? raw : 'Algo salió mal. Intenta de nuevo.';
+    throw new ApiError(message, response.status);
   }
-
-  return res.json();
+  return data as T;
 }
 
-export async function deleteCartItem(itemId: string) {
-  const res = await fetch(`${API_URL}/api/cart/items/${itemId}`, {
-    method: 'DELETE',
-  });
-
-  if (!res.ok) {
-    throw new Error('Failed to delete cart item');
-  }
-
-  return res.json();
-}
-
-export async function checkoutOrder(payload: {
-  sessionId: string;
-  customerName: string;
-  customerPhone: string;
-  customerEmail?: string;
-  orderType: 'pickup' | 'delivery';
-  deliveryStreet?: string;
-  deliveryCity?: string;
-  deliveryState?: string;
-  deliveryZipCode?: string;
-  deliveryInstructions?: string;
-  notes?: string;
-  tip?: number;
-  paymentMethod?: 'in_person' | 'online';
-}) {
-  const res = await fetch(`${API_URL}/api/orders/checkout`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify(payload),
-  });
-
-  if (!res.ok) {
-    const error = await res.json().catch(() => null);
-    throw new Error(error?.error || 'Failed to checkout');
-  }
-
-  return res.json();
-}
-
-export async function prepareStripePayment(payload: {
-  sessionId: string;
-  customerName: string;
-  customerPhone: string;
-  customerEmail?: string;
-  orderType: 'pickup' | 'delivery';
-  deliveryStreet?: string;
-  deliveryCity?: string;
-  deliveryState?: string;
-  deliveryZipCode?: string;
-  deliveryInstructions?: string;
-  notes?: string;
-  tip?: number;
-}) {
-  const res = await fetch(`${API_URL}/api/payments/stripe/prepare`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify(payload),
-  });
-
-  if (!res.ok) {
-    const error = await res.json().catch(() => null);
-    throw new Error(error?.error || 'Failed to prepare Stripe payment');
-  }
-
-  return res.json() as Promise<{
-  orderId: string;
-  publicCode: string;
-  clientSecret: string;
-  paymentIntentId: string;
-}>;
-}
+export const api = {
+  config: () => request<OnlineConfig>('/online/config'),
+  menu: () => request<PublicMenu>('/menu?channel=online'),
+  promotions: () => request<PublicPromotion[]>('/promotions/public?channel=online'),
+  quote: (body: { fulfillmentType: 'PICKUP' | 'DELIVERY'; items: OrderLineInput[]; tipAmount?: number }) =>
+    request<Quote>('/online/quote', { method: 'POST', body: JSON.stringify(body) }),
+  createOrder: (body: unknown) => request<CreatedOrder>('/online/orders', { method: 'POST', body: JSON.stringify(body) }),
+  order: (code: string) => request<PublicOrder>(`/online/orders/${encodeURIComponent(code)}`),
+  confirmPayment: (code: string) =>
+    request<PublicOrder>(`/online/orders/${encodeURIComponent(code)}/confirm-payment`, { method: 'POST' }),
+};

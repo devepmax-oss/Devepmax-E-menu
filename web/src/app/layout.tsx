@@ -1,42 +1,31 @@
+import type { Metadata, Viewport } from 'next';
 import './globals.css';
-import type { Metadata } from 'next';
-import SiteHeader from '@/components/layout/site-header';
-import FloatingCartButton from '@/components/cart/floating-cart-button';
-import ThemeProvider from '@/components/theme/theme-provider';
-import MaintenancePage from '@/maintenance/MaintenancePage';
+import { brandStyle } from '@/lib/brand';
+import { fontPair } from '@/lib/fonts';
+import { getConfig as loadConfig } from '@/lib/server';
 
-export const metadata: Metadata = {
-  title: 'Go Picadera',
-  description: 'Ordena online',
-};
+export async function generateMetadata(): Promise<Metadata> {
+  const config = await loadConfig();
+  const name = config?.name ?? 'Pedidos en línea';
+  return {
+    title: { default: `${name} · Ordena en línea`, template: `%s · ${name}` },
+    description: `Pide en línea a ${name}: recoge en el local o recibe a domicilio.`,
+    icons: config?.logoUrl ? { icon: config.logoUrl } : { icon: '/favicon.png' },
+  };
+}
 
-export default function RootLayout({
-  children,
-}: Readonly<{
-  children: React.ReactNode;
-}>) {
-  const maintenanceMode =
-    process.env.MAINTENANCE_MODE === 'true';
+export async function generateViewport(): Promise<Viewport> {
+  const config = await loadConfig();
+  return { themeColor: config?.themeMode === 'light' ? '#FBF6F0' : '#120E0B', width: 'device-width', initialScale: 1 };
+}
 
-  if (maintenanceMode) {
-    return (
-      <html lang="es" suppressHydrationWarning>
-        <body>
-          <MaintenancePage />
-        </body>
-      </html>
-    );
-  }
-
+export default async function RootLayout({ children }: { children: React.ReactNode }) {
+  const config = await loadConfig();
+  const fonts = fontPair(config?.fontPair ?? 'bricolage-inter');
+  const style = { ...brandStyle(config ?? {}), ...fonts.style };
   return (
-    <html lang="es" suppressHydrationWarning>
-      <body>
-        <ThemeProvider>
-          <SiteHeader />
-          {children}
-          <FloatingCartButton />
-        </ThemeProvider>
-      </body>
+    <html lang="es" className={fonts.className} style={style}>
+      <body>{children}</body>
     </html>
   );
 }
