@@ -25,6 +25,14 @@ export interface Env {
   accessTokenTtlSeconds: number;
   refreshTokenDays: number;
   storage: StorageConfig;
+  /** Pagos en línea. Sin STRIPE_SECRET_KEY la web solo ofrece pagar al recoger. */
+  stripe: StripeConfig;
+}
+
+export interface StripeConfig {
+  secretKey?: string;
+  publishableKey?: string;
+  webhookSecret?: string;
 }
 
 let cached: Env | undefined;
@@ -95,6 +103,11 @@ export function loadEnv(): Env {
     accessTokenTtlSeconds: Number(process.env.ACCESS_TOKEN_TTL_SECONDS) || 900,
     refreshTokenDays: Number(process.env.REFRESH_TOKEN_DAYS) || 30,
     storage: loadStorage(port),
+    stripe: {
+      secretKey: process.env.STRIPE_SECRET_KEY?.trim() || undefined,
+      publishableKey: process.env.STRIPE_PUBLISHABLE_KEY?.trim() || undefined,
+      webhookSecret: process.env.STRIPE_WEBHOOK_SECRET?.trim() || undefined,
+    },
   };
   return cached;
 }

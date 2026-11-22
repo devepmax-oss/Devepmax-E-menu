@@ -165,6 +165,9 @@ class OrderView {
   List<OrderItem> get activeItems => items.where((i) => i.isActive).toList();
   int get itemCount => activeItems.fold(0, (sum, i) => sum + i.quantity);
 
+  /// Productos que se pidieron (en una cancelada, los que tenía antes de anularse).
+  int get orderedCount => (status == 'CANCELLED' ? items : activeItems).fold(0, (sum, i) => sum + i.quantity);
+
   /// "Mesa 7", "Para llevar · Luis", "Delivery"…
   String get where {
     if (tableLabel != null) return 'Mesa $tableLabel';

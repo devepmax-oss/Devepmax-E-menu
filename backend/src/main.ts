@@ -17,7 +17,7 @@ process.on('unhandledRejection', (reason) => {
 
 async function bootstrap(): Promise<void> {
   const env = loadEnv();
-  const app = await NestFactory.create<NestExpressApplication>(AppModule);
+  const app = await NestFactory.create<NestExpressApplication>(AppModule, { rawBody: true });
 
   app.setGlobalPrefix('api/v1');
   app.useGlobalPipes(

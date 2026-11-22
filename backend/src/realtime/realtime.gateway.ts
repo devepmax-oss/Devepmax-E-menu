@@ -10,10 +10,14 @@ import type { Server, Socket } from 'socket.io';
 import { Actor } from '../common/auth/actor';
 import { AuthService } from '../modules/auth/auth.service';
 import { DomainEvent, DomainEventsService } from './domain-events.service';
-import { Rooms, roomsForActor, roomsForEvent, secondsUntilExpiry } from './rooms';
+import { toPublicOrderView } from '../modules/orders/public-order.view';
+import type { OrderView } from '../modules/orders/orders.service';
+import { normalizeTrackCode, publicOrderRoom, Rooms, roomsForActor, roomsForEvent, secondsUntilExpiry } from './rooms';
 
 interface SocketData {
   actor: Actor;
+  /** Cliente de la web siguiendo su pedido (sin cuenta): solo entra a order:<código>. */
+  trackCode: string;
   expiryTimer?: NodeJS.Timeout;
 }
 
@@ -30,6 +34,8 @@ const MAX_TIMER_MS = 2_147_000_000;
  * - Al conectarse (y en cada reconexión) el servidor manda `ready`: es la señal para que la app
  *   vuelva a pedir su lista completa (GET /orders?scope=active o GET /kitchen/tickets) y la reemplace.
  * - Cada orden, ticket y cuenta trae `updatedAt`: la app ignora un evento más viejo que lo que ya tiene.
+ * - La web del cliente se conecta sin cuenta con `io(url, { auth: { track: '<código>' } })`:
+ *   solo entra a la room de su pedido y solo recibe `order.public` (sin teléfono, email ni dirección).
  * - Si el token de acceso vence, el servidor manda `session.expired` y desconecta: la app renueva
  *   el token y se vuelve a conectar.
  */
@@ -50,7 +56,12 @@ export class RealtimeGateway implements OnGatewayInit, OnGatewayConnection, OnGa
     // Autenticación antes de aceptar la conexión: sin token válido no hay socket.
     server.use((socket, next) => {
       const token = extractSocketToken(socket);
-      if (!token) return next(new Error('Autenticación requerida'));
+      if (!token) {
+        const trackCode = normalizeTrackCode((socket.handshake.auth as { track?: unknown } | undefined)?.track);
+        if (!trackCode) return next(new Error('Autenticación requerida'));
+        (socket as AppSocket).data.trackCode = trackCode;
+        return next();
+      }
       this.auth
         .resolveActor(token)
         .then((actor) => {
@@ -65,7 +76,13 @@ export class RealtimeGateway implements OnGatewayInit, OnGatewayConnection, OnGa
   }
 
   async handleConnection(socket: AppSocket): Promise<void> {
-    const { actor } = socket.data;
+    const { actor, trackCode } = socket.data;
+    if (!actor && trackCode) {
+      const room = Rooms.order(trackCode);
+      await socket.join(room);
+      socket.emit('ready', { rooms: [room], serverTime: new Date().toISOString() });
+      return;
+    }
     if (!actor) {
       socket.disconnect(true);
       return;
@@ -98,6 +115,16 @@ export class RealtimeGateway implements OnGatewayInit, OnGatewayConnection, OnGa
       const { employeeId } = event.payload as { employeeId: string };
       this.server.in(Rooms.employee(employeeId)).disconnectSockets(true);
       return;
+    }
+
+    const trackRoom = publicOrderRoom(event);
+    if (trackRoom) {
+      try {
+        const view = toPublicOrderView(event.payload as OrderView);
+        this.server.to(trackRoom).emit('order.public', JSON.parse(JSON.stringify(view)));
+      } catch (error) {
+        this.logger.error(`No se pudo difundir order.public: ${String(error)}`);
+      }
     }
 
     const rooms = roomsForEvent(event);

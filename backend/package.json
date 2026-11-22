@@ -17,6 +17,7 @@
     "smoke:orders": "tsx scripts/smoke-orders.ts",
     "smoke:promotions": "tsx scripts/smoke-promotions.ts",
     "smoke:realtime": "tsx scripts/smoke-realtime.ts",
+    "smoke:online": "tsx scripts/smoke-online.ts",
     "demo:orders": "tsx scripts/demo-orders.ts"
   },
   "dependencies": {
@@ -34,7 +35,8 @@
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.1",
     "sharp": "^0.34.0",
-    "socket.io": "^4.8.4"
+    "socket.io": "^4.8.4",
+    "stripe": "^23.2.0"
   },
   "devDependencies": {
     "@nestjs/cli": "^11.0.0",

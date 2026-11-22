@@ -404,7 +404,7 @@ class _TodayList extends ConsumerWidget {
                     title: Text(orders[i].where, style: text.titleSmall),
                     subtitle: Text(
                       '${time.format(orders[i].createdAt)} · ${channelLabels[orders[i].channel] ?? orders[i].channel} · '
-                      '${orders[i].itemCount} productos',
+                      '${orders[i].orderedCount} productos',
                       style: text.bodySmall,
                     ),
                     trailing: Row(mainAxisSize: MainAxisSize.min, children: [

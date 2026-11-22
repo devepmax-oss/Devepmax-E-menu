@@ -5,7 +5,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { OrderChannel, OrderStatus, Prisma } from '@prisma/client';
+import { FulfillmentType, OrderChannel, OrderStatus, Prisma } from '@prisma/client';
 import { Actor } from '../../common/auth/actor';
 import { isUniqueViolation } from '../../prisma/errors';
 import { PrismaService } from '../../prisma/prisma.service';
@@ -14,7 +14,7 @@ import { AuditService } from '../audit/audit.service';
 import { Allocation } from '../promotions/promotion.engine';
 import { PromotionsService } from '../promotions/promotions.service';
 import { SettingsService } from '../settings/settings.service';
-import { CreateOrderDto, QuoteOrderDto } from './dto/order.dto';
+import { CreateOrderDto, OrderLineDto, QuoteOrderDto } from './dto/order.dto';
 import {
   businessDateFor,
   computeTotals,
@@ -26,6 +26,28 @@ import { PricedLine, PricingService } from './pricing.service';
 import { TICKET_INCLUDE, latest, toTicketView } from './ticket.view';
 
 type Tx = Prisma.TransactionClient;
+
+/** Datos para crear una orden desde cualquier canal. */
+export interface NewOrder {
+  clientRequestId: string;
+  channel: OrderChannel;
+  fulfillmentType: FulfillmentType;
+  /** PLACED (a cocina), PENDING_APPROVAL (espera al mesero) o PENDING_PAYMENT (web, espera el pago). */
+  status: OrderStatus;
+  tableId?: string;
+  deviceId?: string | null;
+  createdById?: string | null;
+  customerName?: string | null;
+  customerPhone?: string | null;
+  customerEmail?: string | null;
+  deliveryAddress?: Prisma.InputJsonValue;
+  deliveryInstructions?: string | null;
+  notes?: string | null;
+  items: OrderLineDto[];
+  pricingChannel: 'dine_in' | 'online';
+  deliveryFee?: Prisma.Decimal;
+  tipTotal?: Prisma.Decimal;
+}
 
 export const ORDER_INCLUDE = {
   items: { orderBy: { id: 'asc' }, include: { modifiers: true, discounts: true } },
@@ -52,10 +74,14 @@ export function toOrderView(order: OrderWithRelations) {
     table: order.tableSession ? { id: order.tableSession.table.id, label: order.tableSession.table.label } : null,
     customerName: order.customerName,
     customerPhone: order.customerPhone,
+    customerEmail: order.customerEmail,
+    deliveryAddress: order.deliveryAddress,
+    deliveryInstructions: order.deliveryInstructions,
     notes: order.notes,
     createdAt: order.createdAt,
     placedAt: order.placedAt,
     readyAt: order.readyAt,
+    estimatedReadyAt: order.estimatedReadyAt,
     completedAt: order.completedAt,
     cancelledAt: order.cancelledAt,
     cancelReason: order.cancelReason,
@@ -149,10 +175,39 @@ export class OrdersService {
     if (fulfillmentType === 'DINE_IN' && !settings.acceptsDineIn) {
       throw new BadRequestException('Los pedidos en mesa están desactivados');
     }
-
-    const lines = await this.pricing.priceLines(this.prisma, 'dine_in', dto.items);
-    const allocations = await this.promotions.applyToLines('dine_in', lines);
     const status: OrderStatus = channel === 'TABLET' && settings.requireWaiterApproval ? 'PENDING_APPROVAL' : 'PLACED';
+
+    return this.createOrder(
+      {
+        clientRequestId: dto.clientRequestId,
+        channel,
+        fulfillmentType,
+        status,
+        tableId,
+        deviceId: actor.kind === 'device' ? actor.id : actor.deviceId,
+        createdById: actor.kind === 'employee' ? actor.id : null,
+        customerName: dto.customerName,
+        customerPhone: dto.customerPhone,
+        notes: dto.notes,
+        items: dto.items,
+        pricingChannel: 'dine_in',
+      },
+      actor,
+    );
+  }
+
+  /**
+   * Crea una orden de cualquier canal (caja, tablet, mesero o web) dentro de una transacción:
+   * número del día, cuenta, líneas con promociones, envío a cocina si corresponde y totales.
+   * Idempotente por clientRequestId.
+   */
+  async createOrder(input: NewOrder, auditActor: Actor | 'system'): Promise<OrderView> {
+    const existing = await this.findByClientRequestId(input.clientRequestId);
+    if (existing) return existing;
+
+    const settings = await this.settings.get();
+    const lines = await this.pricing.priceLines(this.prisma, input.pricingChannel, input.items);
+    const allocations = await this.promotions.applyToLines(input.pricingChannel, lines);
 
     let orderId: string;
     try {
@@ -164,29 +219,40 @@ export class OrdersService {
             create: { businessDate, lastOrderNumber: 1 },
             update: { lastOrderNumber: { increment: 1 } },
           });
-          const billId = await this.resolveBill(tx, tableId);
+          const billId = await this.resolveBill(tx, input.tableId);
+          if (input.deliveryFee || input.tipTotal) {
+            await tx.bill.update({
+              where: { id: billId },
+              data: { deliveryFee: input.deliveryFee ?? 0, tipTotal: input.tipTotal ?? 0 },
+            });
+          }
 
           const order = await tx.order.create({
             data: {
               businessDate,
               number: counter.lastOrderNumber,
               publicCode: generatePublicCode(),
-              clientRequestId: dto.clientRequestId,
-              channel,
-              fulfillmentType,
-              status,
-              tableSessionId: tableId ? (await tx.bill.findUniqueOrThrow({ where: { id: billId } })).tableSessionId : null,
+              clientRequestId: input.clientRequestId,
+              channel: input.channel,
+              fulfillmentType: input.fulfillmentType,
+              status: input.status,
+              tableSessionId: input.tableId
+                ? (await tx.bill.findUniqueOrThrow({ where: { id: billId } })).tableSessionId
+                : null,
               billId,
-              deviceId: actor.kind === 'device' ? actor.id : actor.deviceId,
-              createdById: actor.kind === 'employee' ? actor.id : null,
-              customerName: dto.customerName?.trim() || null,
-              customerPhone: dto.customerPhone?.trim() || null,
-              notes: dto.notes?.trim() || null,
+              deviceId: input.deviceId ?? null,
+              createdById: input.createdById ?? null,
+              customerName: input.customerName?.trim() || null,
+              customerPhone: input.customerPhone?.trim() || null,
+              customerEmail: input.customerEmail?.trim() || null,
+              deliveryAddress: input.deliveryAddress ?? undefined,
+              deliveryInstructions: input.deliveryInstructions?.trim() || null,
+              notes: input.notes?.trim() || null,
             },
           });
 
           await this.createItems(tx, order.id, billId, lines, allocations);
-          if (status === 'PLACED') await this.placeInTx(tx, order.id);
+          if (input.status === 'PLACED') await this.placeInTx(tx, order.id, settings.prepTimeMinutes);
           await this.recomputeBill(tx, billId);
           return order.id;
         }),
@@ -194,22 +260,40 @@ export class OrdersService {
     } catch (error) {
       // Dos envíos simultáneos con el mismo clientRequestId: se devuelve la orden ya creada.
       if (isUniqueViolation(error) && this.uniqueTarget(error).includes('clientRequestId')) {
-        const duplicate = await this.findByClientRequestId(dto.clientRequestId);
+        const duplicate = await this.findByClientRequestId(input.clientRequestId);
         if (duplicate) return duplicate;
       }
       throw error;
     }
 
     const view = await this.getView(orderId);
-    await this.audit.log(actor, 'order.create', 'order', orderId, {
+    await this.audit.log(auditActor, 'order.create', 'order', orderId, {
       number: view.number,
-      channel,
+      channel: input.channel,
       total: view.bill.total.toString(),
     });
     this.events.emit('order.created', view);
     this.emitBill(view);
     await this.emitTickets(orderId, 'ticket.created');
     return view;
+  }
+
+  /**
+   * Orden online pagada: pasa a cocina. Si ya estaba en cocina (pago confirmado dos veces,
+   * por el webhook y por la web) no hace nada.
+   */
+  async placeAfterPayment(orderId: string): Promise<OrderView> {
+    const settings = await this.settings.get();
+    const placed = await this.prisma.$transaction(async (tx) => {
+      const order = await tx.order.findUnique({ where: { id: orderId } });
+      if (!order) throw new NotFoundException('Orden no encontrada');
+      if (order.status !== 'PENDING_PAYMENT') return false;
+      await this.placeInTx(tx, orderId, settings.prepTimeMinutes);
+      return true;
+    });
+    if (!placed) return this.getView(orderId);
+    await this.audit.log('system', 'order.paid_online', 'order', orderId);
+    return this.publishUpdate(orderId, true);
   }
 
   /**
@@ -262,15 +346,21 @@ export class OrdersService {
     return toOrderView(order);
   }
 
+  async findByPublicCode(publicCode: string): Promise<OrderView | null> {
+    const order = await this.prisma.order.findUnique({ where: { publicCode }, include: ORDER_INCLUDE });
+    return order ? toOrderView(order) : null;
+  }
+
   // ───────── Cambios de estado ─────────
 
   /** Orden de tablet aprobada por el mesero: pasa a cocina. */
   async approve(actor: Actor, id: string): Promise<OrderView> {
+    const settings = await this.settings.get();
     await this.prisma.$transaction(async (tx) => {
       const order = await tx.order.findUnique({ where: { id } });
       if (!order) throw new NotFoundException('Orden no encontrada');
       if (order.status !== 'PENDING_APPROVAL') throw new ConflictException('La orden no está esperando aprobación');
-      await this.placeInTx(tx, id);
+      await this.placeInTx(tx, id, settings.prepTimeMinutes);
     });
     await this.audit.log(actor, 'order.approve', 'order', id);
     return this.publishUpdate(id, true);
@@ -407,7 +497,7 @@ export class OrdersService {
   }
 
   /** Envía la orden a cocina: un ticket por estación. */
-  private async placeInTx(tx: Tx, orderId: string): Promise<void> {
+  private async placeInTx(tx: Tx, orderId: string, prepMinutes = 20): Promise<void> {
     const items = await tx.orderItem.findMany({ where: { orderId, status: 'ACTIVE' } });
     const fallback = await tx.kitchenStation.findFirst({
       where: { isActive: true },
@@ -424,7 +514,11 @@ export class OrdersService {
       const ticket = await tx.kitchenTicket.create({ data: { orderId, stationId } });
       await tx.orderItem.updateMany({ where: { id: { in: itemIds } }, data: { ticketId: ticket.id, stationId } });
     }
-    await tx.order.update({ where: { id: orderId }, data: { status: 'PLACED', placedAt: new Date() } });
+    const now = new Date();
+    await tx.order.update({
+      where: { id: orderId },
+      data: { status: 'PLACED', placedAt: now, estimatedReadyAt: new Date(now.getTime() + prepMinutes * 60_000) },
+    });
   }
 
   /** Mesa → sesión abierta y su cuenta pendiente. Mostrador → cuenta nueva. */

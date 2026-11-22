@@ -1,6 +1,6 @@
 import { DeviceActor, EmployeeActor } from '../common/auth/actor';
 import { DomainEvent, DomainEventName } from './domain-events.service';
-import { Rooms, roomsForActor, roomsForEvent, secondsUntilExpiry } from './rooms';
+import { normalizeTrackCode, publicOrderRoom, Rooms, roomsForActor, roomsForEvent, secondsUntilExpiry } from './rooms';
 
 function employee(permissions: string[], deviceId: string | null = null): EmployeeActor {
   return {
@@ -73,13 +73,16 @@ describe('roomsForActor', () => {
 });
 
 describe('roomsForEvent', () => {
-  it('una orden de mesa va a caja, meseros, admin, su mesa y su seguimiento', () => {
+  it('una orden de mesa va a caja, meseros, admin y su mesa', () => {
     const rooms = roomsForEvent(
       event('order.created', { publicCode: 'ABC', fulfillmentType: 'DINE_IN', table: { id: 't7' } }),
     );
-    expect(rooms).toEqual(
-      expect.arrayContaining([Rooms.pos, Rooms.waiters, Rooms.admin, Rooms.table('t7'), Rooms.order('ABC')]),
-    );
+    expect(rooms).toEqual(expect.arrayContaining([Rooms.pos, Rooms.waiters, Rooms.admin, Rooms.table('t7')]));
+  });
+
+  it('la orden completa nunca va a la room del cliente que sigue su pedido', () => {
+    const rooms = roomsForEvent(event('order.updated', { publicCode: 'ABC', channel: 'ONLINE', fulfillmentType: 'PICKUP' }));
+    expect(rooms).not.toContain(Rooms.order('ABC'));
   });
 
   it('una orden para llevar no va a los meseros ni a ninguna mesa', () => {
@@ -121,5 +124,20 @@ describe('secondsUntilExpiry', () => {
   it('los tokens de dispositivo (sin exp) no vencen', () => {
     expect(secondsUntilExpiry('dev_abc123')).toBeUndefined();
     expect(secondsUntilExpiry(jwt({ sub: 'x' }))).toBeUndefined();
+  });
+});
+
+describe('seguimiento público', () => {
+  it('solo los pedidos web tienen room de seguimiento', () => {
+    expect(publicOrderRoom(event('order.updated', { publicCode: 'ABC', channel: 'ONLINE' }))).toBe(Rooms.order('ABC'));
+    expect(publicOrderRoom(event('order.updated', { publicCode: 'ABC', channel: 'POS' }))).toBeUndefined();
+    expect(publicOrderRoom(event('ticket.updated', { publicCode: 'ABC', channel: 'ONLINE' }))).toBeUndefined();
+  });
+
+  it('acepta solo códigos con formato válido', () => {
+    expect(normalizeTrackCode(' abcd2345 ')).toBe('ABCD2345');
+    expect(normalizeTrackCode('ab')).toBeUndefined();
+    expect(normalizeTrackCode('ABC$1234')).toBeUndefined();
+    expect(normalizeTrackCode(42)).toBeUndefined();
   });
 });

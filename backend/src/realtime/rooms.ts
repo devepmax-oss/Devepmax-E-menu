@@ -57,6 +57,7 @@ export function roomsForActor(actor: Actor): string[] {
 
 interface OrderLike {
   publicCode?: string;
+  channel?: string;
   fulfillmentType?: string;
   table?: { id: string } | null;
 }
@@ -78,7 +79,6 @@ export function roomsForEvent(event: DomainEvent): string[] {
       const rooms: string[] = [Rooms.pos, Rooms.admin];
       if (order.fulfillmentType === 'DINE_IN') rooms.push(Rooms.waiters);
       if (order.table?.id) rooms.push(Rooms.table(order.table.id));
-      if (order.publicCode) rooms.push(Rooms.order(order.publicCode));
       return rooms;
     }
     case 'ticket.created':
@@ -96,6 +96,23 @@ export function roomsForEvent(event: DomainEvent): string[] {
     default:
       return [];
   }
+}
+
+/**
+ * Room del cliente que sigue su pedido web. Solo recibe `order.public` (vista sin datos
+ * privados), nunca la orden completa que ve el personal.
+ */
+export function publicOrderRoom(event: DomainEvent): string | undefined {
+  if (event.name !== 'order.created' && event.name !== 'order.updated') return undefined;
+  const order = event.payload as OrderLike;
+  return order.channel === 'ONLINE' && order.publicCode ? Rooms.order(order.publicCode) : undefined;
+}
+
+/** Código de seguimiento válido (mismo alfabeto que los códigos públicos). */
+export function normalizeTrackCode(value: unknown): string | undefined {
+  if (typeof value !== 'string') return undefined;
+  const code = value.trim().toUpperCase();
+  return /^[A-Z0-9]{6,12}$/.test(code) ? code : undefined;
 }
 
 /** Segundos de vida que le quedan a un JWT (sin verificarlo: eso ya lo hizo AuthService). */

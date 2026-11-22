@@ -1,3 +1,5 @@
+import { OnlineModule } from './modules/online/online.module';
+import { PaymentsModule } from './modules/payments/payments.module';
 import { Module } from '@nestjs/common';
 import { HealthController } from './health/health.controller';
 import { AuditModule } from './modules/audit/audit.module';
@@ -27,6 +29,8 @@ import { StorageModule } from './storage/storage.module';
     OrdersModule,
     PromotionsModule,
     RealtimeModule,
+    PaymentsModule,
+    OnlineModule,
   ],
   controllers: [HealthController],
 })
