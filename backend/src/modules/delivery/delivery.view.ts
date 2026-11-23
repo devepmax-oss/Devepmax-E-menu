@@ -6,7 +6,7 @@ const ACTIVE = ['PENDING', 'ACCEPTED', 'PICKED_UP'];
  * Lo que ve el repartidor de una entrega: cliente, dirección, productos y estado.
  * Sin datos de caja ni de otros pedidos.
  */
-export function toDriverDelivery(order: OrderView) {
+export function toDriverDelivery(order: OrderView, offerSeconds?: number) {
   const d = order.delivery!;
   const cancelled = order.status === 'CANCELLED';
   const completed = order.status === 'COMPLETED';
@@ -33,6 +33,11 @@ export function toDriverDelivery(order: OrderView) {
     estimatedReadyAt: order.estimatedReadyAt,
     readyAt: order.readyAt,
     assignedAt: d.assignedAt,
+    /** Asignación automática sin aceptar: hasta cuándo puede aceptarla. */
+    offerExpiresAt:
+      d.status === 'PENDING' && d.autoAssigned && offerSeconds
+        ? new Date(new Date(d.assignedAt).getTime() + offerSeconds * 1000).toISOString()
+        : null,
     acceptedAt: d.acceptedAt,
     pickedUpAt: d.pickedUpAt,
     updatedAt: order.updatedAt,

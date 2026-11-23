@@ -23,6 +23,11 @@ class HomeScreen extends ConsumerWidget {
     final deliveries = ref.watch(deliveriesProvider);
     final live = ref.watch(realtimeProvider);
     final location = ref.watch(locationSharingProvider);
+    ref.listen(driverNoticeProvider, (_, message) {
+      if (message == null) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message), duration: const Duration(seconds: 6)));
+      ref.read(driverNoticeProvider.notifier).clear();
+    });
 
     return Scaffold(
       appBar: AppBar(
@@ -251,6 +256,10 @@ class _DeliveryCard extends StatelessWidget {
                 '${d.status == 'ACCEPTED' ? ' · ${kitchenLabels[d.orderStatus] ?? d.orderStatus}' : ''}',
                 style: text.bodyMedium,
               ),
+              if (d.status == 'PENDING' && d.offerExpiresAt != null) ...[
+                const SizedBox(height: 12),
+                OfferCountdown(key: ValueKey(d.offerExpiresAt), expiresAt: d.offerExpiresAt!),
+              ],
               const SizedBox(height: 14),
               DeliveryActionButton(delivery: d),
             ]),

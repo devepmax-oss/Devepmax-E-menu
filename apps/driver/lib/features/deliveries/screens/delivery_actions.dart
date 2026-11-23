@@ -1,3 +1,6 @@
+import 'dart:async';
+
+import 'package:devepmax_ui/devepmax_ui.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -107,5 +110,61 @@ class _DeliveryActionButtonState extends ConsumerState<DeliveryActionButton> {
       default:
         return const SizedBox.shrink();
     }
+  }
+}
+
+/// Cuenta regresiva de una oferta automática: "Acepta en 45 s".
+class OfferCountdown extends StatefulWidget {
+  const OfferCountdown({super.key, required this.expiresAt});
+  final DateTime expiresAt;
+
+  @override
+  State<OfferCountdown> createState() => _OfferCountdownState();
+}
+
+class _OfferCountdownState extends State<OfferCountdown> {
+  Timer? _timer;
+  late final Duration _total = widget.expiresAt.difference(DateTime.now());
+
+  @override
+  void initState() {
+    super.initState();
+    _timer = Timer.periodic(const Duration(milliseconds: 500), (_) => setState(() {}));
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final t = BrandTokens.of(context);
+    final text = Theme.of(context).textTheme;
+    final left = widget.expiresAt.difference(DateTime.now());
+    final seconds = left.inSeconds.clamp(0, 999);
+    final ratio = _total.inMilliseconds <= 0 ? 0.0 : (left.inMilliseconds / _total.inMilliseconds).clamp(0.0, 1.0);
+    final urgent = seconds <= 15;
+    return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+      Row(children: [
+        Icon(Icons.timer_rounded, size: 18, color: urgent ? t.danger : t.accentText),
+        const SizedBox(width: 6),
+        Text(
+          seconds > 0 ? 'Acepta en $seconds s' : 'Pasando a otro repartidor…',
+          style: text.titleSmall?.copyWith(color: urgent ? t.danger : t.accentText),
+        ),
+      ]),
+      const SizedBox(height: 6),
+      ClipRRect(
+        borderRadius: BorderRadius.circular(99),
+        child: LinearProgressIndicator(
+          value: ratio,
+          minHeight: 6,
+          backgroundColor: t.surface3,
+          color: urgent ? t.danger : t.accent,
+        ),
+      ),
+    ]);
   }
 }

@@ -52,10 +52,21 @@ class OrdersApi {
   Future<Map<String, dynamic>> deliveryZone() =>
       _call(() async => (await _dio.get<Map<String, dynamic>>('/delivery/zone')).data!);
 
-  Future<Map<String, dynamic>> saveDeliveryZone({required double fee, required double minOrder, required int etaMinutes}) =>
-      _call(() async => (await _dio.put<Map<String, dynamic>>('/delivery/zone',
-              data: {'fee': fee, 'minOrder': minOrder, 'etaMinutes': etaMinutes}))
-          .data!);
+  Future<Map<String, dynamic>> saveDeliveryZone({
+    required double fee,
+    required double minOrder,
+    required int etaMinutes,
+    required bool autoAssign,
+    required int offerSeconds,
+  }) =>
+      _call(() async => (await _dio.put<Map<String, dynamic>>('/delivery/zone', data: {
+            'fee': fee,
+            'minOrder': minOrder,
+            'etaMinutes': etaMinutes,
+            'autoAssign': autoAssign,
+            'offerSeconds': offerSeconds,
+          }))
+              .data!);
 
   /// Cocina: mueve un ticket (NEW → PREPARING → READY). La orden llega actualizada por tiempo real.
   Future<void> moveTicket(String ticketId, String status) => _call(() async {

@@ -102,6 +102,10 @@ async function main() {
   const config = (await api('GET', '/online/config')).data;
   check('la web muestra el nuevo envío', Number(config?.delivery?.fee) === 3.99, config?.delivery);
 
+  // La app del repartidor queda conectada antes del pedido, para no perder ningún aviso.
+  const driverSocket = await connect({ token: D });
+  const driverEvents = driverSocket ? listen(driverSocket, 'delivery.updated') : [];
+
   console.log('\nPedido de delivery');
   const menu = (await api('GET', '/menu?channel=online')).data;
   const product = (menu?.categories ?? []).flatMap((c: Json) => c.products).find((p: Json) => p.isAvailable !== false);
@@ -124,17 +128,25 @@ async function main() {
   await new Stripe(key).paymentIntents.confirm(intentId, { payment_method: 'pm_card_visa', return_url: 'https://example.com' });
   const paid = await api('POST', `/online/orders/${code}/confirm-payment`);
   check('pagado y en cocina', paid.data?.stage === 'received' && paid.data?.totals?.paid === true, paid.data);
+  await sleep(1500);
   const staffOrder = ((await api('GET', '/orders?scope=active', undefined, A)).data as Json[]).find((o) => o.publicCode === code)!;
 
-  console.log('\nAsignar y aceptar');
-  const driverSocket = await connect({ token: D });
+  console.log('\nAsignación automática');
   check('la app del repartidor se conecta en vivo', !!driverSocket);
-  const driverEvents = driverSocket ? listen(driverSocket, 'delivery.updated') : [];
+  const zoneNow = (await api('GET', '/delivery/zone', undefined, A)).data;
+  if (zoneNow?.autoAssign) {
+    check('al entrar a cocina se asigna solo a un repartidor disponible', !!staffOrder?.delivery?.driver, staffOrder?.delivery);
+    check('la oferta automática tiene tiempo para aceptar', staffOrder?.delivery?.autoAssigned === true);
+  } else {
+    console.log('  (La asignación automática está apagada en Ajustes → Delivery)');
+  }
+
+  console.log('\nAsignar y aceptar');
   const drivers = (await api('GET', '/delivery/drivers', undefined, A)).data as Json[];
   const driver = drivers.find((d) => d.name === 'Repartidor de prueba');
   check('caja ve al repartidor disponible', driver?.status === 'AVAILABLE', drivers);
   const assigned = await api('POST', `/delivery/orders/${staffOrder.id}/assign`, { driverId: driver?.id }, A);
-  check('se asigna el repartidor', assigned.data?.delivery?.driver?.name === 'Repartidor de prueba', assigned.data);
+  check('caja puede asignarlo a mano', assigned.data?.delivery?.driver?.name === 'Repartidor de prueba', assigned.data);
   await sleep(600);
   check('al repartidor le llega la entrega al instante', driverEvents.some((e) => e.delivery?.publicCode === code && e.delivery?.status === 'PENDING'), driverEvents);
   const mine = (await api('GET', '/delivery/me/deliveries', undefined, D)).data as Json[];

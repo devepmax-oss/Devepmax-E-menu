@@ -70,6 +70,8 @@ export class UpdateSettingsDto {
   tipPresets?: number[];
   @IsOptional() @IsString() @MaxLength(300) receiptFooter?: string;
   @IsOptional() @IsBoolean() maintenanceMode?: boolean;
+  @IsOptional() @IsBoolean() autoAssignDrivers?: boolean;
+  @IsOptional() @IsInt() @Min(30) @Max(300) driverOfferSeconds?: number;
 }
 
 export class OpeningHourDto {

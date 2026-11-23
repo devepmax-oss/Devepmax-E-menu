@@ -21,6 +21,17 @@ class DriverMeController extends AsyncNotifier<DriverMe> {
   }
 }
 
+/// Avisos para mostrar en pantalla (por ejemplo, una oferta que venció).
+final driverNoticeProvider = NotifierProvider<DriverNotice, String?>(DriverNotice.new);
+
+class DriverNotice extends Notifier<String?> {
+  @override
+  String? build() => null;
+
+  void show(String message) => state = message;
+  void clear() => state = null;
+}
+
 /// Entregas en curso, al día en tiempo real. Suena cuando llega una nueva.
 final deliveriesProvider = AsyncNotifierProvider<DeliveriesController, List<Delivery>>(DeliveriesController.new);
 
@@ -58,7 +69,18 @@ class DeliveriesController extends AsyncNotifier<List<Delivery>> {
         if (json is Map) apply(Delivery.fromJson(Map<String, dynamic>.from(json)), fromServer: true);
       case 'delivery.removed':
         final id = event.json?['assignmentId'];
-        if (id is String && _byId.remove(id) != null) state = AsyncData(_snapshot());
+        final removed = id is String ? _byId.remove(id) : null;
+        if (removed != null) state = AsyncData(_snapshot());
+        if (event.json?['reason'] == 'expired') {
+          // El servidor lo desconectó por no aceptar a tiempo: se actualiza el interruptor.
+          ref.invalidate(driverMeProvider);
+          ref.read(driverNoticeProvider.notifier).show(
+                'El pedido${removed != null ? ' #${removed.number}' : ''} pasó a otro repartidor porque no lo aceptaste a tiempo. '
+                'Quedaste desconectado: actívate cuando estés listo.',
+              );
+        } else if (removed != null && event.json?['reason'] != 'declined') {
+          ref.read(driverNoticeProvider.notifier).show('El pedido #${removed.number} se asignó a otro repartidor.');
+        }
     }
   }
 

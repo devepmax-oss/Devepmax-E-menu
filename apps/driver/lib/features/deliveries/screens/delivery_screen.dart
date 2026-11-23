@@ -168,7 +168,13 @@ class DeliveryScreen extends ConsumerWidget {
       ]),
       bottomNavigationBar: SafeArea(
         minimum: const EdgeInsets.fromLTRB(16, 8, 16, 16),
-        child: DeliveryActionButton(delivery: d, large: true),
+        child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          if (d.status == 'PENDING' && d.offerExpiresAt != null) ...[
+            OfferCountdown(key: ValueKey(d.offerExpiresAt), expiresAt: d.offerExpiresAt!),
+            const SizedBox(height: 10),
+          ],
+          DeliveryActionButton(delivery: d, large: true),
+        ]),
       ),
     );
   }

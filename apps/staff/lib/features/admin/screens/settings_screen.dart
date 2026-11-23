@@ -524,6 +524,8 @@ class _DeliveryZoneCardState extends ConsumerState<_DeliveryZoneCard> {
   final _fee = TextEditingController();
   final _min = TextEditingController();
   final _eta = TextEditingController();
+  bool _auto = true;
+  int _offer = 60;
   bool _loaded = false;
   bool _saving = false;
 
@@ -548,6 +550,8 @@ class _DeliveryZoneCardState extends ConsumerState<_DeliveryZoneCard> {
             fee: double.parse(_fee.text.trim()),
             minOrder: double.parse(_min.text.trim()),
             etaMinutes: int.parse(_eta.text.trim()),
+            autoAssign: _auto,
+            offerSeconds: _offer,
           );
       ref.invalidate(deliveryZoneProvider);
       if (mounted) showSuccess(context, 'Zona de delivery guardada');
@@ -582,6 +586,8 @@ class _DeliveryZoneCardState extends ConsumerState<_DeliveryZoneCard> {
               _fee.text = _money(z['fee']);
               _min.text = _money(z['minOrder']);
               _eta.text = '${z['etaMinutes'] ?? 35}';
+              _auto = z['autoAssign'] as bool? ?? true;
+              _offer = (z['offerSeconds'] as num?)?.toInt() ?? 60;
             }
             final configured = z['configured'] == true;
             return Form(
@@ -625,6 +631,30 @@ class _DeliveryZoneCardState extends ConsumerState<_DeliveryZoneCard> {
                     ),
                   ),
                 ]),
+                const SizedBox(height: 8),
+                SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text('Asignar repartidor automáticamente'),
+                  subtitle: const Text(
+                    'Al entrar a cocina, el pedido va al repartidor disponible con menos entregas. '
+                    'Si no acepta a tiempo, pasa al siguiente y queda desconectado.',
+                  ),
+                  value: _auto,
+                  onChanged: (v) => setState(() => _auto = v),
+                ),
+                if (_auto)
+                  Row(children: [
+                    Expanded(child: Text('Tiempo para aceptar', style: text.bodyMedium)),
+                    SegmentedButton<int>(
+                      segments: const [
+                        ButtonSegment(value: 30, label: Text('30 s')),
+                        ButtonSegment(value: 60, label: Text('60 s')),
+                        ButtonSegment(value: 120, label: Text('2 min')),
+                      ],
+                      selected: {const [30, 60, 120].contains(_offer) ? _offer : 60},
+                      onSelectionChanged: (v) => setState(() => _offer = v.first),
+                    ),
+                  ]),
                 const SizedBox(height: 12),
                 Align(
                   alignment: Alignment.centerRight,

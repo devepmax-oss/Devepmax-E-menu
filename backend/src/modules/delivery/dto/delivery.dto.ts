@@ -1,4 +1,4 @@
-import { IsIn, IsInt, IsLatitude, IsLongitude, IsNumber, IsOptional, IsString, Max, MaxLength, Min } from 'class-validator';
+import { IsBoolean, IsIn, IsInt, IsLatitude, IsLongitude, IsNumber, IsOptional, IsString, Max, MaxLength, Min } from 'class-validator';
 
 export class UpdateDriverMeDto {
   /** Disponible para recibir entregas, o desconectado. */
@@ -21,4 +21,6 @@ export class DeliveryZoneDto {
   @IsNumber({ maxDecimalPlaces: 2 }) @Min(0) @Max(100) fee: number;
   @IsNumber({ maxDecimalPlaces: 2 }) @Min(0) @Max(1000) minOrder: number;
   @IsInt() @Min(5) @Max(240) etaMinutes: number;
+  @IsOptional() @IsBoolean() autoAssign?: boolean;
+  @IsOptional() @IsInt() @Min(30) @Max(300) offerSeconds?: number;
 }

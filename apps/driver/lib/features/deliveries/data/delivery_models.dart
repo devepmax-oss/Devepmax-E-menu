@@ -76,6 +76,7 @@ class Delivery {
     this.notes,
     this.readyAt,
     this.estimatedReadyAt,
+    this.offerExpiresAt,
   });
 
   final String assignmentId;
@@ -98,6 +99,9 @@ class Delivery {
   final String? notes;
   final DateTime? readyAt;
   final DateTime? estimatedReadyAt;
+
+  /// Asignación automática: hasta cuándo puede aceptarla (luego pasa a otro repartidor).
+  final DateTime? offerExpiresAt;
 
   bool get readyToPickUp => orderStatus == 'READY';
   int get itemCount => items.fold(0, (n, i) => n + i.quantity);
@@ -148,6 +152,7 @@ class Delivery {
       amountDue: parseMoney(j['amountDue']),
       readyAt: date(j['readyAt']),
       estimatedReadyAt: date(j['estimatedReadyAt']),
+      offerExpiresAt: date(j['offerExpiresAt']),
       updatedAt: date(j['updatedAt']) ?? DateTime.fromMillisecondsSinceEpoch(0),
     );
   }

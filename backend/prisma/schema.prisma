@@ -42,6 +42,8 @@ model RestaurantSettings {
   tipPresets            Int[]    @default([15, 18, 20])
   receiptFooter         String?
   maintenanceMode       Boolean  @default(false)
+  autoAssignDrivers     Boolean  @default(true) // delivery: asignar repartidor automáticamente
+  driverOfferSeconds    Int      @default(60) // tiempo para aceptar antes de pasar al siguiente
   updatedAt             DateTime @updatedAt
 }
 
@@ -634,6 +636,10 @@ model DeliveryAssignment {
   deliveredAt DateTime?
   cancelledAt DateTime?
   createdAt   DateTime                 @default(now())
+  /// Asignada por el sistema (vence si no se acepta a tiempo).
+  autoAssigned     Boolean  @default(false)
+  /// Repartidores que ya rechazaron o dejaron vencer este pedido.
+  skippedDriverIds String[] @default([])
   order       Order                    @relation(fields: [orderId], references: [id], onDelete: Cascade)
   driver      DriverProfile            @relation(fields: [driverId], references: [id])
 }

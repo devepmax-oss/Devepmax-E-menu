@@ -23,6 +23,10 @@ import { GeocodingService } from './geocoding.service';
 const ACTIVE: DeliveryAssignmentStatus[] = ['PENDING', 'ACCEPTED', 'PICKED_UP'];
 /** Una orden de delivery se puede asignar mientras no haya salido ni terminado. */
 const ASSIGNABLE = ['PLACED', 'ACCEPTED', 'PREPARING', 'READY'];
+/** Máximo de entregas en curso por repartidor para recibir una automática. */
+const MAX_ACTIVE_PER_DRIVER = 3;
+/** Cada cuánto se revisan las ofertas vencidas. */
+const SWEEP_MS = 5000;
 
 @Injectable()
 export class DeliveryService implements OnModuleInit, OnModuleDestroy {
@@ -30,6 +34,11 @@ export class DeliveryService implements OnModuleInit, OnModuleDestroy {
   private unsubscribe?: () => void;
   /** Última ubicación aceptada por repartidor (para no saturar con envíos seguidos). */
   private readonly lastFix = new Map<string, number>();
+  /** Pedidos que se están asignando ahora (evita asignar dos veces el mismo). */
+  private readonly assigning = new Set<string>();
+  private sweepTimer?: NodeJS.Timeout;
+  private sweeping = false;
+  private offerSeconds = 60;
 
   constructor(
     private readonly prisma: PrismaService,
@@ -42,10 +51,14 @@ export class DeliveryService implements OnModuleInit, OnModuleDestroy {
 
   onModuleInit() {
     this.unsubscribe = this.events.subscribe((e) => this.onEvent(e));
+    this.sweepTimer = setInterval(() => void this.sweep(), SWEEP_MS);
+    // Al arrancar: pedidos que quedaron sin repartidor (por ejemplo, tras reiniciar el servidor).
+    setTimeout(() => void this.assignWaiting(), 3000);
   }
 
   onModuleDestroy() {
     this.unsubscribe?.();
+    if (this.sweepTimer) clearInterval(this.sweepTimer);
   }
 
   /** Cada cambio de una orden con repartidor le llega a ese repartidor en vivo. */
@@ -53,13 +66,20 @@ export class DeliveryService implements OnModuleInit, OnModuleDestroy {
     if (event.name !== 'order.created' && event.name !== 'order.updated') return;
     const order = event.payload as OrderView;
     const d = order.delivery;
-    if (!d) return;
+    if (!d) {
+      // Pedido de delivery que entró a cocina sin repartidor: se asigna solo (si está activado).
+      if (order.fulfillmentType === 'DELIVERY' && ASSIGNABLE.includes(order.status)) void this.autoAssign(order.id);
+      return;
+    }
     if (order.status === 'CANCELLED' && ACTIVE.includes(d.status)) {
       void this.prisma.deliveryAssignment
         .updateMany({ where: { id: d.assignmentId, status: { in: ACTIVE } }, data: { status: 'CANCELLED', cancelledAt: new Date() } })
         .catch((e) => this.logger.error(`No se pudo cerrar la entrega: ${String(e)}`));
     }
-    this.events.emit('delivery.updated', { driverEmployeeId: d.driver.employeeId, delivery: toDriverDelivery(order) });
+    this.events.emit('delivery.updated', {
+      driverEmployeeId: d.driver.employeeId,
+      delivery: toDriverDelivery(order, this.offerSeconds),
+    });
   }
 
   // ───────── Repartidor ─────────
@@ -94,6 +114,8 @@ export class DeliveryService implements OnModuleInit, OnModuleDestroy {
         ...(dto.vehiclePlate !== undefined ? { vehiclePlate: dto.vehiclePlate.trim().toUpperCase() || null } : {}),
       },
     });
+    // Se conectó: puede recibir los pedidos que esperan repartidor.
+    if (dto.status === 'AVAILABLE') void this.assignWaiting();
     return this.me(actor);
   }
 
@@ -105,7 +127,7 @@ export class DeliveryService implements OnModuleInit, OnModuleDestroy {
       include: ORDER_INCLUDE,
       orderBy: { createdAt: 'asc' },
     });
-    return orders.map((o) => toDriverDelivery(toOrderView(o)));
+    return orders.map((o) => toDriverDelivery(toOrderView(o), this.offerSeconds));
   }
 
   private async ownAssignment(actor: EmployeeActor, id: string) {
@@ -135,11 +157,15 @@ export class DeliveryService implements OnModuleInit, OnModuleDestroy {
     if (a.status === 'PICKED_UP') throw new ConflictException('Ya recogiste este pedido; márcalo como entregado');
     if (!ACTIVE.includes(a.status)) throw new ConflictException('Esta entrega ya no está activa');
     await this.prisma.$transaction([
-      this.prisma.deliveryAssignment.update({ where: { id }, data: { status: 'CANCELLED', cancelledAt: new Date() } }),
+      this.prisma.deliveryAssignment.update({
+        where: { id },
+        data: { status: 'CANCELLED', cancelledAt: new Date(), skippedDriverIds: { push: a.driverId } },
+      }),
       this.touch(a.orderId),
     ]);
     await this.audit.log(actor, 'delivery.decline', 'order', a.orderId);
-    this.events.emit('delivery.removed', { driverEmployeeId: actor.id, assignmentId: id, orderId: a.orderId });
+    this.events.emit('delivery.removed', { driverEmployeeId: actor.id, assignmentId: id, orderId: a.orderId, reason: 'declined' });
+    // publishUpdate dispara la asignación automática al siguiente repartidor.
     await this.orders.publishUpdate(a.orderId);
     return { ok: true };
   }
@@ -168,6 +194,7 @@ export class DeliveryService implements OnModuleInit, OnModuleDestroy {
     await this.prisma.deliveryAssignment.update({ where: { id }, data: { status: 'DELIVERED', deliveredAt: new Date() } });
     await this.orders.complete(actor, a.orderId);
     await this.audit.log(actor, 'delivery.delivered', 'order', a.orderId);
+    void this.assignWaiting();
     return this.deliveryView(a.orderId);
   }
 
@@ -235,8 +262,17 @@ export class DeliveryService implements OnModuleInit, OnModuleDestroy {
     await this.prisma.$transaction([
       this.prisma.deliveryAssignment.upsert({
         where: { orderId },
-        create: { orderId, driverId },
-        update: { driverId, status: 'PENDING', createdAt: new Date(), acceptedAt: null, pickedUpAt: null, deliveredAt: null, cancelledAt: null },
+        create: { orderId, driverId, autoAssigned: false },
+        update: {
+          driverId,
+          status: 'PENDING',
+          autoAssigned: false,
+          createdAt: new Date(),
+          acceptedAt: null,
+          pickedUpAt: null,
+          deliveredAt: null,
+          cancelledAt: null,
+        },
       }),
       this.touch(orderId),
     ]);
@@ -267,9 +303,10 @@ export class DeliveryService implements OnModuleInit, OnModuleDestroy {
       this.prisma.deliveryZone.findFirst({ where: { isActive: true }, orderBy: { fee: 'asc' } }),
       this.settings.get(),
     ]);
+    const auto = { autoAssign: settings.autoAssignDrivers, offerSeconds: settings.driverOfferSeconds };
     return zone
-      ? { fee: zone.fee, minOrder: zone.minOrder, etaMinutes: zone.etaMinutes, configured: true }
-      : { fee: new Prisma.Decimal(0), minOrder: new Prisma.Decimal(0), etaMinutes: settings.prepTimeMinutes + 20, configured: false };
+      ? { fee: zone.fee, minOrder: zone.minOrder, etaMinutes: zone.etaMinutes, configured: true, ...auto }
+      : { fee: new Prisma.Decimal(0), minOrder: new Prisma.Decimal(0), etaMinutes: settings.prepTimeMinutes + 20, configured: false, ...auto };
   }
 
   async saveZone(actor: EmployeeActor, dto: DeliveryZoneDto) {
@@ -277,6 +314,11 @@ export class DeliveryService implements OnModuleInit, OnModuleDestroy {
     const data = { fee: new Prisma.Decimal(dto.fee), minOrder: new Prisma.Decimal(dto.minOrder), etaMinutes: dto.etaMinutes };
     if (zone) await this.prisma.deliveryZone.update({ where: { id: zone.id }, data });
     else await this.prisma.deliveryZone.create({ data: { name: 'Zona principal', ...data } });
+    if (dto.autoAssign !== undefined || dto.offerSeconds !== undefined) {
+      await this.settings.update(actor, { autoAssignDrivers: dto.autoAssign, driverOfferSeconds: dto.offerSeconds });
+      if (dto.offerSeconds) this.offerSeconds = dto.offerSeconds;
+      if (dto.autoAssign) void this.assignWaiting();
+    }
     await this.audit.log(actor, 'delivery.zone', 'settings', 'delivery-zone', { ...dto });
     return this.zone();
   }
@@ -302,10 +344,140 @@ export class DeliveryService implements OnModuleInit, OnModuleDestroy {
   }
 
   private async publish(orderId: string) {
-    return toDriverDelivery(await this.orders.publishUpdate(orderId));
+    return toDriverDelivery(await this.orders.publishUpdate(orderId), this.offerSeconds);
   }
 
   private async deliveryView(orderId: string) {
-    return toDriverDelivery(await this.orders.getView(orderId));
+    return toDriverDelivery(await this.orders.getView(orderId), this.offerSeconds);
+  }
+
+  // ───────── Asignación automática ─────────
+
+  /**
+   * Elige repartidor para un pedido de delivery: disponible, con menos entregas en curso y,
+   * si empatan, el que lleva más tiempo sin recibir una. Salta a quienes ya lo rechazaron
+   * o lo dejaron vencer. Si no hay nadie, el pedido espera y se asigna cuando alguien se conecte.
+   */
+  async autoAssign(orderId: string): Promise<void> {
+    if (this.assigning.has(orderId)) return;
+    this.assigning.add(orderId);
+    try {
+      const settings = await this.settings.get();
+      this.offerSeconds = settings.driverOfferSeconds;
+      if (!settings.autoAssignDrivers) return;
+      const order = await this.prisma.order.findUnique({ where: { id: orderId }, include: { deliveryAssignment: true } });
+      if (!order || order.fulfillmentType !== 'DELIVERY' || !ASSIGNABLE.includes(order.status)) return;
+      const current = order.deliveryAssignment;
+      if (current && ACTIVE.includes(current.status)) return;
+
+      const driverId = await this.pickDriver(current?.skippedDriverIds ?? []);
+      if (!driverId) return;
+      const now = new Date();
+      await this.prisma.$transaction([
+        this.prisma.deliveryAssignment.upsert({
+          where: { orderId },
+          create: { orderId, driverId, autoAssigned: true },
+          update: {
+            driverId,
+            status: 'PENDING',
+            autoAssigned: true,
+            createdAt: now,
+            acceptedAt: null,
+            pickedUpAt: null,
+            deliveredAt: null,
+            cancelledAt: null,
+          },
+        }),
+        this.touch(orderId),
+      ]);
+      await this.audit.log('system', 'delivery.auto_assign', 'order', orderId, { driverId });
+      await this.orders.publishUpdate(orderId);
+    } catch (error) {
+      this.logger.error(`No se pudo asignar repartidor al pedido ${orderId}: ${String(error)}`);
+    } finally {
+      this.assigning.delete(orderId);
+    }
+  }
+
+  private async pickDriver(skipped: string[]): Promise<string | null> {
+    const candidates = await this.prisma.driverProfile.findMany({
+      where: {
+        status: 'AVAILABLE',
+        id: { notIn: skipped },
+        employee: { isActive: true, role: { permissions: { has: 'delivery.own' }, name: { not: ADMIN_ROLE_NAME } } },
+      },
+      select: { id: true, assignments: { orderBy: { createdAt: 'desc' }, take: 1, select: { createdAt: true } } },
+    });
+    if (!candidates.length) return null;
+    const counts = await this.prisma.deliveryAssignment.groupBy({
+      by: ['driverId'],
+      where: { status: { in: ACTIVE }, driverId: { in: candidates.map((c) => c.id) } },
+      _count: { _all: true },
+    });
+    const active = new Map(counts.map((c) => [c.driverId, c._count._all]));
+    const ranked = candidates
+      .map((c) => ({ id: c.id, active: active.get(c.id) ?? 0, last: c.assignments[0]?.createdAt.getTime() ?? 0 }))
+      .filter((c) => c.active < MAX_ACTIVE_PER_DRIVER)
+      .sort((a, b) => a.active - b.active || a.last - b.last);
+    return ranked[0]?.id ?? null;
+  }
+
+  /** Asigna, del más antiguo al más nuevo, los pedidos de delivery que esperan repartidor. */
+  async assignWaiting(): Promise<void> {
+    try {
+      const waiting = await this.prisma.order.findMany({
+        where: {
+          fulfillmentType: 'DELIVERY',
+          status: { in: ['PLACED', 'ACCEPTED', 'PREPARING', 'READY'] },
+          OR: [{ deliveryAssignment: null }, { deliveryAssignment: { status: { in: ['CANCELLED', 'DELIVERED'] } } }],
+        },
+        select: { id: true },
+        orderBy: { placedAt: 'asc' },
+        take: 20,
+      });
+      for (const o of waiting) await this.autoAssign(o.id);
+    } catch (error) {
+      this.logger.error(`No se pudieron asignar los pedidos en espera: ${String(error)}`);
+    }
+  }
+
+  /**
+   * Ofertas automáticas que nadie aceptó a tiempo: pasan al siguiente repartidor, y quien
+   * no respondió queda desconectado (así no se le siguen enviando pedidos que no ve).
+   */
+  private async sweep(): Promise<void> {
+    if (this.sweeping) return;
+    this.sweeping = true;
+    try {
+      const settings = await this.settings.get();
+      this.offerSeconds = settings.driverOfferSeconds;
+      const cutoff = new Date(Date.now() - settings.driverOfferSeconds * 1000);
+      const expired = await this.prisma.deliveryAssignment.findMany({
+        where: { status: 'PENDING', autoAssigned: true, createdAt: { lt: cutoff } },
+        include: { driver: true },
+      });
+      for (const a of expired) {
+        const closed = await this.prisma.deliveryAssignment.updateMany({
+          where: { id: a.id, status: 'PENDING' },
+          data: { status: 'CANCELLED', cancelledAt: new Date(), skippedDriverIds: { push: a.driverId } },
+        });
+        if (closed.count === 0) continue; // la aceptó justo a tiempo
+        await this.prisma.driverProfile.updateMany({ where: { id: a.driverId, status: 'AVAILABLE' }, data: { status: 'OFFLINE' } });
+        await this.touch(a.orderId);
+        await this.audit.log('system', 'delivery.offer_expired', 'order', a.orderId, { driverId: a.driverId });
+        this.events.emit('delivery.removed', {
+          driverEmployeeId: a.driver.employeeId,
+          assignmentId: a.id,
+          orderId: a.orderId,
+          reason: 'expired',
+        });
+        // Publicar la orden sin repartidor dispara la asignación al siguiente.
+        await this.orders.publishUpdate(a.orderId);
+      }
+    } catch (error) {
+      this.logger.error(`Error revisando ofertas vencidas: ${String(error)}`);
+    } finally {
+      this.sweeping = false;
+    }
   }
 }

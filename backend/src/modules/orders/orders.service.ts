@@ -138,6 +138,7 @@ function toDeliveryInfo(a: AssignmentWithDriver | null) {
   return {
     assignmentId: a.id,
     status: a.status,
+    autoAssigned: a.autoAssigned,
     assignedAt: a.createdAt,
     acceptedAt: a.acceptedAt,
     pickedUpAt: a.pickedUpAt,
