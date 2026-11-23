@@ -27,6 +27,8 @@ export interface Env {
   storage: StorageConfig;
   /** Pagos en línea. Sin STRIPE_SECRET_KEY la web solo ofrece pagar al recoger. */
   stripe: StripeConfig;
+  /** Notificaciones push (Firebase). Sin archivo, no se envían y todo lo demás sigue igual. */
+  firebaseServiceAccountPath?: string;
 }
 
 export interface StripeConfig {
@@ -103,6 +105,7 @@ export function loadEnv(): Env {
     accessTokenTtlSeconds: Number(process.env.ACCESS_TOKEN_TTL_SECONDS) || 900,
     refreshTokenDays: Number(process.env.REFRESH_TOKEN_DAYS) || 30,
     storage: loadStorage(port),
+    firebaseServiceAccountPath: process.env.FIREBASE_SERVICE_ACCOUNT_PATH?.trim() || undefined,
     stripe: {
       secretKey: process.env.STRIPE_SECRET_KEY?.trim() || undefined,
       publishableKey: process.env.STRIPE_PUBLISHABLE_KEY?.trim() || undefined,

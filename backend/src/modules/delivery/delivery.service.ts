@@ -19,6 +19,7 @@ import { SettingsService } from '../settings/settings.service';
 import { DeliveryZoneDto, DriverLocationDto, UpdateDriverMeDto } from './dto/delivery.dto';
 import { toDriverDelivery } from './delivery.view';
 import { GeocodingService } from './geocoding.service';
+import { PushService } from '../notifications/push.service';
 
 const ACTIVE: DeliveryAssignmentStatus[] = ['PENDING', 'ACCEPTED', 'PICKED_UP'];
 /** Una orden de delivery se puede asignar mientras no haya salido ni terminado. */
@@ -39,6 +40,8 @@ export class DeliveryService implements OnModuleInit, OnModuleDestroy {
   private sweepTimer?: NodeJS.Timeout;
   private sweeping = false;
   private offerSeconds = 60;
+  /** Entregas a las que ya se avisó "listo para recoger" o "cancelado" (no repetir). */
+  private readonly notified = new Set<string>();
 
   constructor(
     private readonly prisma: PrismaService,
@@ -47,6 +50,7 @@ export class DeliveryService implements OnModuleInit, OnModuleDestroy {
     private readonly audit: AuditService,
     private readonly settings: SettingsService,
     private readonly geocoding: GeocodingService,
+    private readonly push: PushService,
   ) {}
 
   onModuleInit() {
@@ -71,7 +75,19 @@ export class DeliveryService implements OnModuleInit, OnModuleDestroy {
       if (order.fulfillmentType === 'DELIVERY' && ASSIGNABLE.includes(order.status)) void this.autoAssign(order.id);
       return;
     }
+    if (order.status === 'READY' && (d.status === 'ACCEPTED' || d.status === 'PENDING')) {
+      this.notifyOnce(`${d.assignmentId}:ready`, d.driver.employeeId, {
+        title: `Pedido #${order.number} listo para recoger`,
+        body: 'Pasa por el local: ya está empacado.',
+        data: { type: 'delivery.ready', assignmentId: d.assignmentId, orderId: order.id, tag: `delivery-${order.id}` },
+      });
+    }
     if (order.status === 'CANCELLED' && ACTIVE.includes(d.status)) {
+      this.notifyOnce(`${d.assignmentId}:cancelled`, d.driver.employeeId, {
+        title: `Pedido #${order.number} cancelado`,
+        body: 'Ya no tienes que llevarlo.',
+        data: { type: 'delivery.cancelled', assignmentId: d.assignmentId, orderId: order.id, tag: `delivery-${order.id}` },
+      });
       void this.prisma.deliveryAssignment
         .updateMany({ where: { id: d.assignmentId, status: { in: ACTIVE } }, data: { status: 'CANCELLED', cancelledAt: new Date() } })
         .catch((e) => this.logger.error(`No se pudo cerrar la entrega: ${String(e)}`));
@@ -280,7 +296,9 @@ export class DeliveryService implements OnModuleInit, OnModuleDestroy {
       this.events.emit('delivery.removed', { driverEmployeeId: previous.driver.employeeId, assignmentId: previous.id, orderId });
     }
     await this.audit.log(actor, 'delivery.assign', 'order', orderId, { driverId });
-    return this.orders.publishUpdate(orderId);
+    const view = await this.orders.publishUpdate(orderId);
+    this.notifyOffer(view);
+    return view;
   }
 
   async unassign(actor: EmployeeActor, orderId: string) {
@@ -351,6 +369,29 @@ export class DeliveryService implements OnModuleInit, OnModuleDestroy {
     return toDriverDelivery(await this.orders.getView(orderId), this.offerSeconds);
   }
 
+  // ───────── Notificaciones push ─────────
+
+  /** "Nuevo pedido #12": suena aunque la app esté cerrada o el teléfono bloqueado. */
+  private notifyOffer(order: OrderView) {
+    const d = order.delivery;
+    if (!d || d.status !== 'PENDING') return;
+    const a = (order.deliveryAddress ?? {}) as { street?: string; city?: string };
+    const where = [a.street, a.city].filter(Boolean).join(', ') || 'Entrega a domicilio';
+    void this.push.send(`employee:${d.driver.employeeId}`, {
+      title: `Nuevo pedido #${order.number}`,
+      body: d.autoAssigned ? `${where} · Acepta en ${this.offerSeconds} s` : `${where} · Te lo asignaron`,
+      data: { type: 'delivery.offer', assignmentId: d.assignmentId, orderId: order.id, tag: `delivery-${order.id}` },
+      urgent: true,
+    });
+  }
+
+  private notifyOnce(key: string, employeeId: string, message: { title: string; body: string; data: Record<string, string> }) {
+    if (this.notified.has(key)) return;
+    this.notified.add(key);
+    if (this.notified.size > 5000) this.notified.clear();
+    void this.push.send(`employee:${employeeId}`, message);
+  }
+
   // ───────── Asignación automática ─────────
 
   /**
@@ -391,7 +432,7 @@ export class DeliveryService implements OnModuleInit, OnModuleDestroy {
         this.touch(orderId),
       ]);
       await this.audit.log('system', 'delivery.auto_assign', 'order', orderId, { driverId });
-      await this.orders.publishUpdate(orderId);
+      this.notifyOffer(await this.orders.publishUpdate(orderId));
     } catch (error) {
       this.logger.error(`No se pudo asignar repartidor al pedido ${orderId}: ${String(error)}`);
     } finally {

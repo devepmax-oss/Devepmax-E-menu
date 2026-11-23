@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/auth/auth_controller.dart';
+import '../../../core/push/push.dart';
 import '../../../core/realtime/realtime.dart';
 import '../../../core/ui/feedback.dart';
 import '../data/deliveries_api.dart';
@@ -23,6 +24,7 @@ class HomeScreen extends ConsumerWidget {
     final deliveries = ref.watch(deliveriesProvider);
     final live = ref.watch(realtimeProvider);
     final location = ref.watch(locationSharingProvider);
+    final push = ref.watch(pushProvider);
     ref.listen(driverNoticeProvider, (_, message) {
       if (message == null) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message), duration: const Duration(seconds: 6)));
@@ -51,6 +53,7 @@ class HomeScreen extends ConsumerWidget {
               if (v == 'vehicle') await showVehicleDialog(context, ref);
               if (v == 'logout') {
                 await ref.read(driverMeProvider.notifier).save({'status': 'OFFLINE'}).catchError((_) {});
+                await ref.read(pushProvider.notifier).unregister();
                 await ref.read(authControllerProvider.notifier).logout();
               }
             },
@@ -71,6 +74,10 @@ class HomeScreen extends ConsumerWidget {
               error: (e, _) => DmPanel(child: Text('No se pudo cargar tu perfil: $e')),
               data: (m) => _AvailabilityCard(me: m),
             ),
+            if (push == PushStatus.off || push == PushStatus.blocked) ...[
+              const SizedBox(height: 12),
+              _PushBanner(status: push),
+            ],
             if (location == LocationState.sharing || location == LocationState.denied || location == LocationState.disabled) ...[
               const SizedBox(height: 12),
               _LocationBanner(state: location),
@@ -136,6 +143,52 @@ class _AvailabilityCardState extends ConsumerState<_AvailabilityCard> {
         _busy
             ? const Padding(padding: EdgeInsets.all(12), child: SizedBox.square(dimension: 24, child: CircularProgressIndicator(strokeWidth: 2.5)))
             : Transform.scale(scale: 1.2, child: Switch(value: m.available, onChanged: _toggle)),
+      ]),
+    );
+  }
+}
+
+class _PushBanner extends ConsumerStatefulWidget {
+  const _PushBanner({required this.status});
+  final PushStatus status;
+
+  @override
+  ConsumerState<_PushBanner> createState() => _PushBannerState();
+}
+
+class _PushBannerState extends ConsumerState<_PushBanner> {
+  bool _busy = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = BrandTokens.of(context);
+    final text = Theme.of(context).textTheme;
+    final blocked = widget.status == PushStatus.blocked;
+    return DmPanel(
+      color: t.accentSoft,
+      padding: const EdgeInsets.all(14),
+      child: Row(children: [
+        Icon(blocked ? Icons.notifications_off_rounded : Icons.notifications_active_rounded, color: t.accentText),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Text(
+            blocked
+                ? 'Las notificaciones están bloqueadas. Actívalas en los ajustes del navegador o del teléfono para no perder pedidos.'
+                : 'Activa las notificaciones para que los pedidos suenen aunque la app esté cerrada.',
+            style: text.bodyMedium?.copyWith(color: t.accentText),
+          ),
+        ),
+        if (!blocked)
+          _busy
+              ? const Padding(padding: EdgeInsets.all(8), child: SizedBox.square(dimension: 20, child: CircularProgressIndicator(strokeWidth: 2)))
+              : FilledButton(
+                  onPressed: () async {
+                    setState(() => _busy = true);
+                    await ref.read(pushProvider.notifier).enable();
+                    if (mounted) setState(() => _busy = false);
+                  },
+                  child: const Text('Activar'),
+                ),
       ]),
     );
   }

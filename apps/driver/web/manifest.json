@@ -1,0 +1,12 @@
+{
+  "name": "Repartidor",
+  "short_name": "Repartidor",
+  "start_url": ".",
+  "display": "standalone",
+  "background_color": "#120E0B",
+  "theme_color": "#120E0B",
+  "description": "App del repartidor",
+  "orientation": "portrait-primary",
+  "prefer_related_applications": false,
+  "icons": []
+}

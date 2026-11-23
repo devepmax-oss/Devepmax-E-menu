@@ -28,6 +28,12 @@ key.properties
 !.env.example
 *credentials*.json
 *.pem
+# Firebase: cuenta de servicio (secreta) y configuración de cada instalación
+secrets/
+*service-account*.json
+*firebase-adminsdk*.json
+firebase.local.json
+firebase-web.txt
 
 # IDE / SO
 .idea/
