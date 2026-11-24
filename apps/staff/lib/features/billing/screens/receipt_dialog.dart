@@ -287,3 +287,98 @@ class _PrinterSetupState extends ConsumerState<_PrinterSetup> {
     );
   }
 }
+
+/// La cuenta antes de pagar: imprimirla para llevarla a la mesa o mostrar el QR para pagar
+/// con el celular. No es un recibo: el recibo se da después de cobrar.
+Future<void> showCheckDialog(BuildContext context, BillView bill) =>
+    showDialog<void>(context: context, builder: (_) => _CheckDialog(bill: bill));
+
+class _CheckDialog extends ConsumerStatefulWidget {
+  const _CheckDialog({required this.bill});
+  final BillView bill;
+
+  @override
+  ConsumerState<_CheckDialog> createState() => _CheckDialogState();
+}
+
+class _CheckDialogState extends ConsumerState<_CheckDialog> {
+  late final Future<Map<String, dynamic>> _check = ref.read(billingApiProvider).check(widget.bill.id);
+  bool _printing = false;
+
+  Future<void> _print() async {
+    setState(() => _printing = true);
+    try {
+      await ref.read(printerProvider.notifier).printCheck(await _check);
+      if (mounted) showSuccess(context, 'Cuenta impresa');
+    } catch (error) {
+      if (mounted) showError(context, error);
+    } finally {
+      if (mounted) setState(() => _printing = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final t = BrandTokens.of(context);
+    final text = Theme.of(context).textTheme;
+    final printer = ref.watch(printerProvider).value;
+    return AlertDialog(
+      title: Text('Cuenta · ${widget.bill.label}'),
+      content: SizedBox(
+        width: 480,
+        child: SingleChildScrollView(
+          child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+            Text('Por pagar ${formatMoney(widget.bill.due)}', style: text.headlineSmall),
+            const SizedBox(height: 4),
+            Text('Para llevar a la mesa o mostrar el total. No es un recibo: el recibo se da después de cobrar.',
+                style: TextStyle(color: t.muted)),
+            const SizedBox(height: 18),
+            Text('Imprimir', style: text.titleMedium),
+            const SizedBox(height: 8),
+            if (!canPrintHere)
+              Text('Para imprimir usa la app instalada en la caja (Android o Windows).', style: TextStyle(color: t.muted))
+            else ...[
+              Row(children: [
+                Icon(Icons.print_rounded, color: printer == null ? t.faint : t.accentText),
+                const SizedBox(width: 10),
+                Expanded(child: Text(printer == null ? 'Sin impresora en este aparato' : '${printer.host} · ${printer.paper}')),
+                TextButton(onPressed: () => showPrinterSetup(context), child: Text(printer == null ? 'Configurar' : 'Cambiar')),
+              ]),
+              const SizedBox(height: 8),
+              FilledButton.icon(
+                onPressed: printer == null || _printing ? null : _print,
+                icon: _printing ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.print_rounded),
+                label: const Text('Imprimir cuenta'),
+              ),
+            ],
+            FutureBuilder<Map<String, dynamic>>(
+              future: _check,
+              builder: (context, snap) {
+                if (snap.hasError) return Padding(padding: const EdgeInsets.only(top: 12), child: Text('${snap.error}', style: TextStyle(color: t.danger)));
+                final url = snap.data?['payUrl'] as String?;
+                if (!snap.hasData) return const Padding(padding: EdgeInsets.all(16), child: Center(child: CircularProgressIndicator()));
+                if (url == null) return const SizedBox.shrink();
+                return Padding(
+                  padding: const EdgeInsets.only(top: 18),
+                  child: Column(children: [
+                    Align(alignment: Alignment.centerLeft, child: Text('Pagar con el celular', style: text.titleMedium)),
+                    const SizedBox(height: 8),
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16)),
+                      child: QrImageView(data: url, size: 200, backgroundColor: Colors.white, semanticsLabel: 'QR para pagar la cuenta'),
+                    ),
+                    const SizedBox(height: 8),
+                    Text('El cliente lo escanea y paga todo o su parte con tarjeta, Apple Pay o Google Pay.',
+                        textAlign: TextAlign.center, style: TextStyle(color: t.muted, fontSize: 13)),
+                  ]),
+                );
+              },
+            ),
+          ]),
+        ),
+      ),
+      actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cerrar'))],
+    );
+  }
+}

@@ -89,6 +89,10 @@ class BillingApi {
         return (email: data['email'] == true, sms: data['sms'] == true);
       });
 
+  /// La cuenta antes de pagar: total, propinas sugeridas y, en mesas, el enlace para pagar con el celular.
+  Future<Map<String, dynamic>> check(String billId) =>
+      _call(() async => (await _dio.get<Map<String, dynamic>>('/billing/bills/$billId/check')).data!);
+
   /// El recibo para imprimir (incluye el enlace del QR).
   Future<Map<String, dynamic>> receipt(String billId) =>
       _call(() async => (await _dio.get<Map<String, dynamic>>('/billing/bills/$billId/receipt')).data!);

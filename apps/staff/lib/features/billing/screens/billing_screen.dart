@@ -509,10 +509,17 @@ class _BillPanelState extends ConsumerState<BillPanel> {
                 ])
               : Wrap(alignment: WrapAlignment.end, spacing: 10, runSpacing: 10, children: [
                   OutlinedButton.icon(
-                    onPressed: _busy ? null : () => showReceiptDialog(context, bill),
-                    icon: const Icon(Icons.receipt_rounded),
-                    label: const Text('Cuenta / recibo'),
+                    onPressed: _busy ? null : () => showCheckDialog(context, bill),
+                    icon: const Icon(Icons.receipt_long_rounded),
+                    label: const Text('Cuenta'),
                   ),
+                  // Ya pagaron una parte: el recibo de ese pago.
+                  if (bill.hasPayments)
+                    OutlinedButton.icon(
+                      onPressed: _busy ? null : () => showReceiptDialog(context, bill),
+                      icon: const Icon(Icons.receipt_rounded),
+                      label: const Text('Recibo'),
+                    ),
                   OutlinedButton.icon(
                     onPressed: _busy
                         ? null

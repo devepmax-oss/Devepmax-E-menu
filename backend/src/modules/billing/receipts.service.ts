@@ -1,7 +1,7 @@
-import { BadRequestException, Injectable, Logger, NotFoundException, ServiceUnavailableException } from '@nestjs/common';
+import { BadRequestException, ConflictException, Injectable, Logger, NotFoundException, ServiceUnavailableException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { EmployeeActor } from '../../common/auth/actor';
-import { signReceipt, verifyReceipt } from '../../common/pay-token';
+import { signReceipt, signTablePay, verifyReceipt } from '../../common/pay-token';
 import { loadEnv } from '../../config/env';
 import { AuditService } from '../audit/audit.service';
 import { SettingsService } from '../settings/settings.service';
@@ -55,23 +55,40 @@ export class ReceiptsService {
     return `${this.env.webUrl}/recibo/${signReceipt(billId, this.env.jwtAccessSecret)}`;
   }
 
-  /** El recibo para el cliente (sin datos internos). */
+  /** El recibo para el cliente (sin datos internos). Solo existe si ya se cobró algo. */
   async publicView(token: string) {
     const billId = verifyReceipt(token, this.env.jwtAccessSecret);
     if (!billId) throw new NotFoundException('Recibo no encontrado');
     const bill = await this.billing.view(billId).catch(() => null);
-    if (!bill) throw new NotFoundException('Recibo no encontrado');
+    if (!bill || !this.hasPayments(bill)) throw new NotFoundException('Recibo no encontrado');
     return this.toReceipt(bill);
   }
 
-  /** Lo mismo, para la caja (imprimir el ticket). */
+  /** Lo mismo, para la caja (imprimir el ticket del pago). */
   async forStaff(billId: string) {
-    return { ...(await this.toReceipt(await this.billing.view(billId))), url: this.url(billId) };
+    return { ...(await this.toReceipt(await this.paidBill(billId))), url: this.url(billId) };
+  }
+
+  /**
+   * La cuenta antes de pagar (pre-cuenta): lo pedido y el total, propinas sugeridas y, en una
+   * mesa, el QR para pagar con el celular. No es un comprobante de pago.
+   */
+  async check(billId: string) {
+    const bill = await this.billing.view(billId);
+    if (bill.status !== 'UNPAID' && bill.status !== 'PARTIALLY_PAID') throw new ConflictException('Esta cuenta ya está pagada: imprime el recibo');
+    const s = await this.settings.get();
+    const base = bill.due.toNumber();
+    const stripeReady = !!(this.env.stripe.secretKey && this.env.stripe.publishableKey);
+    return {
+      ...(await this.toReceipt(bill)),
+      tips: s.tipPresets.map((percent) => ({ percent, amount: Math.round(base * percent) / 100 })),
+      payUrl: stripeReady && bill.session ? `${this.env.webUrl}/cuenta/${signTablePay(bill.session.id, this.env.jwtAccessSecret)}` : null,
+    };
   }
 
   async send(actor: EmployeeActor, billId: string, dto: SendReceiptDto) {
     if (!dto.email && !dto.phone) throw new BadRequestException('Escribe un email o un teléfono');
-    const receipt = await this.toReceipt(await this.billing.view(billId));
+    const receipt = await this.toReceipt(await this.paidBill(billId));
     const url = this.url(billId);
     const sent: string[] = [];
     if (dto.email) {
@@ -86,6 +103,17 @@ export class ReceiptsService {
     }
     await this.audit.log(actor, 'receipt.send', 'bill', billId, { channels: sent });
     return { sent, url };
+  }
+
+  private hasPayments(bill: BillView) {
+    return bill.payments.some((p) => p.status === 'SUCCEEDED');
+  }
+
+  /** El recibo es el comprobante de un pago: sin cobro no hay recibo (para eso está la cuenta). */
+  private async paidBill(billId: string) {
+    const bill = await this.billing.view(billId);
+    if (!this.hasPayments(bill)) throw new ConflictException('Todavía no hay pagos: el recibo se da después de cobrar. Para mostrar el total, imprime la cuenta.');
+    return bill;
   }
 
   private async toReceipt(bill: BillView) {

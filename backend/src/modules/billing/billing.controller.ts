@@ -45,6 +45,13 @@ export class BillingController {
     return this.receipts.config();
   }
 
+  /** La cuenta antes de pagar (pre-cuenta) para imprimir o mostrar, con el QR de pago de la mesa. */
+  @RequirePermissions('payments.take')
+  @Get('bills/:id/check')
+  check(@Param('id') id: string) {
+    return this.receipts.check(id);
+  }
+
   /** El recibo para imprimir el ticket (con el enlace del QR). */
   @RequirePermissions('payments.take')
   @Get('bills/:id/receipt')

@@ -91,6 +91,14 @@ async function main() {
   await api('POST', `/orders/${takeout.data.id}/cancel`, { reason: 'Prueba automática' }, A);
   const counterBill = (await api('GET', `/billing/bills/${counter.data.bill.id}`, undefined, A)).data;
   check('su cuenta aparece como mostrador', counterBill?.kind === 'COUNTER', counterBill?.kind);
+  console.log('\nCuenta antes de pagar');
+  const check0 = await api('GET', `/billing/bills/${counterBill.id}/check`, undefined, A);
+  check('se puede imprimir la cuenta antes de pagar', check0.status === 200 && near(check0.data?.total, n(counterBill.total)) && Array.isArray(check0.data?.tips), check0.data);
+  check('en mostrador la cuenta no trae QR de pago de mesa', check0.data?.payUrl === null, check0.data?.payUrl);
+  const early = await api('GET', `/billing/bills/${counterBill.id}/receipt`, undefined, A);
+  check('sin cobrar no hay recibo', early.status === 409, early.data);
+  const earlySend = await api('POST', `/billing/bills/${counterBill.id}/receipt`, { email: 'cliente@example.com' }, A);
+  check('ni se puede enviar un recibo', earlySend.status === 409, earlySend.data);
   const cashPaid = await api('POST', `/billing/bills/${counterBill.id}/payments`, { clientRequestId: rid(), method: 'CASH', amount: n(counterBill.due), cashTendered: Math.ceil(n(counterBill.due)) + 20 }, A);
   check('se cobra en efectivo', cashPaid.data?.status === 'PAID', cashPaid.data);
   const cashPayment = cashPaid.data.payments.find((p: Json) => p.method === 'CASH');
@@ -132,6 +140,8 @@ async function main() {
   const tableOrder = await api('POST', '/orders', { clientRequestId: rid(), fulfillmentType: 'DINE_IN', tableId: table.id, items }, A);
   check('la caja le pone una orden a una mesa sin tablet', tableOrder.status === 201 && tableOrder.data?.table?.label === 'R1', tableOrder.data);
   const tableBill = (await api('GET', `/billing/bills?tableId=${table.id}`, undefined, A)).data?.[0];
+  const tableCheck = (await api('GET', `/billing/bills/${tableBill.id}/check`, undefined, A)).data;
+  check('la cuenta de una mesa trae el QR para pagar con el celular', String(tableCheck?.payUrl).includes('/cuenta/'), tableCheck?.payUrl);
   const payToken = signTablePay(tableBill.session.id, process.env.JWT_ACCESS_SECRET ?? '');
   const intent = (await api('POST', `/pay/${payToken}/intent`, { clientRequestId: rid(), billId: tableBill.id, amount: n(tableBill.due), tip: 3 })).data;
   const piId = String(intent?.clientSecret ?? '').split('_secret_')[0];

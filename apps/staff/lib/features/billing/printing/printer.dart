@@ -73,6 +73,13 @@ class PrinterController extends AsyncNotifier<PrinterConfig?> {
     await _send(config, receiptBytes(receipt, config.columns));
   }
 
+  /// La cuenta antes de pagar (no es comprobante de pago).
+  Future<void> printCheck(Map<String, dynamic> check) async {
+    final config = state.value;
+    if (config == null) throw ApiException('Configura la impresora de este aparato');
+    await _send(config, receiptBytes(check, config.columns, check: true));
+  }
+
   Future<void> _send(PrinterConfig config, List<int> bytes) async {
     try {
       await transport.sendToPrinter(config.host, config.port, bytes);
@@ -85,7 +92,8 @@ class PrinterController extends AsyncNotifier<PrinterConfig?> {
 }
 
 /// El ticket: datos del restaurante, lo pedido, totales, pagos y un QR al recibo digital.
-List<int> receiptBytes(Map<String, dynamic> r, int columns) {
+/// Con [check], es la cuenta antes de pagar: propinas sugeridas y QR para pagar con el celular.
+List<int> receiptBytes(Map<String, dynamic> r, int columns, {bool check = false}) {
   final restaurant = r['restaurant'] as Map<String, dynamic>? ?? const {};
   String m(Object? v) => formatMoney(parseMoney(v));
   final p = EscPos(columns)
@@ -99,6 +107,15 @@ List<int> receiptBytes(Map<String, dynamic> r, int columns) {
     p.wrap('$line');
   }
   if (restaurant['phone'] != null) p.line('${restaurant['phone']}');
+  if (check) {
+    p
+      ..feed()
+      ..bold(true)
+      ..big(true)
+      ..line('CUENTA')
+      ..big(false)
+      ..bold(false);
+  }
   p
     ..feed()
     ..left()
@@ -131,6 +148,43 @@ List<int> receiptBytes(Map<String, dynamic> r, int columns) {
     ..bold(true)
     ..row('TOTAL', m(r['total']))
     ..bold(false);
+
+  if (check) {
+    final paidSoFar = parseMoney(r['amountPaid']);
+    if (paidSoFar > 0) {
+      p.row('Ya pagado', '-${m(paidSoFar)}');
+      p
+        ..bold(true)
+        ..row('POR PAGAR', m(r['due']))
+        ..bold(false);
+    }
+    final tips = r['tips'] as List? ?? const [];
+    if (tips.isNotEmpty) {
+      p
+        ..divider()
+        ..line('Propina sugerida:');
+      for (final tip in tips) {
+        final x = tip as Map<String, dynamic>;
+        p.row('  ${x['percent']}%', m(x['amount']));
+      }
+    }
+    final payUrl = r['payUrl'] as String?;
+    p
+      ..feed()
+      ..center();
+    if (payUrl != null) {
+      p
+        ..bold(true)
+        ..line('Paga con tu celular')
+        ..bold(false)
+        ..line('Tarjeta, Apple Pay o Google Pay')
+        ..qr(payUrl, size: columns <= 32 ? 5 : 6);
+    }
+    p
+      ..wrap('Este documento no es un comprobante de pago.')
+      ..cut();
+    return p.bytes;
+  }
 
   final payments = r['payments'] as List? ?? const [];
   if (payments.isNotEmpty) p.divider();
