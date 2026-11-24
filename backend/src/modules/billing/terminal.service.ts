@@ -149,7 +149,70 @@ export class TerminalService implements OnModuleInit, OnModuleDestroy {
     return { ok: true };
   }
 
+  /** Tap to Pay (el teléfono o la tablet es el lector): token de conexión para el SDK de Stripe. */
+  async connectionToken() {
+    this.requireStripe();
+    const location = await this.location();
+    const token = await this.stripe.api.terminal.connectionTokens.create({ location });
+    return { secret: token.secret, locationId: location, testMode: this.stripe.testMode };
+  }
+
   // ───────── Cobrar ─────────
+
+  /**
+   * Tap to Pay: crea el cobro y devuelve el client secret; la app lo cobra con el NFC del aparato
+   * y luego consulta el estado (igual que con el lector).
+   */
+  async tapToPay(actor: EmployeeActor, billId: string, dto: { amount: number; tip?: number; clientRequestId: string }) {
+    this.requireStripe();
+    const existing = await this.prisma.payment.findUnique({ where: { clientRequestId: dto.clientRequestId } });
+    if (existing?.stripePaymentIntentId) {
+      const intent = await this.stripe.api.paymentIntents.retrieve(existing.stripePaymentIntentId);
+      return { paymentId: existing.id, clientSecret: intent.client_secret };
+    }
+    const bill = await this.billing.view(billId);
+    if (bill.status !== 'UNPAID' && bill.status !== 'PARTIALLY_PAID') throw new ConflictException('Esta cuenta ya está pagada o anulada');
+    const amount = new Prisma.Decimal(dto.amount).toDecimalPlaces(2);
+    if (amount.gt(bill.due.plus(0.001))) throw new BadRequestException(`La cuenta tiene $${bill.due.toFixed(2)} por cobrar: el monto es mayor`);
+    const tip = new Prisma.Decimal(dto.tip ?? 0).toDecimalPlaces(2);
+    const cents = toCents(amount.plus(tip));
+    if (cents < 50) throw new BadRequestException('Con tarjeta el mínimo es $0.50');
+
+    const settings = await this.settings.get();
+    const intent = await this.stripe.api.paymentIntents.create(
+      {
+        amount: cents,
+        currency: settings.currency.toLowerCase(),
+        allowed_payment_method_types: ['card_present'],
+        capture_method: 'automatic',
+        description: `${settings.name} · ${bill.label}`,
+        metadata: { kind: 'terminal', billId, tapToPay: 'true', tipCents: String(toCents(tip)) },
+      },
+      { idempotencyKey: `taptopay-${dto.clientRequestId}` },
+    );
+    const shift = await this.prisma.cashShift.findFirst({ where: { closedAt: null }, orderBy: { openedAt: 'desc' } });
+    try {
+      const payment = await this.prisma.payment.create({
+        data: {
+          billId,
+          method: 'CARD_TERMINAL',
+          status: 'PENDING',
+          amount: amount.plus(tip),
+          tipAmount: tip,
+          stripePaymentIntentId: intent.id,
+          clientRequestId: dto.clientRequestId,
+          employeeId: actor.id,
+          cashShiftId: shift?.id ?? null,
+        },
+      });
+      await this.audit.log(actor, 'terminal.tap_to_pay', 'bill', billId, { amount: amount.toString(), tip: tip.toString() });
+      return { paymentId: payment.id, clientSecret: intent.client_secret };
+    } catch (error) {
+      if (!isUniqueViolation(error)) throw error;
+      const again = await this.prisma.payment.findUniqueOrThrow({ where: { clientRequestId: dto.clientRequestId } });
+      return { paymentId: again.id, clientSecret: intent.client_secret };
+    }
+  }
 
   /** Manda el cobro al lector. El cliente paga ahí; la caja consulta el estado hasta que termine. */
   async charge(
@@ -298,7 +361,8 @@ export class TerminalService implements OnModuleInit, OnModuleDestroy {
     }
     if (intent.status !== 'succeeded') return;
     const received = fromCents(intent.amount_received);
-    const tip = fromCents(intent.amount_details?.tip?.amount ?? 0);
+    const readerTip = intent.amount_details?.tip?.amount ?? 0;
+    const tip = fromCents(readerTip > 0 ? readerTip : Number(intent.metadata?.tipCents ?? 0) || 0);
     const card = await this.cardLabel(intent);
     const billId = await this.prisma.$transaction(async (tx) => {
       const payment = await tx.payment.findUnique({ where: { stripePaymentIntentId: intent.id } });

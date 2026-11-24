@@ -17,6 +17,7 @@ import {
   RemoveDiscountDto,
   SimulateTapDto,
   SplitDto,
+  TapToPayDto,
   TerminalChargeDto,
 } from './dto/billing.dto';
 
@@ -35,6 +36,13 @@ export class BillingController {
   @Post('bills/:id/terminal')
   charge(@CurrentActor() actor: EmployeeActor, @Param('id') id: string, @Body() dto: TerminalChargeDto) {
     return this.terminal.charge(actor, id, dto);
+  }
+
+  /** Tap to Pay: crea el cobro para que este aparato lo cobre con su NFC. */
+  @RequirePermissions('payments.take')
+  @Post('bills/:id/tap-to-pay')
+  tapToPay(@CurrentActor() actor: EmployeeActor, @Param('id') id: string, @Body() dto: TapToPayDto) {
+    return this.terminal.tapToPay(actor, id, dto);
   }
 
   @RequirePermissions('payments.take')
@@ -153,6 +161,14 @@ export class TerminalController {
   @Get('config')
   config() {
     return this.terminal.config();
+  }
+
+  /** Tap to Pay: token de conexión para el SDK de Stripe en el aparato. */
+  @RequirePermissions('payments.take')
+  @Post('connection-token')
+  @HttpCode(200)
+  connectionToken() {
+    return this.terminal.connectionToken();
   }
 
   @RequirePermissions('payments.take')

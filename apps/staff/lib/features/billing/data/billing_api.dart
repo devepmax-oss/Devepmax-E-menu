@@ -112,6 +112,29 @@ class BillingApi {
   Future<void> terminalSimulate(String paymentId, {double tip = 0, bool declined = false}) => _call(() =>
       _dio.post('/billing/terminal/$paymentId/simulate', data: {if (tip > 0) 'tip': tip, if (declined) 'declined': true}));
 
+  /// Tap to Pay: token para el SDK de Stripe (y la ubicación del restaurante).
+  Future<({String secret, String locationId, bool testMode})> connectionToken() => _call(() async {
+        final data = (await _dio.post<Map<String, dynamic>>('/terminal/connection-token')).data!;
+        return (
+          secret: data['secret'] as String,
+          locationId: data['locationId'] as String,
+          testMode: data['testMode'] as bool? ?? false,
+        );
+      });
+
+  /// Tap to Pay: crea el cobro; este aparato lo cobra con su NFC.
+  Future<({String paymentId, String clientSecret})> tapToPay(String billId,
+          {required String requestId, required double amount, double tip = 0}) =>
+      _call(() async {
+        final data = (await _dio.post<Map<String, dynamic>>('/billing/bills/$billId/tap-to-pay', data: {
+          'clientRequestId': requestId,
+          'amount': amount,
+          if (tip > 0) 'tip': tip,
+        }))
+            .data!;
+        return (paymentId: data['paymentId'] as String, clientSecret: data['clientSecret'] as String);
+      });
+
   // Caja
   Future<CashShiftView?> shift() => _call(() async {
         final data = (await _dio.get<Map<String, dynamic>>('/cash/shift')).data!;

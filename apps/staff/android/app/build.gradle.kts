@@ -2,11 +2,10 @@ plugins {
     id("com.android.application")
     id("kotlin-android")
     id("dev.flutter.flutter-gradle-plugin")
-    id("com.google.gms.google-services")
 }
 
 android {
-    namespace = "com.example.restaurant_app"
+    namespace = "com.devepmax.emenu.staff"
     compileSdk = flutter.compileSdkVersion
     ndkVersion = flutter.ndkVersion
 
@@ -21,8 +20,8 @@ android {
     }
 
     defaultConfig {
-        applicationId = "com.example.restaurant_app"
-        minSdk = flutter.minSdkVersion
+        applicationId = "com.devepmax.emenu.staff"
+        minSdk = maxOf(flutter.minSdkVersion, 26) // Stripe Terminal (Tap to Pay)
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName

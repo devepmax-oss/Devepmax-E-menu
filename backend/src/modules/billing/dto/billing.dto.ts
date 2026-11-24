@@ -99,3 +99,13 @@ export class SimulateTapDto {
   /** Simular una tarjeta rechazada. */
   @IsOptional() @IsBoolean() declined?: boolean;
 }
+
+export class TapToPayDto {
+  @Matches(/^[A-Za-z0-9_-]{8,64}$/, { message: 'clientRequestId inválido' })
+  clientRequestId: string;
+
+  /** Lo que se abona a la cuenta (sin la propina). */
+  @Type(() => Number) @IsNumber(money) @Min(0.01) @Max(100000) amount: number;
+
+  @IsOptional() @Type(() => Number) @IsNumber(money) @Min(0) @Max(10000) tip?: number;
+}

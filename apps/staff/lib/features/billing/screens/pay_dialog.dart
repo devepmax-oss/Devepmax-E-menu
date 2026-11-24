@@ -9,6 +9,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/ui/feedback.dart';
 import '../data/billing_api.dart';
 import '../data/billing_models.dart';
+import '../data/tap_to_pay.dart';
+
+/// Opción "este teléfono" entre los lectores.
+const _tapId = 'tap-to-pay';
 
 /// Cobrar: cuánto (todo, una parte o partes iguales), propina y forma de pago.
 /// Devuelve la cuenta actualizada y el cambio a entregar.
@@ -53,7 +57,11 @@ class _PayDialogState extends ConsumerState<_PayDialog> {
   }
 
   double get _tipValue {
-    if (_method == 'CARD_TERMINAL' && !_manualCard && _tipOnReader && (ref.read(cardReadersProvider).value ?? const []).any((r) => r.online)) {
+    if (_method == 'CARD_TERMINAL' &&
+        !_manualCard &&
+        _tipOnReader &&
+        _readerId != _tapId &&
+        (ref.read(cardReadersProvider).value ?? const []).any((r) => r.online)) {
       return 0; // la propina la elige el cliente en el lector
     }
     final p = _tipPercent;
@@ -130,6 +138,29 @@ class _PayDialogState extends ConsumerState<_PayDialog> {
     }
   }
 
+  /// Tap to Pay: cobra con el NFC de este aparato (Stripe muestra su pantalla para acercar la tarjeta).
+  Future<void> _chargeHere() async {
+    if (_problem != null || _busy) return;
+    setState(() => _busy = true);
+    try {
+      final amount = double.parse(_amountValue.clamp(0, _due).toStringAsFixed(2));
+      final result = await ref.read(tapToPayProvider.notifier).charge(widget.bill, amount: amount, tip: _tipValue, requestId: _requestId);
+      if (!mounted) return;
+      setState(() {
+        _charge = result;
+        _activeReader = null;
+      });
+      if (result.status == 'succeeded') {
+        ref.invalidate(openBillsProvider);
+        ref.invalidate(cashShiftProvider);
+      }
+    } catch (error) {
+      if (mounted) showError(context, error);
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
   Future<void> _cancelOnReader() async {
     final current = _charge;
     if (current == null) return;
@@ -187,7 +218,10 @@ class _PayDialogState extends ConsumerState<_PayDialog> {
 
     final readers = ref.watch(cardReadersProvider).value ?? const <CardReader>[];
     final online = readers.where((r) => r.online).toList();
-    final useReader = _useReader(readers);
+    final tapAvailable = tapToPaySupportedPlatform && (ref.watch(terminalConfigProvider).value?.enabled ?? false);
+    final tap = ref.watch(tapToPayProvider);
+    final useTap = _method == 'CARD_TERMINAL' && !_manualCard && tapAvailable && (_readerId == _tapId || online.isEmpty);
+    final useReader = !useTap && _useReader(readers);
     final reader = online.firstWhere((r) => r.id == _readerId, orElse: () => online.isEmpty ? _noReader : online.first);
 
     Widget section(String title, Widget child) => Padding(
@@ -249,7 +283,7 @@ class _PayDialogState extends ConsumerState<_PayDialog> {
                   ),
               ]),
             ),
-            if (useReader && _tipOnReader)
+            if (useReader && _tipOnReader && !useTap)
               section(
                 'Propina',
                 Row(children: [
@@ -333,7 +367,7 @@ class _PayDialogState extends ConsumerState<_PayDialog> {
                   ),
                 ]),
               )
-            else if (useReader)
+            else if (useReader || useTap)
               section(
                 'Lector',
                 Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
@@ -342,11 +376,32 @@ class _PayDialogState extends ConsumerState<_PayDialog> {
                       ChoiceChip(
                         avatar: Icon(Icons.contactless_rounded, size: 18, color: t.accentText),
                         label: Text(r.simulated ? '${r.label} · prueba' : r.label),
-                        selected: r.id == reader.id,
+                        selected: !useTap && r.id == reader.id,
                         showCheckmark: false,
                         onSelected: (_) => setState(() => _readerId = r.id),
                       ),
+                    if (tapAvailable)
+                      ChoiceChip(
+                        avatar: Icon(Icons.phone_android_rounded, size: 18, color: t.accentText),
+                        label: const Text('Este teléfono · Tap to Pay'),
+                        selected: useTap,
+                        showCheckmark: false,
+                        onSelected: (_) => setState(() => _readerId = _tapId),
+                      ),
                   ]),
+                  if (useTap)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 10),
+                      child: Text(
+                        tap.status == TapToPayStatus.error
+                            ? tap.message ?? 'Tap to Pay no está disponible'
+                            : (tap.status == TapToPayStatus.connecting
+                                ? 'Preparando Tap to Pay…'
+                                : 'El cliente acerca su tarjeta, celular o reloj a este teléfono.'),
+                        style: TextStyle(color: tap.status == TapToPayStatus.error ? t.danger : t.muted, fontWeight: FontWeight.w600),
+                      ),
+                    ),
+                  if (!useTap)
                   SwitchListTile(
                     contentPadding: EdgeInsets.zero,
                     value: _tipOnReader,
@@ -403,11 +458,15 @@ class _PayDialogState extends ConsumerState<_PayDialog> {
         TextButton(onPressed: _busy ? null : () => Navigator.pop(context), child: const Text('Cancelar')),
         FilledButton.icon(
           style: FilledButton.styleFrom(minimumSize: const Size(200, 52)),
-          onPressed: problem == null && !_busy ? (useReader ? () => _sendToReader(reader) : _confirm) : null,
+          onPressed: problem == null && !_busy
+              ? (useTap ? _chargeHere : (useReader ? () => _sendToReader(reader) : _confirm))
+              : null,
           icon: _busy
               ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
-              : Icon(useReader ? Icons.contactless_rounded : Icons.check_rounded),
-          label: Text(useReader ? 'Enviar al lector ${formatMoney(_charged)}' : 'Cobrar ${formatMoney(_charged)}'),
+              : Icon(useTap || useReader ? Icons.contactless_rounded : Icons.check_rounded),
+          label: Text(useTap
+              ? 'Cobrar con este teléfono ${formatMoney(_charged)}'
+              : (useReader ? 'Enviar al lector ${formatMoney(_charged)}' : 'Cobrar ${formatMoney(_charged)}')),
         ),
       ],
     );

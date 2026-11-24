@@ -1,4 +1,4 @@
-package com.example.restaurant_app
+package com.devepmax.emenu.staff
 
 import io.flutter.embedding.android.FlutterActivity
 
