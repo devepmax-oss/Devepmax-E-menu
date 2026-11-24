@@ -148,7 +148,7 @@ async function main() {
   const revoked = await api('GET', '/kitchen/tickets', undefined, K);
   check('una pantalla desvinculada deja de funcionar', revoked.status === 401, revoked.status);
   const gone = await api('DELETE', `/devices/${device.data.id}`, undefined, A);
-  check('se elimina la pantalla de prueba', gone.status === 200, gone.data);
+  check('se elimina la pantalla de prueba', gone.status === 200 || gone.status === 204, gone.status);
   kds?.close();
   console.log(failures === 0 ? '\n✅ Todo correcto\n' : `\n❌ ${failures} comprobación(es) fallaron\n`);
   process.exit(failures === 0 ? 0 : 1);
