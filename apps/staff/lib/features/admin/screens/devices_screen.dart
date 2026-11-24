@@ -104,10 +104,23 @@ class _DevicesScreenState extends ConsumerState<DevicesScreen> {
               station: stations.firstWhereOrNull((s) => s.id == list[index].stationId),
               table: tables.firstWhereOrNull((t) => t.id == list[index].tableId),
               onEdit: () => _openEditor(stations, device: list[index]),
-              onNewCode: () => _run((api) async {
-                final updated = await api.newPairingCode(list[index].id);
-                if (mounted) _showCode(updated);
-              }),
+              onNewCode: () async {
+                // Si ya estaba vinculada, el código nuevo la desconecta: se pregunta antes.
+                if (list[index].isPaired) {
+                  final ok = await confirm(
+                    context,
+                    title: 'Volver a vincular "${list[index].name}"',
+                    message: 'Se desconectará de inmediato y tendrás que escanear el código nuevo en el dispositivo. '
+                        'Hazlo solo si la vas a cambiar por otra o si dejó de funcionar.',
+                    confirmLabel: 'Generar código nuevo',
+                  );
+                  if (!ok) return;
+                }
+                await _run((api) async {
+                  final updated = await api.newPairingCode(list[index].id);
+                  if (mounted) _showCode(updated);
+                });
+              },
               onRevoke: () async {
                 final ok = await confirm(
                   context,
