@@ -84,7 +84,7 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen> {
         title: Row(children: [
           const Text('Órdenes'),
           const SizedBox(width: 16),
-          LiveIndicator(status: status),
+          Flexible(child: LiveIndicator(status: status)),
         ]),
         actions: [
           IconButton(
@@ -100,7 +100,7 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen> {
       ),
       body: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
         Padding(
-          padding: const EdgeInsets.fromLTRB(24, 0, 24, 16),
+          padding: EdgeInsets.fromLTRB(pagePadding(context), 0, pagePadding(context), 16),
           child: Wrap(spacing: 16, runSpacing: 12, crossAxisAlignment: WrapCrossAlignment.center, children: [
             SegmentedButton<String>(
               segments: [
@@ -183,15 +183,50 @@ class _Board extends StatelessWidget {
       if (byLane.containsKey(_Lane.onTheWay)) _Lane.onTheWay,
     ];
 
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
-      child: Row(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-        for (var i = 0; i < lanes.length; i++) ...[
-          if (i > 0) const SizedBox(width: 16),
-          Expanded(child: _LaneColumn(lane: lanes[i], orders: byLane[lanes[i]] ?? const [], arrivedAt: arrivedAt)),
-        ],
-      ]),
-    );
+    Widget lane(_Lane l) => _LaneColumn(lane: l, orders: byLane[l] ?? const [], arrivedAt: arrivedAt);
+    final pad = pagePadding(context);
+
+    return LayoutBuilder(builder: (context, box) {
+      // Teléfono: una columna a la vez, con pestañas.
+      if (box.maxWidth < 600) {
+        return DefaultTabController(
+          length: lanes.length,
+          child: Column(children: [
+            TabBar(
+              isScrollable: true,
+              tabAlignment: TabAlignment.start,
+              tabs: [for (final l in lanes) Tab(text: '${_laneTitles[l]} · ${byLane[l]?.length ?? 0}')],
+            ),
+            Expanded(
+              child: TabBarView(children: [
+                for (final l in lanes)
+                  Padding(padding: EdgeInsets.fromLTRB(pad, 12, pad, pad), child: lane(l)),
+              ]),
+            ),
+          ]),
+        );
+      }
+      // Tablet angosta: columnas de ancho fijo que se deslizan de lado.
+      if (box.maxWidth < 280.0 * lanes.length + 16 * (lanes.length - 1) + 2 * pad) {
+        return ListView.separated(
+          scrollDirection: Axis.horizontal,
+          padding: EdgeInsets.fromLTRB(pad, 0, pad, pad),
+          itemCount: lanes.length,
+          separatorBuilder: (_, __) => const SizedBox(width: 16),
+          itemBuilder: (context, i) => SizedBox(width: 300, child: lane(lanes[i])),
+        );
+      }
+      // Tablet y pantallas grandes: todas las columnas a la vista.
+      return Padding(
+        padding: EdgeInsets.fromLTRB(pad, 0, pad, pad),
+        child: Row(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          for (var i = 0; i < lanes.length; i++) ...[
+            if (i > 0) const SizedBox(width: 16),
+            Expanded(child: lane(lanes[i])),
+          ],
+        ]),
+      );
+    });
   }
 }
 
@@ -477,8 +512,9 @@ class _TodayList extends ConsumerWidget {
           return const EmptyState(icon: Icons.today_rounded, message: 'Todavía no hay órdenes hoy.');
         }
         final sales = orders.where((o) => o.status != 'CANCELLED').fold<double>(0, (s, o) => s + o.total);
+        final pad = pagePadding(context);
         return ListView(
-          padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
+          padding: EdgeInsets.fromLTRB(pad, 0, pad, pad),
           children: [
             Padding(
               padding: const EdgeInsets.only(bottom: 12),
@@ -489,23 +525,38 @@ class _TodayList extends ConsumerWidget {
               child: Column(children: [
                 for (var i = 0; i < orders.length; i++) ...[
                   if (i > 0) Divider(color: t.line),
-                  ListTile(
+                  InkWell(
                     onTap: () => showOrderDetail(context, orders[i]),
-                    leading: SizedBox(width: 56, child: Text('#${orders[i].number}', style: text.titleLarge)),
-                    title: Text(orders[i].where, style: text.titleSmall),
-                    subtitle: Text(
-                      '${time.format(orders[i].createdAt)} · ${channelLabels[orders[i].channel] ?? orders[i].channel} · '
-                      '${orders[i].orderedCount} productos',
-                      style: text.bodySmall,
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                      child: Row(children: [
+                        SizedBox(width: 52, child: Text('#${orders[i].number}', style: text.titleLarge)),
+                        Expanded(
+                          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                            Text(orders[i].where, style: text.titleSmall, maxLines: 1, overflow: TextOverflow.ellipsis),
+                            Text(
+                              '${time.format(orders[i].createdAt)} · ${channelLabels[orders[i].channel] ?? orders[i].channel} · '
+                              '${orders[i].orderedCount} productos',
+                              style: text.bodySmall,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ]),
+                        ),
+                        const SizedBox(width: 12),
+                        // En el teléfono el estado va encima del total; en pantallas grandes, al lado.
+                        Flex(
+                          direction: isCompact(context) ? Axis.vertical : Axis.horizontal,
+                          mainAxisSize: MainAxisSize.min,
+                          crossAxisAlignment: isCompact(context) ? CrossAxisAlignment.end : CrossAxisAlignment.center,
+                          children: [
+                            _StatusPill(status: orders[i].status),
+                            const SizedBox(width: 16, height: 4),
+                            Text(formatMoney(orders[i].total), textAlign: TextAlign.right, style: text.titleSmall),
+                          ],
+                        ),
+                      ]),
                     ),
-                    trailing: Row(mainAxisSize: MainAxisSize.min, children: [
-                      _StatusPill(status: orders[i].status),
-                      const SizedBox(width: 16),
-                      SizedBox(
-                        width: 90,
-                        child: Text(formatMoney(orders[i].total), textAlign: TextAlign.right, style: text.titleSmall),
-                      ),
-                    ]),
                   ),
                 ],
               ]),

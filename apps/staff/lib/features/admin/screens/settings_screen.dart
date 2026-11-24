@@ -199,7 +199,7 @@ class _SettingsFormState extends ConsumerState<_SettingsForm> {
             onPressed: _saving ? null : _save,
             child: _saving
                 ? const SizedBox.square(dimension: 18, child: CircularProgressIndicator(strokeWidth: 2))
-                : const Text('Guardar cambios'),
+                : Text(isCompact(context) ? 'Guardar' : 'Guardar cambios'),
           ),
           const SizedBox(width: 16),
         ],
@@ -207,14 +207,18 @@ class _SettingsFormState extends ConsumerState<_SettingsForm> {
       body: Form(
         key: _formKey,
         child: ListView(
-          padding: const EdgeInsets.all(24),
+          padding: EdgeInsets.all(pagePadding(context)),
           children: [
             Center(
               child: ConstrainedBox(
                 constraints: const BoxConstraints(maxWidth: 860),
                 child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
                   _section('Marca', 'Se usa en la app, las tablets, la web y los recibos.', [
-                    Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    Wrap(
+                      spacing: 16,
+                      runSpacing: 16,
+                      crossAxisAlignment: WrapCrossAlignment.start,
+                      children: [
                       ClipRRect(
                         borderRadius: BorderRadius.circular(12),
                         child: SizedBox(
@@ -228,8 +232,9 @@ class _SettingsFormState extends ConsumerState<_SettingsForm> {
                               : Image.network(logoUrl, fit: BoxFit.contain),
                         ),
                       ),
-                      const SizedBox(width: 16),
-                      Expanded(
+                      ConstrainedBox(
+                        // Al lado del logo si cabe; debajo en el teléfono.
+                        constraints: const BoxConstraints(minWidth: 240, maxWidth: 560),
                         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                           _field(_name, 'Nombre del restaurante', required: true),
                           const SizedBox(height: 8),
@@ -270,12 +275,12 @@ class _SettingsFormState extends ConsumerState<_SettingsForm> {
                     const SizedBox(height: 20),
                     _colorPicker('Color principal', _primary, (c) => setState(() => _primary = c)),
                     Padding(
-                      padding: const EdgeInsets.only(left: 140, top: 4, bottom: 12),
+                      padding: EdgeInsets.only(left: isCompact(context) ? 0 : 140, top: 4, bottom: 12),
                       child: Text('Botones y acciones', style: Theme.of(context).textTheme.bodySmall),
                     ),
                     _colorPicker('Color de acento', _accent, (c) => setState(() => _accent = c)),
                     Padding(
-                      padding: const EdgeInsets.only(left: 140, top: 4, bottom: 20),
+                      padding: EdgeInsets.only(left: isCompact(context) ? 0 : 140, top: 4, bottom: 20),
                       child: Text('Promociones y etiquetas', style: Theme.of(context).textTheme.bodySmall),
                     ),
                     _preview(),
@@ -299,6 +304,7 @@ class _SettingsFormState extends ConsumerState<_SettingsForm> {
                     _row([
                       _field(_prep, 'Tiempo de preparación (min)', digits: true),
                       DropdownButtonFormField<String>(
+                        isExpanded: true,
                         initialValue: _timezones.containsKey(_timezone) ? _timezone : 'America/New_York',
                         decoration: const InputDecoration(labelText: 'Zona horaria', border: OutlineInputBorder()),
                         items: [
@@ -327,17 +333,21 @@ class _SettingsFormState extends ConsumerState<_SettingsForm> {
   Widget _dayRow(int day) {
     final hours = _week[(day + 1) % 7]; // empieza en lunes
     final name = _days[(day + 1) % 7];
-    return Row(children: [
-      SizedBox(width: 110, child: Text(name)),
-      Switch(value: hours.isOpen, onChanged: (v) => setState(() => hours.isOpen = v)),
-      const SizedBox(width: 8),
-      if (hours.isOpen) ...[
-        OutlinedButton(onPressed: () => _pickTime(hours, true), child: Text(hours.opensAt)),
-        const Padding(padding: EdgeInsets.symmetric(horizontal: 8), child: Text('a')),
-        OutlinedButton(onPressed: () => _pickTime(hours, false), child: Text(hours.closesAt)),
-      ] else
-        Text('Cerrado', style: TextStyle(color: Theme.of(context).colorScheme.outline)),
-    ]);
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Wrap(spacing: 8, runSpacing: 4, crossAxisAlignment: WrapCrossAlignment.center, children: [
+        SizedBox(width: 100, child: Text(name)),
+        Switch(value: hours.isOpen, onChanged: (v) => setState(() => hours.isOpen = v)),
+        if (hours.isOpen)
+          Row(mainAxisSize: MainAxisSize.min, children: [
+            OutlinedButton(onPressed: () => _pickTime(hours, true), child: Text(hours.opensAt)),
+            const Padding(padding: EdgeInsets.symmetric(horizontal: 8), child: Text('a')),
+            OutlinedButton(onPressed: () => _pickTime(hours, false), child: Text(hours.closesAt)),
+          ])
+        else
+          Text('Cerrado', style: TextStyle(color: Theme.of(context).colorScheme.outline)),
+      ]),
+    );
   }
 
   Widget _fontOption(FontPairOption pair) {
@@ -426,9 +436,10 @@ class _SettingsFormState extends ConsumerState<_SettingsForm> {
   }
 
   Widget _colorPicker(String label, String value, ValueChanged<String> onChanged) {
-    return Row(children: [
-      SizedBox(width: 140, child: Text(label)),
-      Wrap(spacing: 8, children: [
+    return LabeledControl(
+      label: label,
+      labelWidth: 140,
+      child: Wrap(spacing: 8, runSpacing: 8, crossAxisAlignment: WrapCrossAlignment.center, children: [
         for (final c in _brandColors)
           InkWell(
             onTap: () => onChanged(c),
@@ -438,9 +449,7 @@ class _SettingsFormState extends ConsumerState<_SettingsForm> {
               child: value.toUpperCase() == c ? Icon(Icons.check_rounded, color: readableOn(colorFromHex(c)), size: 18) : null,
             ),
           ),
-      ]),
-      const SizedBox(width: 12),
-      SizedBox(
+        SizedBox(
         width: 110,
         child: TextFormField(
           key: ValueKey('$label-$value'),
@@ -453,7 +462,8 @@ class _SettingsFormState extends ConsumerState<_SettingsForm> {
           validator: (v) => RegExp(r'^#[0-9a-fA-F]{6}$').hasMatch(v ?? '') ? null : '#RRGGBB',
         ),
       ),
-    ]);
+      ]),
+    );
   }
 
   Widget _switch(String title, bool value, void Function(bool) set, {String? subtitle}) {
@@ -484,12 +494,7 @@ class _SettingsFormState extends ConsumerState<_SettingsForm> {
   Widget _row(List<Widget> fields) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
-      child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        for (var i = 0; i < fields.length; i++) ...[
-          if (i > 0) const SizedBox(width: 12),
-          Expanded(child: fields[i]),
-        ],
-      ]),
+      child: AdaptiveRow(minChildWidth: 180, children: fields),
     );
   }
 
@@ -643,8 +648,8 @@ class _DeliveryZoneCardState extends ConsumerState<_DeliveryZoneCard> {
                   onChanged: (v) => setState(() => _auto = v),
                 ),
                 if (_auto)
-                  Row(children: [
-                    Expanded(child: Text('Tiempo para aceptar', style: text.bodyMedium)),
+                  Wrap(spacing: 12, runSpacing: 8, crossAxisAlignment: WrapCrossAlignment.center, children: [
+                    Text('Tiempo para aceptar', style: text.bodyMedium),
                     SegmentedButton<int>(
                       segments: const [
                         ButtonSegment(value: 30, label: Text('30 s')),

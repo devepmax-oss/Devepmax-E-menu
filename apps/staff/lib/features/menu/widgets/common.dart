@@ -71,3 +71,108 @@ class ProductImage extends StatelessWidget {
     return Image.network(url!, fit: BoxFit.cover, errorBuilder: (_, __, ___) => placeholder);
   }
 }
+
+// ───────────────────────── Pantallas de cualquier tamaño ─────────────────────────
+
+/// Tamaños de pantalla (estándar Material): teléfono, tablet chica, tablet, tablet grande, muy grande.
+enum WindowSize { compact, medium, expanded, large, extraLarge }
+
+WindowSize windowSizeOf(BuildContext context) {
+  final w = MediaQuery.sizeOf(context).width;
+  if (w < 600) return WindowSize.compact;
+  if (w < 840) return WindowSize.medium;
+  if (w < 1200) return WindowSize.expanded;
+  if (w < 1600) return WindowSize.large;
+  return WindowSize.extraLarge;
+}
+
+/// Teléfono (menos de 600 px de ancho).
+bool isCompact(BuildContext context) => MediaQuery.sizeOf(context).width < 600;
+
+/// Campos lado a lado si caben; uno debajo del otro si el espacio es angosto.
+class AdaptiveRow extends StatelessWidget {
+  const AdaptiveRow({super.key, required this.children, this.minChildWidth = 200, this.spacing = 12});
+
+  final List<Widget> children;
+
+  /// Ancho mínimo que necesita cada campo para ir en la misma fila.
+  final double minChildWidth;
+  final double spacing;
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(builder: (context, box) {
+      final fits = box.maxWidth >= children.length * minChildWidth + (children.length - 1) * spacing;
+      if (!fits) {
+        return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          for (var i = 0; i < children.length; i++) ...[
+            if (i > 0) SizedBox(height: spacing),
+            children[i],
+          ],
+        ]);
+      }
+      return Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        for (var i = 0; i < children.length; i++) ...[
+          if (i > 0) SizedBox(width: spacing),
+          Expanded(child: children[i]),
+        ],
+      ]);
+    });
+  }
+}
+
+/// Una etiqueta y su control: lado a lado si hay espacio; si no, la etiqueta arriba.
+class LabeledControl extends StatelessWidget {
+  const LabeledControl({super.key, required this.label, required this.child, this.labelWidth = 150, this.breakpoint = 460});
+
+  final String label;
+  final Widget child;
+  final double labelWidth;
+  final double breakpoint;
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(builder: (context, box) {
+      if (box.maxWidth < breakpoint) {
+        return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text(label),
+          const SizedBox(height: 8),
+          child,
+        ]);
+      }
+      return Row(children: [
+        SizedBox(width: labelWidth, child: Text(label)),
+        Expanded(child: Align(alignment: Alignment.centerLeft, child: child)),
+      ]);
+    });
+  }
+}
+
+/// Botón de la barra superior: con texto en pantallas grandes, solo ícono en el teléfono.
+class AppBarAction extends StatelessWidget {
+  const AppBarAction({super.key, required this.icon, required this.label, required this.onPressed, this.filled = true});
+
+  final IconData icon;
+  final String label;
+  final VoidCallback? onPressed;
+  final bool filled;
+
+  @override
+  Widget build(BuildContext context) {
+    if (isCompact(context)) {
+      return filled
+          ? IconButton.filled(tooltip: label, onPressed: onPressed, icon: Icon(icon))
+          : IconButton(tooltip: label, onPressed: onPressed, icon: Icon(icon));
+    }
+    return filled
+        ? FilledButton.icon(onPressed: onPressed, icon: Icon(icon), label: Text(label))
+        : OutlinedButton.icon(onPressed: onPressed, icon: Icon(icon), label: Text(label));
+  }
+}
+
+/// Margen exterior según la pantalla: 12 en teléfono, 24 en tablet, 32 en pantallas grandes.
+double pagePadding(BuildContext context) => switch (windowSizeOf(context)) {
+      WindowSize.compact => 12,
+      WindowSize.medium || WindowSize.expanded => 24,
+      _ => 32,
+    };

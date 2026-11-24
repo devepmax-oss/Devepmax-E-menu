@@ -70,7 +70,8 @@ class _MenuScreenState extends ConsumerState<MenuScreen> {
                 _CategoryRail(categories: data.categories, selected: category.id, onSelect: _select),
                 Expanded(child: grid),
                 Container(
-                  width: 380,
+                  // El pedido crece con la pantalla (tablets de 10" a pantallas muy grandes).
+                  width: MediaQuery.sizeOf(context).width >= 1600 ? 460 : (MediaQuery.sizeOf(context).width >= 1200 ? 400 : 360),
                   decoration: BoxDecoration(color: t.surface, border: Border(left: BorderSide(color: t.line))),
                   child: const CartPanel(),
                 ),
@@ -100,8 +101,9 @@ class _CategoryRail extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final t = BrandTokens.of(context);
     final table = ref.watch(tableProvider).value;
+    final screen = MediaQuery.sizeOf(context).width;
     return Container(
-      width: 250,
+      width: screen >= 1600 ? 300 : (screen >= 1200 ? 260 : 230),
       decoration: BoxDecoration(color: t.rail, border: Border(right: BorderSide(color: t.line))),
       child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
         const Padding(padding: EdgeInsets.fromLTRB(20, 24, 20, 8), child: Center(child: StaffLogo(height: 64))),
@@ -238,7 +240,7 @@ class _ProductGrid extends StatelessWidget {
         padding: EdgeInsets.fromLTRB(wide ? 28 : 16, 12, wide ? 28 : 16, 28),
         sliver: SliverGrid(
           gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-            maxCrossAxisExtent: 290,
+            maxCrossAxisExtent: 300,
             mainAxisSpacing: 18,
             crossAxisSpacing: 18,
             childAspectRatio: 0.74,

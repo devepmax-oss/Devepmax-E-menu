@@ -27,10 +27,10 @@ class ModifierGroupsScreen extends ConsumerWidget {
       appBar: AppBar(
         title: const Text('Modificadores'),
         actions: [
-          FilledButton.icon(
+          AppBarAction(
+            icon: Icons.add_rounded,
+            label: 'Nuevo grupo',
             onPressed: () => showModifierGroupDialog(context),
-            icon: const Icon(Icons.add_rounded),
-            label: const Text('Nuevo grupo'),
           ),
           const SizedBox(width: 16),
         ],

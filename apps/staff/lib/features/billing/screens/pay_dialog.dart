@@ -216,6 +216,7 @@ class _PayDialogState extends ConsumerState<_PayDialog> {
     final charge = _charge;
     if (charge != null) return this._readerView(charge); // ignore: unnecessary_this
 
+    final compact = MediaQuery.sizeOf(context).width < 600;
     final readers = ref.watch(cardReadersProvider).value ?? const <CardReader>[];
     final online = readers.where((r) => r.online).toList();
     final tapAvailable = tapToPaySupportedPlatform && (ref.watch(terminalConfigProvider).value?.enabled ?? false);
@@ -244,8 +245,8 @@ class _PayDialogState extends ConsumerState<_PayDialog> {
       ..sort();
 
     return AlertDialog(
-      title: Row(children: [
-        Expanded(child: Text('Cobrar · ${widget.bill.label}')),
+      title: Wrap(spacing: 12, runSpacing: 4, crossAxisAlignment: WrapCrossAlignment.center, children: [
+        Text('Cobrar · ${widget.bill.label}'),
         Text('Debe ${formatMoney(_due)}', style: text.titleMedium?.copyWith(color: t.accentText)),
       ]),
       content: SizedBox(
@@ -322,10 +323,11 @@ class _PayDialogState extends ConsumerState<_PayDialog> {
               'Forma de pago',
               SegmentedButton<String>(
                 showSelectedIcon: false,
-                segments: const [
-                  ButtonSegment(value: 'CASH', label: Text('Efectivo'), icon: Icon(Icons.payments_rounded)),
-                  ButtonSegment(value: 'CARD_TERMINAL', label: Text('Tarjeta'), icon: Icon(Icons.credit_card_rounded)),
-                  ButtonSegment(value: 'OTHER', label: Text('Otro'), icon: Icon(Icons.more_horiz_rounded)),
+                // En el teléfono, solo el texto para que quepan las tres opciones.
+                segments: [
+                  ButtonSegment(value: 'CASH', label: const Text('Efectivo'), icon: compact ? null : const Icon(Icons.payments_rounded)),
+                  ButtonSegment(value: 'CARD_TERMINAL', label: const Text('Tarjeta'), icon: compact ? null : const Icon(Icons.credit_card_rounded)),
+                  ButtonSegment(value: 'OTHER', label: const Text('Otro'), icon: compact ? null : const Icon(Icons.more_horiz_rounded)),
                 ],
                 selected: {_method},
                 onSelectionChanged: (v) => setState(() => _method = v.first),
@@ -457,7 +459,7 @@ class _PayDialogState extends ConsumerState<_PayDialog> {
       actions: [
         TextButton(onPressed: _busy ? null : () => Navigator.pop(context), child: const Text('Cancelar')),
         FilledButton.icon(
-          style: FilledButton.styleFrom(minimumSize: const Size(200, 52)),
+          style: FilledButton.styleFrom(minimumSize: Size(compact ? 0 : 200, 52)),
           onPressed: problem == null && !_busy
               ? (useTap ? _chargeHere : (useReader ? () => _sendToReader(reader) : _confirm))
               : null,

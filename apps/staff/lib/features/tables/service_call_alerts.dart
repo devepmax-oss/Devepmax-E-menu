@@ -50,7 +50,7 @@ class _ServiceCallAlertsState extends ConsumerState<ServiceCallAlerts> {
     messenger.showSnackBar(SnackBar(
       duration: const Duration(seconds: 12),
       behavior: SnackBarBehavior.floating,
-      width: 460,
+      width: MediaQuery.sizeOf(context).width < 600 ? null : 460,
       content: Row(children: [
         Icon(json['type'] == 'REQUEST_BILL' ? Icons.receipt_long_rounded : Icons.notifications_active_rounded,
             color: Colors.white),

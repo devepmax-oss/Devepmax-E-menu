@@ -71,14 +71,64 @@ class _MenuScreenState extends ConsumerState<MenuScreen> {
     }
     final selected = menu.categories.firstWhereOrNull((c) => c.id == _selectedCategoryId) ?? menu.categories.first;
 
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        SizedBox(width: 300, child: _buildCategoryList(menu, selected)),
-        const VerticalDivider(width: 1),
-        Expanded(child: _buildProducts(menu, selected)),
-      ],
-    );
+    return LayoutBuilder(builder: (context, box) {
+      // Pantalla angosta: categorías arriba (deslizables) y la lista completa en una hoja.
+      if (box.maxWidth < 720) {
+        return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          SizedBox(
+            height: 56,
+            child: Row(children: [
+              Expanded(
+                child: ListView(
+                  scrollDirection: Axis.horizontal,
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  children: [
+                    for (final c in menu.categories)
+                      Padding(
+                        padding: const EdgeInsets.only(right: 8),
+                        child: ChoiceChip(
+                          label: Text(c.name),
+                          selected: c.id == selected.id,
+                          showCheckmark: false,
+                          onSelected: (_) => setState(() => _selectedCategoryId = c.id),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+              IconButton(
+                tooltip: 'Categorías',
+                icon: const Icon(Icons.tune_rounded),
+                onPressed: () => showModalBottomSheet<void>(
+                  context: context,
+                  isScrollControlled: true,
+                  showDragHandle: true,
+                  builder: (sheet) => SizedBox(
+                    height: MediaQuery.sizeOf(sheet).height * 0.7,
+                    child: Consumer(builder: (context, ref, _) {
+                      final latest = ref.watch(adminMenuProvider).value ?? menu;
+                      final current = latest.categories.firstWhereOrNull((c) => c.id == _selectedCategoryId) ??
+                          (latest.categories.isEmpty ? selected : latest.categories.first);
+                      return _buildCategoryList(latest, current);
+                    }),
+                  ),
+                ),
+              ),
+            ]),
+          ),
+          const Divider(height: 1),
+          Expanded(child: _buildProducts(menu, selected)),
+        ]);
+      }
+      return Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          SizedBox(width: box.maxWidth >= 1400 ? 340 : 280, child: _buildCategoryList(menu, selected)),
+          const VerticalDivider(width: 1),
+          Expanded(child: _buildProducts(menu, selected)),
+        ],
+      );
+    });
   }
 
   Widget _buildCategoryList(AdminMenu menu, Category selected) {
@@ -179,10 +229,10 @@ class _MenuScreenState extends ConsumerState<MenuScreen> {
                   ],
                 ),
               ),
-              FilledButton.icon(
+              AppBarAction(
+                icon: Icons.add_rounded,
+                label: 'Nuevo producto',
                 onPressed: () => openProductEditor(context, categoryId: category.id),
-                icon: const Icon(Icons.add_rounded),
-                label: const Text('Nuevo producto'),
               ),
             ],
           ),

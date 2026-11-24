@@ -127,7 +127,7 @@ class _TablesScreenState extends ConsumerState<TablesScreen> {
         title: Row(children: [
           Text(_editing ? 'Editar plano' : 'Mesas'),
           const SizedBox(width: 16),
-          if (!_editing) LiveIndicator(status: status),
+          if (!_editing) Flexible(child: LiveIndicator(status: status)),
         ]),
         actions: [
           if (_editing) ...[
@@ -139,7 +139,7 @@ class _TablesScreenState extends ConsumerState<TablesScreen> {
             FilledButton.icon(
               onPressed: _saving ? null : () => _finishEditing(areas, save: true),
               icon: const Icon(Icons.check_rounded),
-              label: Text(_draft.isEmpty ? 'Listo' : 'Guardar plano'),
+              label: Text(_draft.isEmpty || isCompact(context) ? 'Listo' : 'Guardar plano'),
             ),
           ] else ...[
             IconButton(
@@ -149,10 +149,11 @@ class _TablesScreenState extends ConsumerState<TablesScreen> {
             ),
             if (canManage && areas.isNotEmpty) ...[
               const SizedBox(width: 8),
-              OutlinedButton.icon(
+              AppBarAction(
+                icon: Icons.edit_location_alt_rounded,
+                label: 'Editar plano',
                 onPressed: _startEditing,
-                icon: const Icon(Icons.edit_location_alt_rounded),
-                label: const Text('Editar plano'),
+                filled: false,
               ),
             ],
           ],
@@ -769,6 +770,7 @@ class _TableDialogState extends State<_TableDialog> {
             if (widget.areas.length > 1) ...[
               const SizedBox(height: 16),
               DropdownButtonFormField<String>(
+                isExpanded: true,
                 initialValue: _areaId,
                 decoration: const InputDecoration(labelText: 'Área', border: OutlineInputBorder()),
                 items: [for (final a in widget.areas) DropdownMenuItem(value: a.id, child: Text(a.name))],

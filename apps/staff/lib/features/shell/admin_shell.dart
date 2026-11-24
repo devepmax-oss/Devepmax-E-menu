@@ -60,6 +60,18 @@ class AdminShell extends ConsumerWidget {
 
     final brand = BrandConfig.fromJson(ref.watch(publicSettingsProvider).value);
     final t = BrandTokens.of(context);
+    final content = (employee?.can('tables.operate') ?? false) ? ServiceCallAlerts(child: child) : child;
+
+    // Teléfono: barra abajo con lo más usado y "Más" para el resto.
+    if (MediaQuery.sizeOf(context).width < 700) {
+      return _CompactShell(
+        destinations: destinations,
+        selected: selected,
+        employeeName: employee?.name ?? '',
+        roleName: employee?.roleName ?? '',
+        child: content,
+      );
+    }
     final initial = (employee?.name.isNotEmpty ?? false) ? employee!.name[0].toUpperCase() : '?';
 
     return Scaffold(
@@ -131,10 +143,90 @@ class AdminShell extends ConsumerWidget {
             ),
           ),
           VerticalDivider(width: 1, color: t.line),
-          Expanded(
-            // Quien atiende mesas recibe los llamados de las tablets en cualquier pantalla.
-            child: (employee?.can('tables.operate') ?? false) ? ServiceCallAlerts(child: child) : child,
+          // Quien atiende mesas recibe los llamados de las tablets en cualquier pantalla.
+          Expanded(child: content),
+        ],
+      ),
+    );
+  }
+}
+
+/// Marco para teléfonos: hasta 4 secciones abajo (las de operación primero) y "Más".
+class _CompactShell extends ConsumerWidget {
+  const _CompactShell({
+    required this.destinations,
+    required this.selected,
+    required this.employeeName,
+    required this.roleName,
+    required this.child,
+  });
+
+  final List<_Destination> destinations;
+  final int selected;
+  final String employeeName;
+  final String roleName;
+  final Widget child;
+
+  static const _priority = ['/orders', '/tables', '/billing', '/menu'];
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final primary = [
+      for (final path in _priority) ...destinations.where((d) => d.path == path),
+    ].take(destinations.length > 4 ? 3 : 4).toList();
+    final rest = destinations.where((d) => !primary.contains(d)).toList();
+    final current = selected >= 0 ? destinations[selected] : null;
+    final index = current == null ? -1 : primary.indexOf(current);
+    final showMore = rest.isNotEmpty;
+
+    Future<void> openMore() => showModalBottomSheet<void>(
+          context: context,
+          showDragHandle: true,
+          builder: (sheet) => SafeArea(
+            child: ListView(shrinkWrap: true, children: [
+              ListTile(
+                leading: const Icon(Icons.person_rounded),
+                title: Text(employeeName),
+                subtitle: Text(roleName),
+              ),
+              const Divider(),
+              for (final d in rest)
+                ListTile(
+                  leading: Icon(d.icon),
+                  title: Text(d.label),
+                  selected: d == current,
+                  onTap: () {
+                    Navigator.pop(sheet);
+                    context.go(d.path);
+                  },
+                ),
+              const Divider(),
+              ListTile(
+                leading: const Icon(Icons.logout_rounded),
+                title: const Text('Cerrar sesión'),
+                onTap: () {
+                  Navigator.pop(sheet);
+                  ref.read(authControllerProvider.notifier).logout();
+                },
+              ),
+            ]),
           ),
+        );
+
+    return Scaffold(
+      body: child,
+      bottomNavigationBar: NavigationBar(
+        selectedIndex: index >= 0 ? index : (showMore ? primary.length : 0),
+        onDestinationSelected: (i) {
+          if (i < primary.length) {
+            context.go(primary[i].path);
+          } else {
+            openMore();
+          }
+        },
+        destinations: [
+          for (final d in primary) NavigationDestination(icon: Icon(d.icon), label: d.label),
+          if (showMore) const NavigationDestination(icon: Icon(Icons.menu_rounded), label: 'Más'),
         ],
       ),
     );

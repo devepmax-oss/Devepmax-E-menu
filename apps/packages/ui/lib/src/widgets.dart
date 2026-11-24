@@ -35,10 +35,21 @@ class DmPill extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
       decoration: BoxDecoration(color: background, borderRadius: BorderRadius.circular(999)),
-      child: Row(mainAxisSize: MainAxisSize.min, children: [
-        if (icon != null) ...[Icon(icon, size: 14, color: foreground), const SizedBox(width: 5)],
-        Text(label, style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: foreground)),
-      ]),
+      // Un solo texto (con el ícono adentro): se recorta con "…" si no cabe, sin desbordar.
+      child: Text.rich(
+        TextSpan(children: [
+          if (icon != null) ...[
+            WidgetSpan(
+              alignment: PlaceholderAlignment.middle,
+              child: Padding(padding: const EdgeInsets.only(right: 5), child: Icon(icon, size: 14, color: foreground)),
+            ),
+          ],
+          TextSpan(text: label),
+        ]),
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: foreground),
+      ),
     );
   }
 

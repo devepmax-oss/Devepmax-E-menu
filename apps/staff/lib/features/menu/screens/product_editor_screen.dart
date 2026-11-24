@@ -218,6 +218,7 @@ class _ProductEditorScreenState extends ConsumerState<ProductEditorScreen> {
                     _section('Organización', [
                       _row([
                         DropdownButtonFormField<String>(
+                          isExpanded: true,
                           initialValue: _categoryId,
                           decoration: const InputDecoration(labelText: 'Categoría', border: OutlineInputBorder()),
                           items: [
@@ -226,6 +227,7 @@ class _ProductEditorScreenState extends ConsumerState<ProductEditorScreen> {
                           onChanged: (v) => setState(() => _categoryId = v ?? _categoryId),
                         ),
                         DropdownButtonFormField<String?>(
+                          isExpanded: true,
                           initialValue: _stationId,
                           decoration: const InputDecoration(
                             labelText: 'Estación de cocina',
@@ -239,6 +241,7 @@ class _ProductEditorScreenState extends ConsumerState<ProductEditorScreen> {
                           onChanged: (v) => setState(() => _stationId = v),
                         ),
                         DropdownButtonFormField<String?>(
+                          isExpanded: true,
                           initialValue: _taxRateId,
                           decoration: const InputDecoration(labelText: 'Impuesto', border: OutlineInputBorder()),
                           items: [
@@ -332,15 +335,16 @@ class _ProductEditorScreenState extends ConsumerState<ProductEditorScreen> {
       preview = ProductImage(url: _removeImage ? null : _p?.imageUrl);
     }
     final hasImage = _newImage != null || (!_removeImage && _p?.imageUrl != null);
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
+    return Wrap(
+      spacing: 24,
+      runSpacing: 16,
       children: [
         ClipRRect(
           borderRadius: BorderRadius.circular(12),
           child: SizedBox(width: 240, height: 180, child: preview),
         ),
-        const SizedBox(width: 24),
-        Expanded(
+        ConstrainedBox(
+          constraints: const BoxConstraints(minWidth: 220, maxWidth: 520),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [

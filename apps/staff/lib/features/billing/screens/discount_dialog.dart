@@ -80,15 +80,15 @@ class _DiscountDialogState extends ConsumerState<_DiscountDialog> {
         width: 480,
         child: SingleChildScrollView(
           child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-            Row(children: [
+            Wrap(spacing: 12, runSpacing: 12, crossAxisAlignment: WrapCrossAlignment.center, children: [
               SegmentedButton<String>(
                 showSelectedIcon: false,
                 segments: const [ButtonSegment(value: 'PERCENT', label: Text('%')), ButtonSegment(value: 'AMOUNT', label: Text('\$'))],
                 selected: {_type},
                 onSelectionChanged: (v) => setState(() => _type = v.first),
               ),
-              const SizedBox(width: 12),
-              Expanded(
+              SizedBox(
+                width: 180,
                 child: TextField(
                   controller: _value,
                   autofocus: true,
@@ -106,6 +106,7 @@ class _DiscountDialogState extends ConsumerState<_DiscountDialog> {
             ]),
             const SizedBox(height: 14),
             DropdownButtonFormField<String?>(
+              isExpanded: true,
               initialValue: _itemId,
               decoration: const InputDecoration(labelText: 'A qué', border: OutlineInputBorder()),
               items: [

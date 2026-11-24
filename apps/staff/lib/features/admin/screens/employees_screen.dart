@@ -20,10 +20,10 @@ class EmployeesScreen extends ConsumerWidget {
       appBar: AppBar(
         title: const Text('Empleados'),
         actions: [
-          FilledButton.icon(
+          AppBarAction(
+            icon: Icons.person_add_alt_1_rounded,
+            label: 'Nuevo empleado',
             onPressed: () => _openEditor(context),
-            icon: const Icon(Icons.person_add_alt_1_rounded),
-            label: const Text('Nuevo empleado'),
           ),
           const SizedBox(width: 16),
         ],
@@ -166,6 +166,7 @@ class _EmployeeDialogState extends ConsumerState<_EmployeeDialog> {
                 ),
                 const SizedBox(height: 12),
                 DropdownButtonFormField<String>(
+                  isExpanded: true,
                   initialValue: _roleId,
                   decoration: InputDecoration(
                     labelText: 'Rol',

@@ -77,7 +77,7 @@ class _BillingScreenState extends ConsumerState<BillingScreen> {
     return Scaffold(
       backgroundColor: t.bg,
       appBar: AppBar(
-        title: Row(children: [const Text('Caja'), const SizedBox(width: 16), LiveIndicator(status: status)]),
+        title: Row(children: [const Text('Caja'), const SizedBox(width: 16), Flexible(child: LiveIndicator(status: status))]),
         actions: [const _ShiftButton(), const SizedBox(width: 16)],
       ),
       body: bills.when(
@@ -122,8 +122,9 @@ class _BillingScreenState extends ConsumerState<BillingScreen> {
           ]);
 
           if (!wide) return listPane;
+          // Pantalla mediana: la lista se angosta para que quepa la cuenta.
           return Row(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-            SizedBox(width: 400, child: listPane),
+            SizedBox(width: MediaQuery.sizeOf(context).width >= 1600 ? 460 : 400, child: listPane),
             VerticalDivider(width: 1, color: t.line),
             Expanded(
               child: _selected == null
@@ -168,10 +169,11 @@ class _ShiftButton extends ConsumerWidget {
             )
           : const DmPill('Caja cerrada', tone: DmTone.warning);
     }
+    final narrow = MediaQuery.sizeOf(context).width < 700;
     return OutlinedButton.icon(
       onPressed: () => showShiftSheet(context),
       icon: const Icon(Icons.point_of_sale_rounded),
-      label: Text('Caja abierta · efectivo ${formatMoney(s.expectedCash)}'),
+      label: Text(narrow ? formatMoney(s.expectedCash) : 'Caja abierta · efectivo ${formatMoney(s.expectedCash)}'),
     );
   }
 }

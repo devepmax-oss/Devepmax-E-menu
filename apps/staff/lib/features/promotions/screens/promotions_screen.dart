@@ -61,10 +61,10 @@ class PromotionsScreen extends ConsumerWidget {
       appBar: AppBar(
         title: const Text('Promociones'),
         actions: [
-          FilledButton.icon(
+          AppBarAction(
+            icon: Icons.add_rounded,
+            label: 'Nueva promoción',
             onPressed: menu == null ? null : () => openPromotionEditor(context),
-            icon: const Icon(Icons.add_rounded),
-            label: const Text('Nueva promoción'),
           ),
           const SizedBox(width: 16),
         ],
@@ -80,7 +80,7 @@ class PromotionsScreen extends ConsumerWidget {
             );
           }
           return ListView.separated(
-            padding: const EdgeInsets.all(24),
+            padding: EdgeInsets.all(pagePadding(context)),
             itemCount: list.length,
             separatorBuilder: (_, __) => const SizedBox(height: 8),
             itemBuilder: (context, index) {
@@ -91,31 +91,7 @@ class PromotionsScreen extends ConsumerWidget {
                 if (p.startsAt != null) 'desde ${dates.format(p.startsAt!)}',
                 if (p.endsAt != null) 'hasta ${dates.format(p.endsAt!)}',
               ].join(' ');
-              return Card(
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 12, 8, 12),
-                  child: Row(children: [
-                    Icon(Icons.local_offer_rounded, color: Theme.of(context).colorScheme.primary),
-                    const SizedBox(width: 16),
-                    Expanded(
-                      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                        Wrap(spacing: 8, crossAxisAlignment: WrapCrossAlignment.center, children: [
-                          Text(p.name, style: Theme.of(context).textTheme.titleMedium),
-                          StatusChip(stateLabel, color: stateColor),
-                        ]),
-                        const SizedBox(height: 4),
-                        Text(promotionSummary(p, menu)),
-                        const SizedBox(height: 4),
-                        Text(
-                          [
-                            [if (p.appliesDineIn) 'Mesas y caja', if (p.appliesOnline) 'Web'].join(' · '),
-                            if (validity.isNotEmpty) validity else 'Sin fecha de fin',
-                            'Usada ${p.timesApplied} ${p.timesApplied == 1 ? 'vez' : 'veces'}',
-                          ].join('  ·  '),
-                          style: Theme.of(context).textTheme.bodySmall,
-                        ),
-                      ]),
-                    ),
+              final actions = <Widget>[
                     Switch(
                       value: p.isActive,
                       onChanged: (v) => run((api) => api.update(p.id, {'isActive': v})),
@@ -137,6 +113,37 @@ class PromotionsScreen extends ConsumerWidget {
                         if (ok) await run((api) => api.delete(p.id));
                       },
                     ),
+              ];
+              final compact = isCompact(context);
+              return Card(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 12, 8, 12),
+                  child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                  Row(children: [
+                    Icon(Icons.local_offer_rounded, color: Theme.of(context).colorScheme.primary),
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                        Wrap(spacing: 8, crossAxisAlignment: WrapCrossAlignment.center, children: [
+                          Text(p.name, style: Theme.of(context).textTheme.titleMedium),
+                          StatusChip(stateLabel, color: stateColor),
+                        ]),
+                        const SizedBox(height: 4),
+                        Text(promotionSummary(p, menu)),
+                        const SizedBox(height: 4),
+                        Text(
+                          [
+                            [if (p.appliesDineIn) 'Mesas y caja', if (p.appliesOnline) 'Web'].join(' · '),
+                            if (validity.isNotEmpty) validity else 'Sin fecha de fin',
+                            'Usada ${p.timesApplied} ${p.timesApplied == 1 ? 'vez' : 'veces'}',
+                          ].join('  ·  '),
+                          style: Theme.of(context).textTheme.bodySmall,
+                        ),
+                      ]),
+                    ),
+                    if (!compact) ...actions,
+                  ]),
+                  if (compact) Row(mainAxisAlignment: MainAxisAlignment.end, children: actions),
                   ]),
                 ),
               );

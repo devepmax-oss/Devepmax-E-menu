@@ -258,28 +258,16 @@ class _ModifierGroupDialogState extends ConsumerState<_ModifierGroupDialog> {
 
   Widget _optionRow(int index) {
     final option = _options[index];
+    final name = TextFormField(
+      controller: option.name,
+      decoration: const InputDecoration(labelText: 'Opción', isDense: true, border: OutlineInputBorder()),
+      validator: (v) => (v == null || v.trim().isEmpty) ? 'Obligatorio' : null,
+    );
     return Padding(
       key: ObjectKey(option),
       padding: const EdgeInsets.only(bottom: 8),
-      child: Row(
-        children: [
-          Expanded(
-            flex: 3,
-            child: TextFormField(
-              controller: option.name,
-              decoration: const InputDecoration(labelText: 'Opción', isDense: true, border: OutlineInputBorder()),
-              validator: (v) => (v == null || v.trim().isEmpty) ? 'Obligatorio' : null,
-            ),
-          ),
-          const SizedBox(width: 8),
-          Expanded(
-            flex: 3,
-            child: TextFormField(
-              controller: option.nameEn,
-              decoration: const InputDecoration(labelText: 'En inglés', isDense: true, border: OutlineInputBorder()),
-            ),
-          ),
-          const SizedBox(width: 8),
+      child: LayoutBuilder(builder: (context, box) {
+        final controls = <Widget>[
           SizedBox(
             width: 110,
             child: TextFormField(
@@ -317,10 +305,30 @@ class _ModifierGroupDialogState extends ConsumerState<_ModifierGroupDialog> {
             icon: const Icon(Icons.close_rounded),
             onPressed: () => setState(() => _removed.add(_options.removeAt(index))),
           ),
-        ],
-      ),
+        ];
+        final english = TextFormField(
+          controller: option.nameEn,
+          decoration: const InputDecoration(labelText: 'En inglés', isDense: true, border: OutlineInputBorder()),
+        );
+        // Angosto: nombre y nombre en inglés arriba, precio y controles abajo.
+        if (box.maxWidth < 560) {
+          return Column(children: [
+            Row(children: [Expanded(child: name), const SizedBox(width: 8), Expanded(child: english)]),
+            const SizedBox(height: 6),
+            Row(mainAxisAlignment: MainAxisAlignment.end, children: controls),
+          ]);
+        }
+        return Row(children: [
+          Expanded(flex: 3, child: name),
+          const SizedBox(width: 8),
+          Expanded(flex: 3, child: english),
+          const SizedBox(width: 8),
+          ...controls,
+        ]);
+      }),
     );
   }
+
 
   Widget _counter(String label, int value, int min, int max, ValueChanged<int> onChanged) {
     return InputDecorator(

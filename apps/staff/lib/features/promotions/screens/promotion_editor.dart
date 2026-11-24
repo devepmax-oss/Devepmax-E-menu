@@ -277,7 +277,7 @@ class _PromotionEditorState extends ConsumerState<_PromotionEditor> {
         ];
       case 'BUY_X_GET_Y':
         return [
-          Row(children: [
+          Wrap(spacing: 12, runSpacing: 8, crossAxisAlignment: WrapCrossAlignment.center, children: [
             SizedBox(
               width: 140,
               child: TextFormField(
@@ -288,7 +288,7 @@ class _PromotionEditorState extends ConsumerState<_PromotionEditor> {
                 onChanged: (_) => setState(() {}),
               ),
             ),
-            const Padding(padding: EdgeInsets.symmetric(horizontal: 12), child: Text('y lleva gratis')),
+            const Text('y lleva gratis'),
             SizedBox(
               width: 140,
               child: TextFormField(

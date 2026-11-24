@@ -69,10 +69,10 @@ class _DevicesScreenState extends ConsumerState<DevicesScreen> {
       appBar: AppBar(
         title: const Text('Dispositivos'),
         actions: [
-          FilledButton.icon(
+          AppBarAction(
+            icon: Icons.add_rounded,
+            label: 'Nuevo dispositivo',
             onPressed: () => _openEditor(stations),
-            icon: const Icon(Icons.add_rounded),
-            label: const Text('Nuevo dispositivo'),
           ),
           const SizedBox(width: 16),
         ],
@@ -82,7 +82,7 @@ class _DevicesScreenState extends ConsumerState<DevicesScreen> {
         error: (error, _) => ErrorView(error: error, onRetry: () => ref.invalidate(devicesProvider)),
         data: (list) {
           return ListView.separated(
-            padding: const EdgeInsets.all(24),
+            padding: EdgeInsets.all(pagePadding(context)),
             itemCount: list.length + 1,
             separatorBuilder: (_, __) => const SizedBox(height: 8),
             itemBuilder: (context, i) {
@@ -279,10 +279,22 @@ class _DeviceCard extends StatelessWidget {
       status = const StatusChip('Sin vincular · genera un código');
     }
 
+    final actions = <Widget>[
+      TextButton.icon(
+        onPressed: device.isActive ? onNewCode : null,
+        icon: const Icon(Icons.qr_code_rounded),
+        label: Text(device.isPaired ? 'Volver a vincular' : 'Generar código'),
+      ),
+      IconButton(tooltip: 'Editar', icon: const Icon(Icons.edit_rounded), onPressed: onEdit),
+      if (device.isPaired)
+        IconButton(tooltip: 'Desvincular', icon: const Icon(Icons.link_off_rounded), onPressed: onRevoke),
+    ];
+    final compact = isCompact(context);
     return Card(
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-        child: Row(children: [
+        child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        Row(children: [
           Icon(_typeIcons[device.type] ?? Icons.devices_rounded, size: 32, color: theme.colorScheme.primary),
           const SizedBox(width: 16),
           Expanded(
@@ -298,14 +310,9 @@ class _DeviceCard extends StatelessWidget {
               ]),
             ]),
           ),
-          TextButton.icon(
-            onPressed: device.isActive ? onNewCode : null,
-            icon: const Icon(Icons.qr_code_rounded),
-            label: Text(device.isPaired ? 'Volver a vincular' : 'Generar código'),
-          ),
-          IconButton(tooltip: 'Editar', icon: const Icon(Icons.edit_rounded), onPressed: onEdit),
-          if (device.isPaired)
-            IconButton(tooltip: 'Desvincular', icon: const Icon(Icons.link_off_rounded), onPressed: onRevoke),
+          if (!compact) ...actions,
+        ]),
+        if (compact) Wrap(alignment: WrapAlignment.end, children: actions),
         ]),
       ),
     );
@@ -389,6 +396,7 @@ class _DeviceDialogState extends ConsumerState<_DeviceDialog> {
             ),
             const SizedBox(height: 12),
             DropdownButtonFormField<String>(
+              isExpanded: true,
               initialValue: type,
               decoration: const InputDecoration(labelText: 'Tipo', border: OutlineInputBorder()),
               items: [
@@ -400,6 +408,7 @@ class _DeviceDialogState extends ConsumerState<_DeviceDialog> {
             if (type == 'KDS') ...[
               const SizedBox(height: 12),
               DropdownButtonFormField<String?>(
+                isExpanded: true,
                 initialValue: _stationId,
                 decoration: const InputDecoration(
                   labelText: 'Estación que muestra',
@@ -458,6 +467,7 @@ class _TablePicker extends ConsumerWidget {
         .toList();
     return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
       DropdownButtonFormField<String?>(
+        isExpanded: true,
         initialValue: current,
         decoration: const InputDecoration(labelText: 'Mesa', border: OutlineInputBorder()),
         items: [
@@ -540,6 +550,9 @@ class _ReadersSectionState extends ConsumerState<_ReadersSection> {
                   style: TextStyle(color: t.muted)),
             ]),
           ),
+        ]),
+        const SizedBox(height: 8),
+        Wrap(alignment: WrapAlignment.end, spacing: 8, runSpacing: 8, children: [
           if (config?.enabled ?? false) ...[
             if (config!.testMode)
               TextButton.icon(
@@ -547,7 +560,6 @@ class _ReadersSectionState extends ConsumerState<_ReadersSection> {
                 icon: const Icon(Icons.science_rounded),
                 label: const Text('Lector de prueba'),
               ),
-            const SizedBox(width: 8),
             FilledButton.icon(
               onPressed: _busy ? null : _add,
               icon: const Icon(Icons.add_rounded),
