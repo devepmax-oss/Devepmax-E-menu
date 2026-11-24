@@ -125,12 +125,24 @@ class _TablesScreenState extends ConsumerState<TablesScreen> {
       backgroundColor: t.bg,
       appBar: AppBar(
         title: Row(children: [
-          Text(_editing ? 'Editar plano' : 'Mesas'),
+          Flexible(child: Text(_editing ? 'Editar plano' : 'Mesas', maxLines: 1, overflow: TextOverflow.ellipsis)),
           const SizedBox(width: 16),
           if (!_editing) Flexible(child: LiveIndicator(status: status)),
         ]),
         actions: [
-          if (_editing) ...[
+          if (_editing && isCompact(context)) ...[
+            // Teléfono: solo íconos para que quepa el título.
+            IconButton(
+              tooltip: 'Cancelar',
+              onPressed: _saving ? null : () => _finishEditing(areas, save: false),
+              icon: const Icon(Icons.close_rounded),
+            ),
+            IconButton.filled(
+              tooltip: 'Listo',
+              onPressed: _saving ? null : () => _finishEditing(areas, save: true),
+              icon: const Icon(Icons.check_rounded),
+            ),
+          ] else if (_editing) ...[
             TextButton(
               onPressed: _saving ? null : () => _finishEditing(areas, save: false),
               child: const Text('Cancelar'),
@@ -139,7 +151,7 @@ class _TablesScreenState extends ConsumerState<TablesScreen> {
             FilledButton.icon(
               onPressed: _saving ? null : () => _finishEditing(areas, save: true),
               icon: const Icon(Icons.check_rounded),
-              label: Text(_draft.isEmpty || isCompact(context) ? 'Listo' : 'Guardar plano'),
+              label: Text(_draft.isEmpty ? 'Listo' : 'Guardar plano'),
             ),
           ] else ...[
             IconButton(
@@ -383,9 +395,7 @@ class _FloorCanvas extends StatelessWidget {
     return LayoutBuilder(builder: (context, constraints) {
       final cell = math.min(constraints.maxWidth / cols, constraints.maxHeight / rows).clamp(14.0, 72.0);
       final width = cols * cell, height = rows * cell;
-      return Align(
-        alignment: Alignment.topCenter,
-        child: Container(
+      Widget canvas = Container(
           width: width,
           height: height,
           decoration: BoxDecoration(
@@ -410,8 +420,12 @@ class _FloorCanvas extends StatelessWidget {
                 ),
             ]),
           ),
-        ),
-      );
+        );
+      // En pantallas angostas el plano no se achica de más (las mesas seguirían siendo fáciles
+      // de tocar): se desliza para ver el resto.
+      if (height > constraints.maxHeight + 0.5) canvas = SingleChildScrollView(child: canvas);
+      if (width > constraints.maxWidth + 0.5) canvas = SingleChildScrollView(scrollDirection: Axis.horizontal, child: canvas);
+      return Align(alignment: Alignment.topCenter, child: canvas);
     });
   }
 }
