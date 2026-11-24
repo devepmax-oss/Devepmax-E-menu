@@ -540,6 +540,10 @@ model Payment {
   stripePaymentIntentId String?       @unique
   employeeId            String?
   cashShiftId           String?
+  /// Identificador de la app: si reintenta el mismo cobro, no se registra dos veces.
+  clientRequestId       String?       @unique
+  /// Número de autorización, últimos 4 dígitos o una nota del cobro.
+  reference             String?
   createdAt             DateTime      @default(now())
   bill                  Bill          @relation(fields: [billId], references: [id])
   cashShift             CashShift?    @relation(fields: [cashShiftId], references: [id])

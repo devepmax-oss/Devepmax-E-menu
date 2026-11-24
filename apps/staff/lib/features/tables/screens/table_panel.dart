@@ -2,9 +2,11 @@ import 'package:collection/collection.dart';
 import 'package:devepmax_ui/devepmax_ui.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
 import '../../../core/api/api_exception.dart';
+import '../../../core/auth/auth_controller.dart';
 import '../../../core/ui/feedback.dart';
 import '../../orders/data/orders_api.dart';
 import '../../orders/data/orders_models.dart';
@@ -168,8 +170,19 @@ class _TablePanelState extends ConsumerState<_TablePanel> {
           ]),
         );
 
+    final canCharge = ref.watch(authControllerProvider).value?.employee.can('payments.take') ?? false;
     final actions = <Widget>[
       if (s != null) ...[
+        if (canCharge && s.total > 0)
+          FilledButton.tonalIcon(
+            onPressed: () {
+              final router = GoRouter.of(context);
+              Navigator.pop(context);
+              router.go('/billing?table=${table.id}');
+            },
+            icon: const Icon(Icons.point_of_sale_rounded),
+            label: Text(s.due > 0 ? 'Cobrar ${formatMoney(s.due)}' : 'Ver la cuenta'),
+          ),
         OutlinedButton.icon(
           onPressed: _busy ? null : () => _seat(table),
           icon: const Icon(Icons.people_alt_rounded),

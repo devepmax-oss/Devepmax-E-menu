@@ -21,6 +21,7 @@
     "smoke:delivery": "tsx scripts/smoke-delivery.ts",
     "smoke:tables": "tsx scripts/smoke-tables.ts",
     "smoke:emenu": "tsx scripts/smoke-emenu.ts",
+    "smoke:billing": "tsx scripts/smoke-billing.ts",
     "demo:orders": "tsx scripts/demo-orders.ts"
   },
   "dependencies": {

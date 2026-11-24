@@ -20,6 +20,7 @@ class _Destination {
 const _allDestinations = [
   _Destination('/orders', 'Órdenes', Icons.receipt_long_rounded, 'orders.create'),
   _Destination('/tables', 'Mesas', Icons.table_restaurant_rounded, 'tables.operate'),
+  _Destination('/billing', 'Caja', Icons.point_of_sale_rounded, 'payments.take'),
   _Destination('/menu', 'Menú', Icons.restaurant_menu_rounded, 'menu.manage'),
   _Destination('/modifiers', 'Modificadores', Icons.tune_rounded, 'menu.manage'),
   _Destination('/menu-setup', 'Cocina e impuestos', Icons.soup_kitchen_rounded, 'menu.manage'),

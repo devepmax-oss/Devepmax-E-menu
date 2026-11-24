@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:devepmax_ui/devepmax_ui.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
 import '../../../core/auth/auth_controller.dart';
@@ -329,6 +330,23 @@ class _OrderCard extends ConsumerWidget {
                   const DmPill('Pagado', tone: DmTone.success),
                 ],
                 const Spacer(),
+                if (!order.isPaid &&
+                    order.billId != null &&
+                    order.status != 'PENDING_PAYMENT' &&
+                    order.status != 'CANCELLED' &&
+                    (employee?.can('payments.take') ?? false))
+                  Padding(
+                    padding: const EdgeInsets.only(right: 8),
+                    child: OutlinedButton.icon(
+                      onPressed: () {
+                        final router = GoRouter.of(context);
+                        Navigator.pop(context);
+                        router.go('/billing?bill=${order.billId}');
+                      },
+                      icon: const Icon(Icons.point_of_sale_rounded),
+                      label: const Text('Cobrar'),
+                    ),
+                  ),
                 if (order.status == 'PENDING_APPROVAL' && (employee?.can('orders.approve') ?? false))
                   _ActionButton(label: 'Aprobar', run: (api) => api.approve(order.id)),
                 if (order.status == 'READY' && (employee?.can('orders.create') ?? false))

@@ -187,6 +187,7 @@ class OrderView {
     required this.tipTotal,
     required this.amountPaid,
     required this.billStatus,
+    this.billId,
   });
 
   final String id;
@@ -223,6 +224,9 @@ class OrderView {
   final double tipTotal;
   final double amountPaid;
   final String billStatus;
+
+  /// Cuenta de la orden (para cobrarla en Caja).
+  final String? billId;
 
   bool get isPaid => billStatus == 'PAID';
 
@@ -290,6 +294,7 @@ class OrderView {
       tipTotal: parseMoney(bill['tipTotal']),
       amountPaid: parseMoney(bill['amountPaid']),
       billStatus: bill['status'] as String? ?? 'OPEN',
+      billId: bill['id'] as String?,
     );
   }
 }

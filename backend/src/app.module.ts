@@ -1,4 +1,5 @@
 import { TablesModule } from './modules/tables/tables.module';
+import { BillingModule } from './modules/billing/billing.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
 import { DeliveryModule } from './modules/delivery/delivery.module';
 import { OnlineModule } from './modules/online/online.module';
@@ -35,6 +36,7 @@ import { StorageModule } from './storage/storage.module';
     PaymentsModule,
     NotificationsModule,
     TablesModule,
+    BillingModule,
     DeliveryModule,
     OnlineModule,
   ],
