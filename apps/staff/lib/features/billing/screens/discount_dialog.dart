@@ -172,6 +172,7 @@ Future<String?> askManagerPin(BuildContext context) {
   return showDialog<String>(
     context: context,
     builder: (context) => AlertDialog(
+      scrollable: true,
       title: const Text('PIN de un gerente'),
       content: TextField(
         controller: pin,

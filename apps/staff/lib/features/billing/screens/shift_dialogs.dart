@@ -35,6 +35,7 @@ Future<double?> _askMoney(BuildContext context, {required String title, required
       builder: (context, setState) {
         final value = _parse(controller.text);
         return AlertDialog(
+          scrollable: true,
           title: Text(title),
           content: SizedBox(
             width: 380,
@@ -128,6 +129,7 @@ class _ShiftDialogState extends ConsumerState<_ShiftDialog> {
 
     if (shift == null) {
       return AlertDialog(
+        scrollable: true,
         title: const Text('Caja cerrada'),
         content: const Text('No hay un turno de caja abierto.'),
         actions: [FilledButton(onPressed: () => Navigator.pop(context), child: const Text('Cerrar'))],
@@ -210,6 +212,7 @@ class _MovementDialogState extends State<_MovementDialog> {
     final amount = _parse(_amount.text);
     final ok = amount > 0 && _reason.text.trim().length >= 3;
     return AlertDialog(
+      scrollable: true,
       title: const Text('Movimiento de efectivo'),
       content: SizedBox(
         width: 420,

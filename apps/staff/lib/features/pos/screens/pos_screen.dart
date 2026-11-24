@@ -412,6 +412,7 @@ class _PosOrderPanelState extends ConsumerState<PosOrderPanel> {
     final result = await showDialog<String>(
       context: context,
       builder: (context) => AlertDialog(
+        scrollable: true,
         title: Text(line.product.name),
         content: TextField(
           controller: controller,

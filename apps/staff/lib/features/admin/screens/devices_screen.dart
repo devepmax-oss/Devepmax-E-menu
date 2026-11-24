@@ -205,6 +205,7 @@ class _PairingDialogState extends ConsumerState<_PairingDialog> {
     final code = widget.device.pairingCode!;
     final expires = widget.device.pairingExpiresAt!;
     return AlertDialog(
+      scrollable: true,
       title: Text(_paired ? '¡Listo!' : 'Vincular "${widget.device.name}"'),
       content: SizedBox(
         width: 420,
@@ -391,6 +392,7 @@ class _DeviceDialogState extends ConsumerState<_DeviceDialog> {
     final isNew = widget.device == null;
     final type = widget.device?.type ?? _type;
     return AlertDialog(
+      scrollable: true,
       title: Text(isNew ? 'Nuevo dispositivo' : 'Editar dispositivo'),
       content: SizedBox(
         width: 440,
@@ -634,6 +636,7 @@ class _AddReaderDialogState extends State<_AddReaderDialog> {
   Widget build(BuildContext context) {
     final ok = _code.text.trim().length >= 3 && _label.text.trim().length >= 2;
     return AlertDialog(
+      scrollable: true,
       title: const Text('Agregar lector'),
       content: SizedBox(
         width: 420,

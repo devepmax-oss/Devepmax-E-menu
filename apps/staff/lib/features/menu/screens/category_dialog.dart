@@ -66,6 +66,7 @@ class _CategoryDialogState extends ConsumerState<_CategoryDialog> {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
+      scrollable: true,
       title: Text(widget.category == null ? 'Nueva categoría' : 'Editar categoría'),
       content: SizedBox(
         width: 420,

@@ -39,6 +39,7 @@ Future<bool> confirm(
   final result = await showDialog<bool>(
     context: context,
     builder: (context) => AlertDialog(
+      scrollable: true,
       title: Text(title),
       content: Text(message),
       actions: [

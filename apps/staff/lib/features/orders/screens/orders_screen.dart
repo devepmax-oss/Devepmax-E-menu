@@ -360,36 +360,39 @@ class _OrderCard extends ConsumerWidget {
                 ]),
               ],
               const SizedBox(height: 14),
-              Row(children: [
-                Text(formatMoney(order.total), style: text.titleLarge),
-                if (order.isPaid) ...[
-                  const SizedBox(width: 8),
-                  const DmPill('Pagado', tone: DmTone.success),
+              // Total a la izquierda y botones a la derecha; si no caben, los botones bajan.
+              Wrap(
+                alignment: WrapAlignment.spaceBetween,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                spacing: 8,
+                runSpacing: 10,
+                children: [
+                  Row(mainAxisSize: MainAxisSize.min, children: [
+                    Text(formatMoney(order.total), style: text.titleLarge),
+                    if (order.isPaid) ...[
+                      const SizedBox(width: 8),
+                      const DmPill('Pagado', tone: DmTone.success),
+                    ],
+                  ]),
+                  Wrap(spacing: 8, runSpacing: 8, children: [
+                    if (!order.isPaid &&
+                        order.billId != null &&
+                        order.status != 'PENDING_PAYMENT' &&
+                        order.status != 'CANCELLED' &&
+                        (employee?.can('payments.take') ?? false))
+                      OutlinedButton.icon(
+                        onPressed: () => GoRouter.of(context).go('/billing?bill=${order.billId}'),
+                        icon: const Icon(Icons.point_of_sale_rounded),
+                        label: const Text('Cobrar'),
+                      ),
+                    if (order.status == 'PENDING_APPROVAL' && (employee?.can('orders.approve') ?? false))
+                      _ActionButton(label: 'Aprobar', run: (api) => api.approve(order.id)),
+                    if (order.status == 'READY' && (employee?.can('orders.create') ?? false))
+                      _ActionButton(label: 'Entregar', run: (api) => api.complete(order.id)),
+                    if (employee?.can('kitchen.operate') ?? false) _KitchenButton(order: order),
+                  ]),
                 ],
-                const Spacer(),
-                if (!order.isPaid &&
-                    order.billId != null &&
-                    order.status != 'PENDING_PAYMENT' &&
-                    order.status != 'CANCELLED' &&
-                    (employee?.can('payments.take') ?? false))
-                  Padding(
-                    padding: const EdgeInsets.only(right: 8),
-                    child: OutlinedButton.icon(
-                      onPressed: () {
-                        final router = GoRouter.of(context);
-                        Navigator.pop(context);
-                        router.go('/billing?bill=${order.billId}');
-                      },
-                      icon: const Icon(Icons.point_of_sale_rounded),
-                      label: const Text('Cobrar'),
-                    ),
-                  ),
-                if (order.status == 'PENDING_APPROVAL' && (employee?.can('orders.approve') ?? false))
-                  _ActionButton(label: 'Aprobar', run: (api) => api.approve(order.id)),
-                if (order.status == 'READY' && (employee?.can('orders.create') ?? false))
-                  _ActionButton(label: 'Entregar', run: (api) => api.complete(order.id)),
-                if (employee?.can('kitchen.operate') ?? false) _KitchenButton(order: order),
-              ]),
+              ),
             ]),
           ),
         ),
@@ -824,6 +827,7 @@ class _CancelDialogState extends State<_CancelDialog> {
   Widget build(BuildContext context) {
     final valid = _reason.text.trim().length >= 3;
     return AlertDialog(
+      scrollable: true,
       title: const Text('Cancelar orden'),
       content: SizedBox(
         width: 420,
@@ -936,6 +940,7 @@ class _AssignDriverDialog extends ConsumerWidget {
     final t = BrandTokens.of(context);
     final text = Theme.of(context).textTheme;
     return AlertDialog(
+      scrollable: true,
       title: const Text('Asignar repartidor'),
       content: SizedBox(
         width: 420,

@@ -672,6 +672,7 @@ class _NameDialogState extends State<_NameDialog> {
 
   @override
   Widget build(BuildContext context) => AlertDialog(
+        scrollable: true,
         title: Text(widget.title),
         content: SizedBox(
           width: 380,
@@ -747,6 +748,7 @@ class _TableDialogState extends State<_TableDialog> {
     final isNew = widget.table == null;
     final busy = widget.table?.session != null;
     return AlertDialog(
+      scrollable: true,
       title: Text(isNew ? 'Nueva mesa' : 'Mesa ${widget.table!.label}'),
       content: SizedBox(
         width: 420,

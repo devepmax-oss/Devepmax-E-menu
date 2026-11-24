@@ -229,6 +229,7 @@ class _PrinterSetupState extends ConsumerState<_PrinterSetup> {
   Widget build(BuildContext context) {
     final t = BrandTokens.of(context);
     return AlertDialog(
+      scrollable: true,
       title: const Text('Impresora de tickets'),
       content: SizedBox(
         width: 440,

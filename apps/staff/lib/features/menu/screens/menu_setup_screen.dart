@@ -113,6 +113,7 @@ class _StationsCard extends ConsumerWidget {
       context: context,
       builder: (context) => StatefulBuilder(
         builder: (context, setState) => AlertDialog(
+          scrollable: true,
           title: Text(station == null ? 'Nueva estación' : 'Editar estación'),
           content: Column(mainAxisSize: MainAxisSize.min, children: [
             TextField(
@@ -204,6 +205,7 @@ class _TaxRatesCard extends ConsumerWidget {
       context: context,
       builder: (context) => StatefulBuilder(
         builder: (context, setState) => AlertDialog(
+          scrollable: true,
           title: Text(tax == null ? 'Nuevo impuesto' : 'Editar impuesto'),
           content: Column(mainAxisSize: MainAxisSize.min, children: [
             TextField(

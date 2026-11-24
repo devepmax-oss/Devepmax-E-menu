@@ -571,6 +571,7 @@ extension on _PayDialogState {
     }
 
     return AlertDialog(
+      scrollable: true,
       title: Text('Cobrar · ${widget.bill.label}'),
       content: SizedBox(width: 480, child: Padding(padding: const EdgeInsets.symmetric(vertical: 12), child: body)),
       actions: actions,
@@ -634,6 +635,7 @@ Future<void> showChangeDialog(BuildContext context, double change) {
   return showDialog<void>(
     context: context,
     builder: (context) => AlertDialog(
+      scrollable: true,
       content: Column(mainAxisSize: MainAxisSize.min, children: [
         Icon(Icons.payments_rounded, size: 56, color: t.success),
         const SizedBox(height: 12),

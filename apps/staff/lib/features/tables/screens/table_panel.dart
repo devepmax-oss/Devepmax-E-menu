@@ -382,6 +382,7 @@ class _GuestsDialogState extends State<_GuestsDialog> {
   Widget build(BuildContext context) {
     final t = BrandTokens.of(context);
     return AlertDialog(
+      scrollable: true,
       title: const Text('¿Cuántos clientes?'),
       content: SizedBox(
         width: 360,

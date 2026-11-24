@@ -281,6 +281,7 @@ Future<void> showGeneratedPin(BuildContext context, {required String name, requi
     context: context,
     barrierDismissible: false,
     builder: (context) => AlertDialog(
+      scrollable: true,
       title: Text('PIN de $name'),
       content: Column(mainAxisSize: MainAxisSize.min, children: [
         SelectableText(
