@@ -3,6 +3,7 @@ import { Prisma } from '@prisma/client';
 import type Stripe from 'stripe';
 import { isUniqueViolation } from '../../prisma/errors';
 import { PrismaService } from '../../prisma/prisma.service';
+import { DomainEventsService } from '../../realtime/domain-events.service';
 import { AuditService } from '../audit/audit.service';
 import { OrdersService, OrderView } from '../orders/orders.service';
 import { SettingsService } from '../settings/settings.service';
@@ -22,6 +23,7 @@ export class PaymentsService {
     private readonly orders: OrdersService,
     private readonly settings: SettingsService,
     private readonly audit: AuditService,
+    private readonly events: DomainEventsService,
   ) {}
 
   /**
@@ -81,6 +83,10 @@ export class PaymentsService {
 
   /** Aplica un cobro de Stripe (desde el webhook o desde la confirmación de la web). */
   async applyPaymentIntent(intent: Stripe.PaymentIntent): Promise<PaymentOutcome> {
+    if (intent.metadata?.kind === 'terminal') {
+      this.events.emit('payment.terminal_intent', intent);
+      return intent.status === 'succeeded' ? 'succeeded' : intent.status === 'canceled' ? 'failed' : 'pending';
+    }
     if (intent.status === 'succeeded') {
       await this.markSucceeded(intent.id, intent.amount_received);
       return 'succeeded';

@@ -293,7 +293,7 @@ export class TablesService implements OnModuleInit, OnModuleDestroy {
   }
 
   /** Los clientes se fueron: la mesa queda "por limpiar". */
-  async close(actor: EmployeeActor, id: string, force = false) {
+  async close(actor: EmployeeActor | 'system', id: string, force = false) {
     const table = await this.findTable(id);
     const view = toTableView(await this.prisma.diningTable.findUniqueOrThrow({ where: { id }, include: TABLE_INCLUDE }));
     const s = view.session;
@@ -312,7 +312,7 @@ export class TablesService implements OnModuleInit, OnModuleDestroy {
       this.prisma.tableSession.update({ where: { id: s.id }, data: { status: 'CLOSED', closedAt: now } }),
       this.prisma.serviceRequest.updateMany({
         where: { tableSessionId: s.id, status: { in: ['OPEN', 'ACKNOWLEDGED'] } },
-        data: { status: 'DONE', resolvedAt: now, resolvedById: actor.id },
+        data: { status: 'DONE', resolvedAt: now, resolvedById: actor === 'system' ? null : actor.id },
       }),
       this.prisma.diningTable.update({ where: { id }, data: { status: 'CLEANING' } }),
     ]);

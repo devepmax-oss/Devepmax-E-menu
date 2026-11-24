@@ -22,6 +22,8 @@ export type DomainEventName =
   // Internos: no se difunden; el gateway desconecta los sockets afectados
   // para que vuelvan a entrar con sus permisos y rooms actualizados.
   | 'device.changed'
+  // Interno: Stripe confirmó o canceló un cobro del lector (lo aplica la caja).
+  | 'payment.terminal_intent'
   | 'employee.changed';
 
 export interface DomainEvent<T = unknown> {

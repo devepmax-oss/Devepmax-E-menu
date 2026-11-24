@@ -282,3 +282,45 @@ class CashShiftView {
         difference: j['difference'] == null ? null : parseMoney(j['difference']),
       );
 }
+
+/// Lector de tarjetas (Stripe Terminal).
+class CardReader {
+  const CardReader({required this.id, required this.label, required this.deviceType, required this.simulated, this.status, required this.busy});
+  final String id;
+  final String label;
+  final String deviceType;
+  final bool simulated;
+  final String? status;
+  final bool busy;
+
+  bool get online => simulated || status == 'online';
+
+  factory CardReader.fromJson(BJson j) => CardReader(
+        id: j['id'] as String,
+        label: j['label'] as String? ?? 'Lector',
+        deviceType: j['deviceType'] as String? ?? '',
+        simulated: j['simulated'] as bool? ?? false,
+        status: j['status'] as String?,
+        busy: j['busy'] as bool? ?? false,
+      );
+}
+
+/// En qué va un cobro con el lector.
+class TerminalCharge {
+  const TerminalCharge({required this.paymentId, required this.status, required this.message, this.tip = 0, this.bill});
+  final String paymentId;
+
+  /// waiting · succeeded · failed · cancelled
+  final String status;
+  final String message;
+  final double tip;
+  final BillView? bill;
+
+  factory TerminalCharge.fromJson(BJson j) => TerminalCharge(
+        paymentId: j['paymentId'] as String,
+        status: j['status'] as String,
+        message: j['message'] as String? ?? '',
+        tip: parseMoney(j['tip']),
+        bill: j['bill'] == null ? null : BillView.fromJson(j['bill'] as BJson),
+      );
+}

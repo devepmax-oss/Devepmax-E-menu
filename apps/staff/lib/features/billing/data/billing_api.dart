@@ -77,6 +77,41 @@ class BillingApi {
   Future<BillView> merge(String billId, String targetBillId) =>
       _bill(_dio.post<Map<String, dynamic>>('/billing/bills/$billId/merge', data: {'targetBillId': targetBillId}));
 
+  // Lector de tarjetas (Stripe Terminal)
+  Future<({bool enabled, bool testMode})> terminalConfig() => _call(() async {
+        final data = (await _dio.get<Map<String, dynamic>>('/terminal/config')).data!;
+        return (enabled: data['enabled'] as bool? ?? false, testMode: data['testMode'] as bool? ?? false);
+      });
+
+  Future<List<CardReader>> readers() => _call(() async {
+        final response = await _dio.get<List<dynamic>>('/terminal/readers');
+        return response.data!.map((r) => CardReader.fromJson(r as BJson)).toList();
+      });
+
+  Future<void> registerReader(String code, String label) =>
+      _call(() => _dio.post('/terminal/readers', data: {'registrationCode': code, 'label': label}));
+
+  Future<void> removeReader(String id) => _call(() => _dio.delete('/terminal/readers/$id'));
+
+  Future<TerminalCharge> terminalCharge(String billId,
+          {required String requestId, required String readerId, required double amount, required bool tipOnReader}) =>
+      _call(() async => TerminalCharge.fromJson((await _dio.post<Map<String, dynamic>>('/billing/bills/$billId/terminal', data: {
+            'clientRequestId': requestId,
+            'readerId': readerId,
+            'amount': amount,
+            'tipOnReader': tipOnReader,
+          }))
+              .data!));
+
+  Future<TerminalCharge> terminalStatus(String paymentId) => _call(
+      () async => TerminalCharge.fromJson((await _dio.get<Map<String, dynamic>>('/billing/terminal/$paymentId')).data!));
+
+  Future<TerminalCharge> terminalCancel(String paymentId) => _call(() async =>
+      TerminalCharge.fromJson((await _dio.post<Map<String, dynamic>>('/billing/terminal/$paymentId/cancel')).data!));
+
+  Future<void> terminalSimulate(String paymentId, {double tip = 0, bool declined = false}) => _call(() =>
+      _dio.post('/billing/terminal/$paymentId/simulate', data: {if (tip > 0) 'tip': tip, if (declined) 'declined': true}));
+
   // Caja
   Future<CashShiftView?> shift() => _call(() async {
         final data = (await _dio.get<Map<String, dynamic>>('/cash/shift')).data!;
@@ -153,4 +188,20 @@ final tableBillsProvider = FutureProvider.autoDispose.family<List<BillView>, Str
 final cashShiftProvider = FutureProvider<CashShiftView?>((ref) async {
   ref.watch(openBillsProvider); // los cobros cambian el efectivo esperado
   return ref.read(billingApiProvider).shift();
+});
+
+/// Configuración de Stripe Terminal (si hay claves y si es modo prueba).
+final terminalConfigProvider = FutureProvider<({bool enabled, bool testMode})>((ref) async {
+  try {
+    return await ref.read(billingApiProvider).terminalConfig();
+  } catch (_) {
+    return (enabled: false, testMode: false);
+  }
+});
+
+/// Lectores registrados. Si Stripe no está configurado o falta la dirección, lista vacía con el motivo.
+final cardReadersProvider = FutureProvider.autoDispose<List<CardReader>>((ref) async {
+  final config = await ref.watch(terminalConfigProvider.future);
+  if (!config.enabled) return const [];
+  return ref.read(billingApiProvider).readers();
 });

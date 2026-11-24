@@ -1,3 +1,6 @@
+import 'dart:async';
+
+import 'package:collection/collection.dart';
 import 'package:devepmax_ui/devepmax_ui.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -22,7 +25,7 @@ class _PayDialog extends ConsumerStatefulWidget {
 }
 
 class _PayDialogState extends ConsumerState<_PayDialog> {
-  final _requestId = newRequestId();
+  String _requestId = newRequestId();
   final _amount = TextEditingController();
   final _tip = TextEditingController();
   final _tendered = TextEditingController();
@@ -31,6 +34,14 @@ class _PayDialogState extends ConsumerState<_PayDialog> {
   int? _tipPercent; // null = sin propina, -1 = otra
   String _method = 'CASH';
   bool _busy = false;
+
+  // Lector integrado
+  String? _readerId;
+  bool _tipOnReader = true;
+  bool _manualCard = false; // cobro hecho en otro aparato: solo se anota
+  TerminalCharge? _charge; // cobro en curso en el lector
+  Timer? _poll;
+  CardReader? _activeReader;
 
   double get _due => widget.bill.due;
 
@@ -42,6 +53,9 @@ class _PayDialogState extends ConsumerState<_PayDialog> {
   }
 
   double get _tipValue {
+    if (_method == 'CARD_TERMINAL' && !_manualCard && _tipOnReader && (ref.read(cardReadersProvider).value ?? const []).any((r) => r.online)) {
+      return 0; // la propina la elige el cliente en el lector
+    }
     final p = _tipPercent;
     if (p == null) return 0;
     if (p == -1) return double.tryParse(_tip.text.replaceAll(',', '.')) ?? 0;
@@ -62,11 +76,80 @@ class _PayDialogState extends ConsumerState<_PayDialog> {
 
   @override
   void dispose() {
+    _poll?.cancel();
     _amount.dispose();
     _tip.dispose();
     _tendered.dispose();
     _reference.dispose();
     super.dispose();
+  }
+
+  bool _useReader(List<CardReader> readers) =>
+      _method == 'CARD_TERMINAL' && !_manualCard && readers.any((r) => r.online);
+
+  Future<void> _sendToReader(CardReader reader) async {
+    if (_problem != null || _busy) return;
+    setState(() => _busy = true);
+    try {
+      final amount = double.parse(_amountValue.clamp(0, _due).toStringAsFixed(2));
+      final charge = await ref.read(billingApiProvider).terminalCharge(
+            widget.bill.id,
+            requestId: _requestId,
+            readerId: reader.id,
+            amount: amount,
+            tipOnReader: _tipOnReader,
+          );
+      if (!mounted) return;
+      setState(() {
+        _charge = charge;
+        _activeReader = reader;
+      });
+      _poll?.cancel();
+      _poll = Timer.periodic(const Duration(milliseconds: 1200), (_) => _check());
+    } catch (error) {
+      if (mounted) showError(context, error);
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _check() async {
+    final current = _charge;
+    if (current == null || current.status != 'waiting') return;
+    try {
+      final next = await ref.read(billingApiProvider).terminalStatus(current.paymentId);
+      if (!mounted) return;
+      setState(() => _charge = next);
+      if (next.status != 'waiting') _poll?.cancel();
+      if (next.status == 'succeeded') {
+        ref.invalidate(openBillsProvider);
+        ref.invalidate(cashShiftProvider);
+      }
+    } catch (_) {
+      // Se reintenta en el siguiente ciclo.
+    }
+  }
+
+  Future<void> _cancelOnReader() async {
+    final current = _charge;
+    if (current == null) return;
+    setState(() => _busy = true);
+    try {
+      final next = await ref.read(billingApiProvider).terminalCancel(current.paymentId);
+      if (mounted) setState(() => _charge = next);
+    } catch (error) {
+      if (mounted) showError(context, error);
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  void _retry() {
+    _poll?.cancel();
+    setState(() {
+      _charge = null;
+      _requestId = newRequestId();
+    });
   }
 
   Future<void> _confirm() async {
@@ -99,6 +182,13 @@ class _PayDialogState extends ConsumerState<_PayDialog> {
     final t = BrandTokens.of(context);
     final text = Theme.of(context).textTheme;
     final problem = _problem;
+    final charge = _charge;
+    if (charge != null) return this._readerView(charge); // ignore: unnecessary_this
+
+    final readers = ref.watch(cardReadersProvider).value ?? const <CardReader>[];
+    final online = readers.where((r) => r.online).toList();
+    final useReader = _useReader(readers);
+    final reader = online.firstWhere((r) => r.id == _readerId, orElse: () => online.isEmpty ? _noReader : online.first);
 
     Widget section(String title, Widget child) => Padding(
           padding: const EdgeInsets.only(top: 18),
@@ -159,6 +249,16 @@ class _PayDialogState extends ConsumerState<_PayDialog> {
                   ),
               ]),
             ),
+            if (useReader && _tipOnReader)
+              section(
+                'Propina',
+                Row(children: [
+                  Icon(Icons.touch_app_rounded, color: t.accentText),
+                  const SizedBox(width: 8),
+                  Expanded(child: Text('El cliente la elige en la pantalla del lector (15 %, 18 %, 20 % u otra).', style: TextStyle(color: t.muted))),
+                ]),
+              )
+            else
             section(
               'Propina',
               Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -233,9 +333,40 @@ class _PayDialogState extends ConsumerState<_PayDialog> {
                   ),
                 ]),
               )
+            else if (useReader)
+              section(
+                'Lector',
+                Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                  Wrap(spacing: 8, runSpacing: 8, children: [
+                    for (final r in online)
+                      ChoiceChip(
+                        avatar: Icon(Icons.contactless_rounded, size: 18, color: t.accentText),
+                        label: Text(r.simulated ? '${r.label} · prueba' : r.label),
+                        selected: r.id == reader.id,
+                        showCheckmark: false,
+                        onSelected: (_) => setState(() => _readerId = r.id),
+                      ),
+                  ]),
+                  SwitchListTile(
+                    contentPadding: EdgeInsets.zero,
+                    value: _tipOnReader,
+                    onChanged: (v) => setState(() => _tipOnReader = v),
+                    title: const Text('Que el cliente elija la propina en el lector'),
+                  ),
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: TextButton(
+                      onPressed: () => setState(() => _manualCard = true),
+                      child: const Text('Ya cobré en otro aparato: solo anotar'),
+                    ),
+                  ),
+                ]),
+              )
             else
               section(
-                _method == 'CARD_TERMINAL' ? 'Cobra en el lector y anota (opcional)' : 'Cómo pagó (opcional)',
+                _method == 'CARD_TERMINAL'
+                    ? (readers.isEmpty ? 'Sin lector conectado: cobra aparte y anota (opcional)' : 'Cobra en el lector y anota (opcional)')
+                    : 'Cómo pagó (opcional)',
                 TextField(
                   controller: _reference,
                   maxLength: 60,
@@ -272,13 +403,146 @@ class _PayDialogState extends ConsumerState<_PayDialog> {
         TextButton(onPressed: _busy ? null : () => Navigator.pop(context), child: const Text('Cancelar')),
         FilledButton.icon(
           style: FilledButton.styleFrom(minimumSize: const Size(200, 52)),
-          onPressed: problem == null && !_busy ? _confirm : null,
+          onPressed: problem == null && !_busy ? (useReader ? () => _sendToReader(reader) : _confirm) : null,
           icon: _busy
               ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
-              : const Icon(Icons.check_rounded),
-          label: Text('Cobrar ${formatMoney(_charged)}'),
+              : Icon(useReader ? Icons.contactless_rounded : Icons.check_rounded),
+          label: Text(useReader ? 'Enviar al lector ${formatMoney(_charged)}' : 'Cobrar ${formatMoney(_charged)}'),
         ),
       ],
+    );
+  }
+}
+
+const _noReader = CardReader(id: '', label: '', deviceType: '', simulated: false, busy: false);
+
+extension on _PayDialogState {
+  /// Pantalla mientras el cliente paga en el lector.
+  Widget _readerView(TerminalCharge charge) {
+    final t = BrandTokens.of(context);
+    final text = Theme.of(context).textTheme;
+    final reader = _activeReader;
+    final testMode = ref.watch(terminalConfigProvider).value?.testMode ?? false;
+    final tipBase = _amountValue;
+
+    final Widget body;
+    final List<Widget> actions;
+    switch (charge.status) {
+      case 'succeeded':
+        final bill = charge.bill;
+        final card = bill?.payments.where((p) => p.status == 'SUCCEEDED').lastOrNull?.reference;
+        body = Column(mainAxisSize: MainAxisSize.min, children: [
+          Icon(Icons.check_circle_rounded, size: 96, color: t.success),
+          const SizedBox(height: 12),
+          Text('Aprobado', style: text.headlineMedium),
+          if (card != null) Text(card, style: TextStyle(color: t.muted, fontSize: 16)),
+          if (charge.tip > 0) Padding(
+            padding: const EdgeInsets.only(top: 6),
+            child: Text('Propina ${formatMoney(charge.tip)}', style: text.titleMedium?.copyWith(color: t.success)),
+          ),
+          if (bill != null && bill.due > 0)
+            Padding(
+              padding: const EdgeInsets.only(top: 6),
+              child: Text('Quedan ${formatMoney(bill.due)} por cobrar', style: TextStyle(color: t.muted)),
+            ),
+        ]);
+        actions = [
+          FilledButton(
+            onPressed: () => Navigator.pop(context, bill == null ? null : (bill: bill, change: 0.0)),
+            child: const Text('Listo'),
+          ),
+        ];
+      case 'failed':
+      case 'cancelled':
+        body = Column(mainAxisSize: MainAxisSize.min, children: [
+          Icon(charge.status == 'failed' ? Icons.credit_card_off_rounded : Icons.cancel_rounded, size: 80, color: t.danger),
+          const SizedBox(height: 12),
+          Text(charge.status == 'failed' ? 'No se aprobó' : 'Cobro cancelado', style: text.headlineSmall),
+          const SizedBox(height: 6),
+          Text(charge.message, textAlign: TextAlign.center, style: TextStyle(color: t.muted)),
+        ]);
+        actions = [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cerrar')),
+          FilledButton(onPressed: _retry, child: const Text('Intentar de nuevo')),
+        ];
+      default:
+        body = Column(mainAxisSize: MainAxisSize.min, children: [
+          const _Pulse(icon: Icons.contactless_rounded),
+          const SizedBox(height: 16),
+          Text(formatMoney(_charged), style: text.displaySmall?.copyWith(fontWeight: FontWeight.w800)),
+          const SizedBox(height: 6),
+          Text('Acerca, inserta o desliza la tarjeta o el celular en «${reader?.label ?? 'el lector'}»',
+              textAlign: TextAlign.center, style: text.titleMedium),
+          if (_tipOnReader)
+            Text('El cliente elige la propina en el lector', style: TextStyle(color: t.muted)),
+          if (testMode && (reader?.simulated ?? false)) ...[
+            const SizedBox(height: 20),
+            Text('Modo prueba: simula al cliente', style: TextStyle(color: t.muted)),
+            const SizedBox(height: 8),
+            Wrap(spacing: 8, runSpacing: 8, alignment: WrapAlignment.center, children: [
+              ActionChip(
+                avatar: const Icon(Icons.contactless_rounded, size: 18),
+                label: const Text('Tarjeta sin propina'),
+                onPressed: () => ref.read(billingApiProvider).terminalSimulate(charge.paymentId),
+              ),
+              if (_tipOnReader)
+                ActionChip(
+                  avatar: const Icon(Icons.volunteer_activism_rounded, size: 18),
+                  label: Text('Con propina 18% · ${formatMoney(((tipBase * 0.18) * 100).roundToDouble() / 100)}'),
+                  onPressed: () => ref
+                      .read(billingApiProvider)
+                      .terminalSimulate(charge.paymentId, tip: ((tipBase * 0.18) * 100).roundToDouble() / 100),
+                ),
+              ActionChip(
+                avatar: const Icon(Icons.credit_card_off_rounded, size: 18),
+                label: const Text('Tarjeta rechazada'),
+                onPressed: () => ref.read(billingApiProvider).terminalSimulate(charge.paymentId, declined: true),
+              ),
+            ]),
+          ],
+        ]);
+        actions = [
+          TextButton(onPressed: _busy ? null : _cancelOnReader, child: const Text('Cancelar cobro')),
+        ];
+    }
+
+    return AlertDialog(
+      title: Text('Cobrar · ${widget.bill.label}'),
+      content: SizedBox(width: 480, child: Padding(padding: const EdgeInsets.symmetric(vertical: 12), child: body)),
+      actions: actions,
+    );
+  }
+}
+
+/// Ícono que late suavemente mientras se espera la tarjeta.
+class _Pulse extends StatefulWidget {
+  const _Pulse({required this.icon});
+  final IconData icon;
+
+  @override
+  State<_Pulse> createState() => _PulseState();
+}
+
+class _PulseState extends State<_Pulse> with SingleTickerProviderStateMixin {
+  late final AnimationController _c = AnimationController(vsync: this, duration: const Duration(milliseconds: 1100))..repeat(reverse: true);
+
+  @override
+  void dispose() {
+    _c.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final t = BrandTokens.of(context);
+    return ScaleTransition(
+      scale: Tween(begin: 0.9, end: 1.08).animate(CurvedAnimation(parent: _c, curve: Curves.easeInOut)),
+      child: Container(
+        width: 120,
+        height: 120,
+        decoration: BoxDecoration(color: t.primarySoft, shape: BoxShape.circle),
+        child: Icon(widget.icon, size: 64, color: t.primary),
+      ),
     );
   }
 }

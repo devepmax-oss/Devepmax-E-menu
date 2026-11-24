@@ -416,7 +416,7 @@ export class BillingService {
   }
 
   /** Avisa en vivo y, si la mesa quedó pagada y sin pedidos en cocina, la libera. */
-  private async afterChange(actor: EmployeeActor, billId: string): Promise<BillView> {
+  async afterChange(actor: EmployeeActor | 'system', billId: string): Promise<BillView> {
     const view = await this.view(billId);
     this.events.emit('bill.updated', {
       id: view.id,
@@ -436,7 +436,7 @@ export class BillingService {
     return this.view(billId);
   }
 
-  private async releaseTable(actor: EmployeeActor, tableId: string, sessionId: string) {
+  private async releaseTable(actor: EmployeeActor | 'system', tableId: string, sessionId: string) {
     const [bills, activeOrders] = await Promise.all([
       this.prisma.bill.findMany({ where: { tableSessionId: sessionId, status: { not: 'VOID' } } }),
       this.prisma.order.count({ where: { tableSessionId: sessionId, status: { notIn: FINISHED_ORDER } } }),

@@ -4,6 +4,7 @@ import type { EmployeeActor } from '../../common/auth/actor';
 import { AllowActors, CurrentActor, RequirePermissions } from '../../common/auth/decorators';
 import { BillingService } from './billing.service';
 import { CashService } from './cash.service';
+import { TerminalService } from './terminal.service';
 import {
   BillsQueryDto,
   CashMovementDto,
@@ -12,8 +13,11 @@ import {
   MergeDto,
   OpenShiftDto,
   PaymentDto,
+  RegisterReaderDto,
   RemoveDiscountDto,
+  SimulateTapDto,
   SplitDto,
+  TerminalChargeDto,
 } from './dto/billing.dto';
 
 @ApiTags('billing')
@@ -21,7 +25,38 @@ import {
 @AllowActors('employee')
 @Controller('billing')
 export class BillingController {
-  constructor(private readonly billing: BillingService) {}
+  constructor(
+    private readonly billing: BillingService,
+    private readonly terminal: TerminalService,
+  ) {}
+
+  /** Cobro con el lector: manda el monto; el cliente paga en el lector. */
+  @RequirePermissions('payments.take')
+  @Post('bills/:id/terminal')
+  charge(@CurrentActor() actor: EmployeeActor, @Param('id') id: string, @Body() dto: TerminalChargeDto) {
+    return this.terminal.charge(actor, id, dto);
+  }
+
+  @RequirePermissions('payments.take')
+  @Get('terminal/:paymentId')
+  terminalStatus(@CurrentActor() actor: EmployeeActor, @Param('paymentId') paymentId: string) {
+    return this.terminal.status(actor, paymentId);
+  }
+
+  @RequirePermissions('payments.take')
+  @Post('terminal/:paymentId/cancel')
+  @HttpCode(200)
+  cancelTerminal(@CurrentActor() actor: EmployeeActor, @Param('paymentId') paymentId: string) {
+    return this.terminal.cancel(actor, paymentId);
+  }
+
+  /** Modo prueba: simula la tarjeta en el lector de prueba. */
+  @RequirePermissions('payments.take')
+  @Post('terminal/:paymentId/simulate')
+  @HttpCode(200)
+  simulate(@Param('paymentId') paymentId: string, @Body() dto: SimulateTapDto) {
+    return this.terminal.simulate(paymentId, dto.tip, dto.declined);
+  }
 
   @RequirePermissions('payments.take')
   @Get('bills')
@@ -104,5 +139,37 @@ export class CashController {
   @HttpCode(200)
   close(@CurrentActor() actor: EmployeeActor, @Body() dto: CloseShiftDto) {
     return this.cash.close(actor, dto.countedCash, dto.notes);
+  }
+}
+
+@ApiTags('terminal')
+@ApiBearerAuth()
+@AllowActors('employee')
+@Controller('terminal')
+export class TerminalController {
+  constructor(private readonly terminal: TerminalService) {}
+
+  @RequirePermissions('payments.take')
+  @Get('config')
+  config() {
+    return this.terminal.config();
+  }
+
+  @RequirePermissions('payments.take')
+  @Get('readers')
+  readers() {
+    return this.terminal.readers();
+  }
+
+  @RequirePermissions('devices.manage')
+  @Post('readers')
+  register(@CurrentActor() actor: EmployeeActor, @Body() dto: RegisterReaderDto) {
+    return this.terminal.register(actor, dto.registrationCode, dto.label);
+  }
+
+  @RequirePermissions('devices.manage')
+  @Delete('readers/:id')
+  remove(@CurrentActor() actor: EmployeeActor, @Param('id') id: string) {
+    return this.terminal.remove(actor, id);
   }
 }

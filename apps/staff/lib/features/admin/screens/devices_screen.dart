@@ -9,6 +9,8 @@ import 'package:qr_flutter/qr_flutter.dart';
 
 import '../../../app/config.dart';
 import '../../../core/ui/feedback.dart';
+import '../../billing/data/billing_api.dart';
+import '../../billing/data/billing_models.dart';
 import '../../menu/data/menu_models.dart' show Station;
 import '../../menu/widgets/common.dart';
 import '../../tables/data/tables_api.dart';
@@ -79,17 +81,25 @@ class _DevicesScreenState extends ConsumerState<DevicesScreen> {
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (error, _) => ErrorView(error: error, onRetry: () => ref.invalidate(devicesProvider)),
         data: (list) {
-          if (list.isEmpty) {
-            return const EmptyState(
-              icon: Icons.devices_other_rounded,
-              message: 'Registra aquí las tablets de las mesas, las pantallas de cocina\ny las cajas. Cada una se vincula con un código de 6 dígitos.',
-            );
-          }
           return ListView.separated(
             padding: const EdgeInsets.all(24),
-            itemCount: list.length,
+            itemCount: list.length + 1,
             separatorBuilder: (_, __) => const SizedBox(height: 8),
-            itemBuilder: (context, index) => _DeviceCard(
+            itemBuilder: (context, i) {
+              if (i == 0) {
+                return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                  const _ReadersSection(),
+                  const SizedBox(height: 24),
+                  Text('Tablets, pantallas y cajas', style: Theme.of(context).textTheme.titleLarge),
+                  if (list.isEmpty)
+                    const Padding(
+                      padding: EdgeInsets.only(top: 8),
+                      child: Text('Registra aquí las tablets de las mesas, las pantallas de cocina y las cajas. Cada una se vincula con un QR o un código de 6 dígitos.'),
+                    ),
+                ]);
+              }
+              final index = i - 1;
+              return _DeviceCard(
               device: list[index],
               station: stations.firstWhereOrNull((s) => s.id == list[index].stationId),
               table: tables.firstWhereOrNull((t) => t.id == list[index].tableId),
@@ -107,7 +117,8 @@ class _DevicesScreenState extends ConsumerState<DevicesScreen> {
                 );
                 if (ok) await _run((api) => api.revokeDevice(list[index].id));
               },
-            ),
+            );
+            },
           );
         },
       ),
@@ -467,5 +478,164 @@ class _TablePicker extends ConsumerWidget {
               style: TextStyle(color: BrandTokens.of(context).warning)),
         ),
     ]);
+  }
+}
+
+/// Lectores de tarjetas (Stripe Terminal): el cobro llega solo al lector y la cuenta se paga sola.
+class _ReadersSection extends ConsumerStatefulWidget {
+  const _ReadersSection();
+
+  @override
+  ConsumerState<_ReadersSection> createState() => _ReadersSectionState();
+}
+
+class _ReadersSectionState extends ConsumerState<_ReadersSection> {
+  bool _busy = false;
+
+  Future<void> _register(String code, String label) async {
+    setState(() => _busy = true);
+    try {
+      await ref.read(billingApiProvider).registerReader(code, label);
+      ref.invalidate(cardReadersProvider);
+      if (mounted) showSuccess(context, 'Lector "$label" conectado');
+    } catch (error) {
+      if (mounted) showError(context, error);
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _add() async {
+    final result = await showDialog<(String, String)>(context: context, builder: (_) => const _AddReaderDialog());
+    if (result != null) await _register(result.$1, result.$2);
+  }
+
+  Future<void> _remove(CardReader r) async {
+    final ok = await confirm(context, title: 'Quitar "${r.label}"', message: 'El lector deja de recibir cobros de esta caja.', confirmLabel: 'Quitar');
+    if (!ok) return;
+    try {
+      await ref.read(billingApiProvider).removeReader(r.id);
+      ref.invalidate(cardReadersProvider);
+    } catch (error) {
+      if (mounted) showError(context, error);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final t = BrandTokens.of(context);
+    final text = Theme.of(context).textTheme;
+    final config = ref.watch(terminalConfigProvider).value;
+    final readers = ref.watch(cardReadersProvider);
+
+    return DmPanel(
+      child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        Row(children: [
+          Icon(Icons.contactless_rounded, color: t.accentText, size: 28),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text('Lectores de tarjetas', style: text.titleLarge),
+              Text('Tarjeta, Apple Pay y Google Pay: el monto llega solo al lector y el cliente elige la propina ahí.',
+                  style: TextStyle(color: t.muted)),
+            ]),
+          ),
+          if (config?.enabled ?? false) ...[
+            if (config!.testMode)
+              TextButton.icon(
+                onPressed: _busy ? null : () => _register('simulated-s700', 'Lector de prueba'),
+                icon: const Icon(Icons.science_rounded),
+                label: const Text('Lector de prueba'),
+              ),
+            const SizedBox(width: 8),
+            FilledButton.icon(
+              onPressed: _busy ? null : _add,
+              icon: const Icon(Icons.add_rounded),
+              label: const Text('Agregar lector'),
+            ),
+          ],
+        ]),
+        const SizedBox(height: 12),
+        if (!(config?.enabled ?? true))
+          Text('Configura las claves de Stripe en el servidor para conectar lectores.', style: TextStyle(color: t.muted))
+        else
+          readers.when(
+            loading: () => const LinearProgressIndicator(),
+            error: (error, _) => Text(error.toString(), style: TextStyle(color: t.warning, fontWeight: FontWeight.w600)),
+            data: (list) => list.isEmpty
+                ? Text('Todavía no hay lectores. Enciende el lector, toma el código de registro de su pantalla y tócalo en "Agregar lector".',
+                    style: TextStyle(color: t.muted))
+                : Column(children: [
+                    for (final r in list)
+                      ListTile(
+                        contentPadding: EdgeInsets.zero,
+                        leading: Icon(Icons.point_of_sale_rounded, color: r.online ? t.success : t.faint),
+                        title: Text(r.label),
+                        subtitle: Text(r.simulated ? 'Lector simulado de Stripe (modo prueba)' : r.deviceType.replaceAll('_', ' ')),
+                        trailing: Row(mainAxisSize: MainAxisSize.min, children: [
+                          DmPill(
+                            r.busy ? 'Cobrando' : (r.online ? 'En línea' : 'Apagado'),
+                            tone: r.busy ? DmTone.accent : (r.online ? DmTone.success : DmTone.neutral),
+                          ),
+                          IconButton(tooltip: 'Quitar', onPressed: () => _remove(r), icon: const Icon(Icons.delete_outline_rounded)),
+                        ]),
+                      ),
+                  ]),
+          ),
+      ]),
+    );
+  }
+}
+
+class _AddReaderDialog extends StatefulWidget {
+  const _AddReaderDialog();
+
+  @override
+  State<_AddReaderDialog> createState() => _AddReaderDialogState();
+}
+
+class _AddReaderDialogState extends State<_AddReaderDialog> {
+  final _code = TextEditingController();
+  final _label = TextEditingController(text: 'Caja');
+
+  @override
+  void dispose() {
+    _code.dispose();
+    _label.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final ok = _code.text.trim().length >= 3 && _label.text.trim().length >= 2;
+    return AlertDialog(
+      title: const Text('Agregar lector'),
+      content: SizedBox(
+        width: 420,
+        child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          const Text('En el lector: Ajustes → "Generate pairing code". Escribe aquí las palabras que muestra.'),
+          const SizedBox(height: 14),
+          TextField(
+            controller: _code,
+            autofocus: true,
+            decoration: const InputDecoration(labelText: 'Código de registro', hintText: 'sepia-cerulean-aqua', border: OutlineInputBorder()),
+            onChanged: (_) => setState(() {}),
+          ),
+          const SizedBox(height: 12),
+          TextField(
+            controller: _label,
+            decoration: const InputDecoration(labelText: 'Nombre', hintText: 'Caja, Barra, Mesero 1', border: OutlineInputBorder()),
+            onChanged: (_) => setState(() {}),
+          ),
+        ]),
+      ),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancelar')),
+        FilledButton(
+          onPressed: ok ? () => Navigator.pop(context, (_code.text.trim(), _label.text.trim())) : null,
+          child: const Text('Conectar'),
+        ),
+      ],
+    );
   }
 }

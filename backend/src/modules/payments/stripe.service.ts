@@ -23,6 +23,16 @@ export class StripeService {
     return this.client;
   }
 
+  /** Modo prueba (claves sk_test_): permite el lector simulado. */
+  get testMode(): boolean {
+    return (loadEnv().stripe.secretKey ?? '').startsWith('sk_test_');
+  }
+
+  /** Cliente de Stripe (Terminal: ubicaciones, lectores, cobros presenciales). */
+  get api(): Stripe {
+    return this.stripe;
+  }
+
   createPaymentIntent(params: Stripe.PaymentIntentCreateParams, idempotencyKey: string) {
     return this.stripe.paymentIntents.create(params, { idempotencyKey });
   }

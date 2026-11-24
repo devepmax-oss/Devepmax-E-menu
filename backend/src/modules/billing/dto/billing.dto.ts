@@ -3,6 +3,7 @@ import {
   ArrayMaxSize,
   ArrayMinSize,
   IsArray,
+  IsBoolean,
   IsIn,
   IsNumber,
   IsOptional,
@@ -74,4 +75,27 @@ export class CashMovementDto {
 export class CloseShiftDto {
   @Type(() => Number) @IsNumber(money) @Min(0) @Max(1000000) countedCash: number;
   @IsOptional() @IsString() @MaxLength(500) notes?: string;
+}
+
+export class TerminalChargeDto {
+  @Matches(/^[A-Za-z0-9_-]{8,64}$/, { message: 'clientRequestId inválido' })
+  clientRequestId: string;
+
+  @IsString() @Matches(/^tmr_/, { message: 'Lector inválido' }) readerId: string;
+
+  /** Lo que se abona a la cuenta; la propina la elige el cliente en el lector. */
+  @Type(() => Number) @IsNumber(money) @Min(0.5) @Max(100000) amount: number;
+
+  @IsOptional() @IsBoolean() tipOnReader?: boolean;
+}
+
+export class RegisterReaderDto {
+  @IsString() @MinLength(3) @MaxLength(60) registrationCode: string;
+  @IsString() @MinLength(2) @MaxLength(40) label: string;
+}
+
+export class SimulateTapDto {
+  @IsOptional() @Type(() => Number) @IsNumber(money) @Min(0) @Max(10000) tip?: number;
+  /** Simular una tarjeta rechazada. */
+  @IsOptional() @IsBoolean() declined?: boolean;
 }
