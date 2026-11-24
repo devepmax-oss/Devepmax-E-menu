@@ -433,31 +433,34 @@ class _PosOrderPanelState extends ConsumerState<PosOrderPanel> {
 
   Future<void> _send({required bool charge}) async {
     setState(() => _busy = true);
+    // En el teléfono este panel se cierra al enviar: lo que sigue (cobro y avisos) usa la
+    // pantalla de abajo, que sigue abierta.
     final navigator = Navigator.of(context);
+    final host = widget.closeOnSend ? navigator.context : context;
+    final api = ref.read(billingApiProvider);
+    final orders = ref.read(posOrderProvider.notifier);
     try {
-      final sent = await ref.read(posOrderProvider.notifier).send();
+      final sent = await orders.send();
       _name.clear();
       _phone.clear();
       ref.invalidate(openBillsProvider);
-      if (!mounted) return;
-      if (widget.closeOnSend) navigator.pop();
-      if (charge) {
-        final bill = await ref.read(billingApiProvider).get(sent.billId);
-        if (!mounted) return;
-        final result = await showPayDialog(navigator.context, bill);
-        if (result != null && result.change > 0.004 && navigator.context.mounted) {
-          await showChangeDialog(navigator.context, result.change);
-        }
-        if (!navigator.context.mounted) return;
-        showSuccess(
-          navigator.context,
-          result?.bill.status == 'PAID' ? 'Orden #${sent.number} pagada y en cocina' : 'Orden #${sent.number} en cocina · la cuenta queda en Caja',
-        );
-      } else {
-        showSuccess(navigator.context, 'Orden #${sent.number} enviada a cocina');
+      if (widget.closeOnSend && navigator.mounted) navigator.pop();
+      if (!charge) {
+        if (host.mounted) showSuccess(host, 'Orden #${sent.number} enviada a cocina');
+        return;
       }
+      final bill = await api.get(sent.billId);
+      if (!host.mounted) return;
+      final result = await showPayDialog(host, bill);
+      if (!host.mounted) return;
+      if (result != null && result.change > 0.004) await showChangeDialog(host, result.change);
+      if (!host.mounted) return;
+      showSuccess(
+        host,
+        result?.bill.status == 'PAID' ? 'Orden #${sent.number} pagada y en cocina' : 'Orden #${sent.number} en cocina · la cuenta queda en Caja',
+      );
     } catch (error) {
-      if (mounted) showError(context, error);
+      if (host.mounted) showError(host, error);
     } finally {
       if (mounted) setState(() => _busy = false);
     }
