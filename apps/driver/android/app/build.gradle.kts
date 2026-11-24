@@ -6,7 +6,7 @@ plugins {
 }
 
 android {
-    namespace = "com.example.restaurant_app"
+    namespace = "com.devepmax.emenu.driver"
     compileSdk = flutter.compileSdkVersion
     ndkVersion = flutter.ndkVersion
 
@@ -21,8 +21,8 @@ android {
     }
 
     defaultConfig {
-        applicationId = "com.example.restaurant_app"
-        minSdk = flutter.minSdkVersion
+        applicationId = "com.devepmax.emenu.driver"
+        minSdk = flutter.minSdkVersion // Firebase Messaging
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName

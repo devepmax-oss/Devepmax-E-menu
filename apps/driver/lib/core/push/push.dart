@@ -19,7 +19,10 @@ class FirebaseConfig {
   static const storageBucket = String.fromEnvironment('FIREBASE_STORAGE_BUCKET');
   static const vapidKey = String.fromEnvironment('FIREBASE_VAPID_KEY');
 
-  static bool get configured => apiKey.isNotEmpty && appId.isNotEmpty && projectId.isNotEmpty && messagingSenderId.isNotEmpty;
+  /// En el navegador hacen falta los datos web; en Android/iPhone los toma del archivo de
+  /// Google (android/app/google-services.json) que se agrega en cada instalación.
+  static bool get configured =>
+      !kIsWeb || (apiKey.isNotEmpty && appId.isNotEmpty && projectId.isNotEmpty && messagingSenderId.isNotEmpty);
 
   static FirebaseOptions get options => FirebaseOptions(
         apiKey: apiKey,
@@ -54,7 +57,13 @@ class PushController extends Notifier<PushStatus> {
   Future<bool> _ensureFirebase() async {
     if (_ready) return true;
     try {
-      if (Firebase.apps.isEmpty) await Firebase.initializeApp(options: FirebaseConfig.options);
+      if (Firebase.apps.isEmpty) {
+        if (kIsWeb) {
+          await Firebase.initializeApp(options: FirebaseConfig.options);
+        } else {
+          await Firebase.initializeApp();
+        }
+      }
       _ready = true;
     } catch (error) {
       debugPrint('Firebase no se pudo iniciar: $error');
