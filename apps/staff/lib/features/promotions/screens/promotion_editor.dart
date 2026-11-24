@@ -7,6 +7,7 @@ import '../../../core/ui/feedback.dart';
 import '../../menu/data/menu_models.dart';
 import '../../menu/menu_controller.dart';
 import '../data/promotions_api.dart';
+import '../../menu/widgets/common.dart';
 
 Future<void> openPromotionEditor(BuildContext context, {Promotion? promotion}) {
   return Navigator.of(context).push(MaterialPageRoute<void>(
@@ -171,13 +172,13 @@ class _PromotionEditorState extends ConsumerState<_PromotionEditor> {
                           decoration: const InputDecoration(labelText: 'Descripción (opcional)', border: OutlineInputBorder()),
                         ),
                         const SizedBox(height: 16),
-                        SegmentedButton<String>(
+                        FitSegmented(SegmentedButton<String>(
                           segments: [
                             for (final e in promotionTypeLabels.entries) ButtonSegment(value: e.key, label: Text(e.value)),
                           ],
                           selected: {_type},
                           onSelectionChanged: (s) => setState(() => _type = s.first),
-                        ),
+                        )),
                         const SizedBox(height: 16),
                         ..._ruleFields(),
                       ]),

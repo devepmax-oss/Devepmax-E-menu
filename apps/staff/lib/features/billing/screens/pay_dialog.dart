@@ -10,6 +10,7 @@ import '../../../core/ui/feedback.dart';
 import '../data/billing_api.dart';
 import '../data/billing_models.dart';
 import '../data/tap_to_pay.dart';
+import '../../menu/widgets/common.dart';
 
 /// Opción "este teléfono" entre los lectores.
 const _tapId = 'tap-to-pay';
@@ -321,7 +322,7 @@ class _PayDialogState extends ConsumerState<_PayDialog> {
             ),
             section(
               'Forma de pago',
-              SegmentedButton<String>(
+              FitSegmented(SegmentedButton<String>(
                 showSelectedIcon: false,
                 // En el teléfono, solo el texto para que quepan las tres opciones.
                 segments: [
@@ -331,7 +332,7 @@ class _PayDialogState extends ConsumerState<_PayDialog> {
                 ],
                 selected: {_method},
                 onSelectionChanged: (v) => setState(() => _method = v.first),
-              ),
+              )),
             ),
             if (_method == 'CASH')
               section(

@@ -259,14 +259,14 @@ class _SettingsFormState extends ConsumerState<_SettingsForm> {
                     const SizedBox(height: 8),
                     Align(
                       alignment: Alignment.centerLeft,
-                      child: SegmentedButton<String>(
+                      child: FitSegmented(SegmentedButton<String>(
                         segments: const [
                           ButtonSegment(value: 'dark', label: Text('Oscuro'), icon: Icon(Icons.dark_mode_rounded)),
                           ButtonSegment(value: 'light', label: Text('Claro'), icon: Icon(Icons.light_mode_rounded)),
                         ],
                         selected: {_mode},
                         onSelectionChanged: (v) => setState(() => _mode = v.first),
-                      ),
+                      )),
                     ),
                     const SizedBox(height: 20),
                     Text('Tipografía', style: Theme.of(context).textTheme.titleSmall),
@@ -650,7 +650,7 @@ class _DeliveryZoneCardState extends ConsumerState<_DeliveryZoneCard> {
                 if (_auto)
                   Wrap(spacing: 12, runSpacing: 8, crossAxisAlignment: WrapCrossAlignment.center, children: [
                     Text('Tiempo para aceptar', style: text.bodyMedium),
-                    SegmentedButton<int>(
+                    FitSegmented(SegmentedButton<int>(
                       segments: const [
                         ButtonSegment(value: 30, label: Text('30 s')),
                         ButtonSegment(value: 60, label: Text('60 s')),
@@ -658,7 +658,7 @@ class _DeliveryZoneCardState extends ConsumerState<_DeliveryZoneCard> {
                       ],
                       selected: {const [30, 60, 120].contains(_offer) ? _offer : 60},
                       onSelectionChanged: (v) => setState(() => _offer = v.first),
-                    ),
+                    )),
                   ]),
                 const SizedBox(height: 12),
                 Align(

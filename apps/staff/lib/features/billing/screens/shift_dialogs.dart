@@ -8,6 +8,7 @@ import '../../../core/auth/auth_controller.dart';
 import '../../../core/ui/feedback.dart';
 import '../data/billing_api.dart';
 import '../data/billing_models.dart';
+import '../../menu/widgets/common.dart';
 
 double _parse(String v) => double.tryParse(v.replaceAll(',', '.')) ?? -1;
 
@@ -212,7 +213,7 @@ class _MovementDialogState extends State<_MovementDialog> {
       content: SizedBox(
         width: 420,
         child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-          SegmentedButton<String>(
+          FitSegmented(SegmentedButton<String>(
             showSelectedIcon: false,
             segments: const [
               ButtonSegment(value: 'PAY_OUT', label: Text('Salida')),
@@ -221,7 +222,7 @@ class _MovementDialogState extends State<_MovementDialog> {
             ],
             selected: {_type},
             onSelectionChanged: (v) => setState(() => _type = v.first),
-          ),
+          )),
           const SizedBox(height: 12),
           TextField(
             controller: _amount,

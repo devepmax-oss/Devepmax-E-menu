@@ -176,3 +176,36 @@ double pagePadding(BuildContext context) => switch (windowSizeOf(context)) {
       WindowSize.medium || WindowSize.expanded => 24,
       _ => 32,
     };
+
+/// Botón segmentado que, si sus opciones no caben a lo ancho (por ejemplo en un teléfono),
+/// se muestra como fichas que bajan de línea. Se usa envolviendo el [SegmentedButton] normal.
+class FitSegmented<T> extends StatelessWidget {
+  const FitSegmented(this.button, {super.key});
+  final SegmentedButton<T> button;
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(builder: (context, box) {
+      final style = Theme.of(context).textTheme.labelLarge;
+      var needed = 0.0;
+      for (final s in button.segments) {
+        final label = s.label;
+        final text = label is Text ? (label.data ?? '') : '';
+        final painter = TextPainter(text: TextSpan(text: text, style: style), textDirection: TextDirection.ltr, maxLines: 1)
+          ..layout();
+        needed += painter.width + 48 + (s.icon != null ? 26 : 0);
+      }
+      if (!box.maxWidth.isFinite || needed <= box.maxWidth) return button;
+      return Wrap(spacing: 8, runSpacing: 8, children: [
+        for (final s in button.segments)
+          ChoiceChip(
+            avatar: s.icon,
+            label: s.label ?? Text('${s.value}'),
+            selected: button.selected.contains(s.value),
+            showCheckmark: false,
+            onSelected: button.onSelectionChanged == null || !s.enabled ? null : (_) => button.onSelectionChanged!({s.value}),
+          ),
+      ]);
+    });
+  }
+}

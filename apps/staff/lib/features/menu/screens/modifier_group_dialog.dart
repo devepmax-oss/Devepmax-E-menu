@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/ui/feedback.dart';
 import '../data/menu_models.dart';
 import '../menu_controller.dart';
+import '../widgets/common.dart';
 
 Future<void> showModifierGroupDialog(BuildContext context, {ModifierGroup? group}) {
   return showDialog<void>(context: context, builder: (_) => _ModifierGroupDialog(group: group));
@@ -204,14 +205,14 @@ class _ModifierGroupDialogState extends ConsumerState<_ModifierGroupDialog> {
                   ),
                 ]),
                 const SizedBox(height: 16),
-                SegmentedButton<String>(
+                FitSegmented(SegmentedButton<String>(
                   segments: const [
                     ButtonSegment(value: 'SINGLE', label: Text('Elige una'), icon: Icon(Icons.radio_button_checked)),
                     ButtonSegment(value: 'MULTIPLE', label: Text('Elige varias'), icon: Icon(Icons.check_box)),
                   ],
                   selected: {_type},
                   onSelectionChanged: (s) => _setType(s.first),
-                ),
+                )),
                 const SizedBox(height: 8),
                 if (_single)
                   CheckboxListTile(

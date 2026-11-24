@@ -7,6 +7,7 @@ import '../../../core/auth/auth_controller.dart';
 import '../../../core/ui/feedback.dart';
 import '../data/billing_api.dart';
 import '../data/billing_models.dart';
+import '../../menu/widgets/common.dart';
 
 /// Descuento a la cuenta o a un artículo. Si quien lo aplica no tiene permiso, pide el PIN
 /// de un gerente (queda registrado quién autorizó).
@@ -81,12 +82,12 @@ class _DiscountDialogState extends ConsumerState<_DiscountDialog> {
         child: SingleChildScrollView(
           child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
             Wrap(spacing: 12, runSpacing: 12, crossAxisAlignment: WrapCrossAlignment.center, children: [
-              SegmentedButton<String>(
+              FitSegmented(SegmentedButton<String>(
                 showSelectedIcon: false,
                 segments: const [ButtonSegment(value: 'PERCENT', label: Text('%')), ButtonSegment(value: 'AMOUNT', label: Text('\$'))],
                 selected: {_type},
                 onSelectionChanged: (v) => setState(() => _type = v.first),
-              ),
+              )),
               SizedBox(
                 width: 180,
                 child: TextField(

@@ -236,6 +236,8 @@ ThemeData buildBrandTheme([BrandConfig brand = const BrandConfig()]) {
     ),
     dividerTheme: DividerThemeData(color: t.line, thickness: 1, space: 1),
     dialogTheme: DialogThemeData(
+      // Márgenes chicos: en el teléfono los diálogos aprovechan casi todo el ancho.
+      insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
       backgroundColor: t.surface,
       surfaceTintColor: const Color(0x00000000),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),

@@ -102,7 +102,7 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen> {
         Padding(
           padding: EdgeInsets.fromLTRB(pagePadding(context), 0, pagePadding(context), 16),
           child: Wrap(spacing: 16, runSpacing: 12, crossAxisAlignment: WrapCrossAlignment.center, children: [
-            SegmentedButton<String>(
+            FitSegmented(SegmentedButton<String>(
               segments: [
                 ButtonSegment(value: 'active', label: Text('En curso · $activeCount')),
                 const ButtonSegment(value: 'today', label: Text('Hoy')),
@@ -110,7 +110,7 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen> {
               selected: {_view},
               showSelectedIcon: false,
               onSelectionChanged: (v) => setState(() => _view = v.first),
-            ),
+            )),
             Wrap(spacing: 8, children: [
               for (final e in _channelFilters.entries)
                 ChoiceChip(
