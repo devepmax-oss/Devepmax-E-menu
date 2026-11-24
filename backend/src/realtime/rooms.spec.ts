@@ -152,3 +152,9 @@ describe('repartidores', () => {
     expect(roomsForEvent(event('driver.location', { publicCode: 'ABC' }))).toEqual([Rooms.order('ABC'), Rooms.pos, Rooms.admin]);
   });
 });
+
+describe('salón', () => {
+  it('el estado de una mesa va a caja, meseros, admin y a su tablet', () => {
+    expect(roomsForEvent(event('table.updated', { id: 't3' }))).toEqual([Rooms.pos, Rooms.waiters, Rooms.admin, Rooms.table('t3')]);
+  });
+});

@@ -1,3 +1,4 @@
+import { TablesModule } from './modules/tables/tables.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
 import { DeliveryModule } from './modules/delivery/delivery.module';
 import { OnlineModule } from './modules/online/online.module';
@@ -33,6 +34,7 @@ import { StorageModule } from './storage/storage.module';
     RealtimeModule,
     PaymentsModule,
     NotificationsModule,
+    TablesModule,
     DeliveryModule,
     OnlineModule,
   ],

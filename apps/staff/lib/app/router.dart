@@ -13,6 +13,7 @@ import '../features/menu/screens/modifier_groups_screen.dart';
 import '../features/orders/screens/orders_screen.dart';
 import '../features/promotions/screens/promotions_screen.dart';
 import '../features/shell/admin_shell.dart';
+import '../features/tables/screens/tables_screen.dart';
 
 final routerProvider = Provider<GoRouter>((ref) {
   final authChanges = ValueNotifier<int>(0);
@@ -31,7 +32,9 @@ final routerProvider = Provider<GoRouter>((ref) {
       if (!loggedIn) return location == '/login' ? null : '/login';
       // Quien atiende órdenes entra directo al tablero; el resto, al menú.
       if (location == '/login' || location == '/splash') {
-        return (auth.value!.employee.can('orders.create')) ? '/orders' : '/menu';
+        final employee = auth.value!.employee;
+        if (employee.can('orders.create')) return '/orders';
+        return employee.can('tables.operate') ? '/tables' : '/menu';
       }
       return null;
     },
@@ -42,6 +45,7 @@ final routerProvider = Provider<GoRouter>((ref) {
         builder: (context, state, child) => AdminShell(location: state.matchedLocation, child: child),
         routes: [
           GoRoute(path: '/orders', builder: (_, __) => const OrdersScreen()),
+          GoRoute(path: '/tables', builder: (_, __) => const TablesScreen()),
           GoRoute(path: '/menu', builder: (_, __) => const MenuScreen()),
           GoRoute(path: '/modifiers', builder: (_, __) => const ModifierGroupsScreen()),
           GoRoute(path: '/menu-setup', builder: (_, __) => const MenuSetupScreen()),

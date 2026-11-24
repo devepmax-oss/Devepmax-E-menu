@@ -14,6 +14,8 @@ export type DomainEventName =
   | 'delivery.updated'
   | 'delivery.removed'
   | 'driver.location'
+  // Salón: estado de cada mesa (sesión, cuenta, llamados).
+  | 'table.updated'
   // Internos: no se difunden; el gateway desconecta los sockets afectados
   // para que vuelvan a entrar con sus permisos y rooms actualizados.
   | 'device.changed'

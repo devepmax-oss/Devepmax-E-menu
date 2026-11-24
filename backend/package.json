@@ -19,6 +19,7 @@
     "smoke:realtime": "tsx scripts/smoke-realtime.ts",
     "smoke:online": "tsx scripts/smoke-online.ts",
     "smoke:delivery": "tsx scripts/smoke-delivery.ts",
+    "smoke:tables": "tsx scripts/smoke-tables.ts",
     "demo:orders": "tsx scripts/demo-orders.ts"
   },
   "dependencies": {

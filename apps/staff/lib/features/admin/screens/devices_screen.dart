@@ -9,6 +9,8 @@ import 'package:intl/intl.dart';
 import '../../../core/ui/feedback.dart';
 import '../../menu/data/menu_models.dart' show Station;
 import '../../menu/widgets/common.dart';
+import '../../tables/data/tables_api.dart';
+import '../../tables/data/tables_models.dart';
 import '../data/admin_api.dart';
 import '../data/admin_models.dart';
 
@@ -57,6 +59,7 @@ class _DevicesScreenState extends ConsumerState<DevicesScreen> {
   Widget build(BuildContext context) {
     final devices = ref.watch(devicesProvider);
     final stations = ref.watch(stationsProvider).value ?? const <Station>[];
+    final tables = [for (final a in ref.watch(floorProvider).value ?? const <AreaView>[]) ...a.tables];
 
     return Scaffold(
       appBar: AppBar(
@@ -87,6 +90,7 @@ class _DevicesScreenState extends ConsumerState<DevicesScreen> {
             itemBuilder: (context, index) => _DeviceCard(
               device: list[index],
               station: stations.firstWhereOrNull((s) => s.id == list[index].stationId),
+              table: tables.firstWhereOrNull((t) => t.id == list[index].tableId),
               onEdit: () => _openEditor(stations, device: list[index]),
               onNewCode: () => _run((api) async {
                 final updated = await api.newPairingCode(list[index].id);
@@ -114,6 +118,7 @@ class _DevicesScreenState extends ConsumerState<DevicesScreen> {
       builder: (_) => _DeviceDialog(device: device, stations: stations),
     );
     ref.invalidate(devicesProvider);
+    unawaited(ref.read(floorProvider.notifier).refresh()); // el plano muestra qué mesas tienen tablet
     if (created != null && mounted) _showCode(created);
   }
 
@@ -144,6 +149,7 @@ class _DeviceCard extends StatelessWidget {
   const _DeviceCard({
     required this.device,
     required this.station,
+    this.table,
     required this.onEdit,
     required this.onNewCode,
     required this.onRevoke,
@@ -151,6 +157,7 @@ class _DeviceCard extends StatelessWidget {
 
   final DeviceView device;
   final Station? station;
+  final TableView? table;
   final VoidCallback onEdit;
   final VoidCallback onNewCode;
   final VoidCallback onRevoke;
@@ -189,6 +196,8 @@ class _DeviceCard extends StatelessWidget {
               Wrap(spacing: 8, runSpacing: 4, children: [
                 StatusChip(deviceTypeLabels[device.type] ?? device.type),
                 if (station != null) StatusChip(station!.name, color: colorFromHex(station!.color)),
+                if (table != null) DmPill('Mesa ${table!.label}', tone: DmTone.primary, icon: Icons.table_restaurant_rounded)
+                else if (device.type == 'EMENU') const DmPill('Sin mesa', tone: DmTone.warning),
                 status,
               ]),
             ]),
@@ -221,6 +230,7 @@ class _DeviceDialogState extends ConsumerState<_DeviceDialog> {
   late final _name = TextEditingController(text: widget.device?.name);
   late String _type = widget.device?.type ?? 'KDS';
   late String? _stationId = widget.device?.stationId;
+  late String? _tableId = widget.device?.tableId;
   late bool _isActive = widget.device?.isActive ?? true;
   bool _saving = false;
 
@@ -241,12 +251,14 @@ class _DeviceDialogState extends ConsumerState<_DeviceDialog> {
           'name': _name.text.trim(),
           'type': _type,
           if (_type == 'KDS' && _stationId != null) 'stationId': _stationId,
+          if (_type == 'EMENU' && _tableId != null) 'tableId': _tableId,
         });
         if (mounted) Navigator.pop(context, created);
       } else {
         await api.updateDevice(existing.id, {
           'name': _name.text.trim(),
           'stationId': existing.type == 'KDS' ? _stationId : null,
+          'tableId': existing.type == 'EMENU' ? _tableId : null,
           'isActive': _isActive,
         });
         if (mounted) Navigator.pop(context);
@@ -307,7 +319,7 @@ class _DeviceDialogState extends ConsumerState<_DeviceDialog> {
             ],
             if (type == 'EMENU') ...[
               const SizedBox(height: 12),
-              const Text('La mesa se asigna cuando creemos el plano del salón (Fase 3).'),
+              _TablePicker(deviceId: widget.device?.id, value: _tableId, onChanged: (v) => setState(() => _tableId = v)),
             ],
             if (!isNew)
               SwitchListTile(
@@ -325,5 +337,50 @@ class _DeviceDialogState extends ConsumerState<_DeviceDialog> {
         FilledButton(onPressed: _saving ? null : _save, child: Text(isNew ? 'Crear y ver código' : 'Guardar')),
       ],
     );
+  }
+}
+
+/// Mesa donde queda la tablet: el menú que muestra hace los pedidos para esa mesa.
+class _TablePicker extends ConsumerWidget {
+  const _TablePicker({this.deviceId, required this.value, required this.onChanged});
+  final String? deviceId;
+  final String? value;
+  final ValueChanged<String?> onChanged;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final floor = ref.watch(floorProvider);
+    final areas = floor.value ?? const <AreaView>[];
+    final all = [for (final a in areas) ...a.tables];
+    if (floor.isLoading && !floor.hasValue) return const LinearProgressIndicator();
+    if (all.isEmpty) {
+      return const Text('Primero crea las mesas en la sección Mesas; después vuelve aquí para asignar la tablet.');
+    }
+    final current = all.any((t) => t.id == value) ? value : null;
+    final others = (all.firstWhereOrNull((t) => t.id == current)?.tablets ?? const <TabletView>[])
+        .where((d) => d.id != deviceId)
+        .toList();
+    return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+      DropdownButtonFormField<String?>(
+        initialValue: current,
+        decoration: const InputDecoration(labelText: 'Mesa', border: OutlineInputBorder()),
+        items: [
+          const DropdownMenuItem<String?>(value: null, child: Text('Sin mesa por ahora')),
+          for (final a in areas)
+            for (final t in a.tables)
+              DropdownMenuItem<String?>(
+                value: t.id,
+                child: Text(areas.length > 1 ? '${a.name} · Mesa ${t.label}' : 'Mesa ${t.label}'),
+              ),
+        ],
+        onChanged: onChanged,
+      ),
+      if (others.isNotEmpty)
+        Padding(
+          padding: const EdgeInsets.only(top: 6),
+          child: Text('Esa mesa ya tiene la tablet "${others.first.name}". Las dos mostrarán la misma cuenta.',
+              style: TextStyle(color: BrandTokens.of(context).warning)),
+        ),
+    ]);
   }
 }

@@ -99,6 +99,11 @@ export function roomsForEvent(event: DomainEvent): string[] {
       const { driverEmployeeId } = event.payload as { driverEmployeeId?: string };
       return driverEmployeeId ? [Rooms.employee(driverEmployeeId)] : [];
     }
+    case 'table.updated': {
+      // Caja, meseros, admin y la tablet de esa mesa.
+      const { id } = event.payload as { id?: string };
+      return id ? [Rooms.pos, Rooms.waiters, Rooms.admin, Rooms.table(id)] : [Rooms.pos, Rooms.waiters, Rooms.admin];
+    }
     case 'driver.location': {
       // Quien sigue ese pedido (solo ve la posición) y el personal.
       const { publicCode } = event.payload as { publicCode?: string };

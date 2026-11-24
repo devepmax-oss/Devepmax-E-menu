@@ -83,7 +83,7 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen> {
         title: Row(children: [
           const Text('Órdenes'),
           const SizedBox(width: 16),
-          _LiveIndicator(status: status),
+          LiveIndicator(status: status),
         ]),
         actions: [
           IconButton(
@@ -139,8 +139,8 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen> {
   }
 }
 
-class _LiveIndicator extends StatelessWidget {
-  const _LiveIndicator({required this.status});
+class LiveIndicator extends StatelessWidget {
+  const LiveIndicator({super.key, required this.status});
   final RealtimeStatus status;
 
   @override
