@@ -111,8 +111,11 @@ class _MenuScreenState extends ConsumerState<MenuScreen> {
             itemBuilder: (context, index) {
               final category = categories[index];
               final hidden = !category.isActive;
-              return ListTile(
+              // Material propio: el color de selección se pinta bien sobre el panel.
+              return Material(
                 key: ValueKey(category.id),
+                type: MaterialType.transparency,
+                child: ListTile(
                 selected: category.id == selected.id,
                 leading: ReorderableDragStartListener(
                   index: index,
@@ -127,6 +130,7 @@ class _MenuScreenState extends ConsumerState<MenuScreen> {
                     PopupMenuItem(value: 'edit', child: Text('Editar')),
                     PopupMenuItem(value: 'delete', child: Text('Eliminar')),
                   ],
+                ),
                 ),
               );
             },
@@ -192,7 +196,7 @@ class _MenuScreenState extends ConsumerState<MenuScreen> {
                     maxCrossAxisExtent: 260,
                     mainAxisSpacing: 16,
                     crossAxisSpacing: 16,
-                    childAspectRatio: 0.74,
+                    childAspectRatio: 0.68,
                   ),
                   itemCount: category.products.length,
                   itemBuilder: (context, index) => _ProductCard(
@@ -239,8 +243,8 @@ class _ProductCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            AspectRatio(
-              aspectRatio: 4 / 3,
+            // La foto toma el espacio que sobra; el texto siempre cabe completo.
+            Expanded(
               child: Stack(
                 fit: StackFit.expand,
                 children: [
@@ -257,10 +261,10 @@ class _ProductCard extends StatelessWidget {
                 ],
               ),
             ),
-            Expanded(
-              child: Padding(
+            Padding(
                 padding: const EdgeInsets.fromLTRB(12, 10, 12, 4),
                 child: Column(
+                  mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(product.name,
@@ -269,7 +273,7 @@ class _ProductCard extends StatelessWidget {
                         style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700)),
                     const SizedBox(height: 4),
                     Text(formatMoney(product.price), style: theme.textTheme.titleMedium),
-                    const Spacer(),
+                    const SizedBox(height: 6),
                     Wrap(spacing: 4, runSpacing: 4, children: [
                       if (!product.isActive) const StatusChip('Oculto'),
                       if (station != null) StatusChip(station!.name, color: colorFromHex(station!.color)),
@@ -277,7 +281,6 @@ class _ProductCard extends StatelessWidget {
                     ]),
                   ],
                 ),
-              ),
             ),
             Padding(
               padding: const EdgeInsets.fromLTRB(12, 0, 4, 4),
