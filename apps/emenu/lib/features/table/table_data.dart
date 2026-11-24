@@ -89,13 +89,16 @@ class GuestBill {
 }
 
 class GuestSession {
-  const GuestSession({required this.id, required this.status, required this.openedAt, required this.requests, required this.orders, required this.bill});
+  const GuestSession({required this.id, required this.status, required this.openedAt, required this.requests, required this.orders, required this.bill, this.payUrl});
   final String id;
   final String status;
   final DateTime openedAt;
   final List<GuestRequest> requests;
   final List<GuestOrder> orders;
   final GuestBill bill;
+
+  /// Enlace del QR "Paga con tu celular" (null si el restaurante no tiene pagos en línea).
+  final String? payUrl;
 
   GuestRequest? request(String type) {
     for (final r in requests) {
@@ -111,6 +114,7 @@ class GuestSession {
         requests: [for (final r in j['requests'] as List? ?? const []) GuestRequest.fromJson(r as Json)],
         orders: [for (final o in j['orders'] as List? ?? const []) GuestOrder.fromJson(o as Json)],
         bill: GuestBill.fromJson(j['bill'] as Json),
+        payUrl: j['payUrl'] as String?,
       );
 }
 

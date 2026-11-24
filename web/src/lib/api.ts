@@ -1,3 +1,4 @@
+import type { TablePayIntent, TablePayView } from './table-pay';
 import type { CreatedOrder, OnlineConfig, OrderLineInput, PublicMenu, PublicOrder, PublicPromotion, Quote } from './types';
 
 /** URL del backend. En el navegador y en el servidor de Next se usa la misma. */
@@ -44,6 +45,14 @@ export const api = {
     request<Quote>('/online/quote', { method: 'POST', body: JSON.stringify(body) }),
   createOrder: (body: unknown) => request<CreatedOrder>('/online/orders', { method: 'POST', body: JSON.stringify(body) }),
   order: (code: string) => request<PublicOrder>(`/online/orders/${encodeURIComponent(code)}`),
+  tablePay: (token: string) => request<TablePayView>(`/pay/${encodeURIComponent(token)}`),
+  tablePayIntent: (token: string, body: { clientRequestId: string; billId: string; amount: number; tip?: number; email?: string }) =>
+    request<TablePayIntent>(`/pay/${encodeURIComponent(token)}/intent`, { method: 'POST', body: JSON.stringify(body) }),
+  tablePayConfirm: (token: string, paymentIntentId: string) =>
+    request<{ status: 'succeeded' | 'pending' | 'failed'; view: TablePayView }>(`/pay/${encodeURIComponent(token)}/confirm`, {
+      method: 'POST',
+      body: JSON.stringify({ paymentIntentId }),
+    }),
   confirmPayment: (code: string) =>
     request<PublicOrder>(`/online/orders/${encodeURIComponent(code)}/confirm-payment`, { method: 'POST' }),
 };

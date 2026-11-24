@@ -4,6 +4,7 @@ import {
   ArrayMinSize,
   IsArray,
   IsBoolean,
+  IsEmail,
   IsIn,
   IsNumber,
   IsOptional,
@@ -108,4 +109,25 @@ export class TapToPayDto {
   @Type(() => Number) @IsNumber(money) @Min(0.01) @Max(100000) amount: number;
 
   @IsOptional() @Type(() => Number) @IsNumber(money) @Min(0) @Max(10000) tip?: number;
+}
+
+/** Pagar desde la mesa (celular del cliente). */
+export class TablePayIntentDto {
+  @Matches(/^[A-Za-z0-9_-]{8,64}$/, { message: 'clientRequestId inválido' })
+  clientRequestId: string;
+
+  @IsString() @MaxLength(40) billId: string;
+
+  /** Lo que se abona a la cuenta (sin la propina). */
+  @Type(() => Number) @IsNumber(money) @Min(0.5) @Max(100000) amount: number;
+
+  @IsOptional() @Type(() => Number) @IsNumber(money) @Min(0) @Max(10000) tip?: number;
+
+  /** Para mandarle el recibo de Stripe. */
+  @IsOptional() @IsEmail({}, { message: 'Correo inválido' }) @MaxLength(120) email?: string;
+}
+
+export class TablePayConfirmDto {
+  @Matches(/^pi_[A-Za-z0-9]{8,64}$/, { message: 'Pago inválido' })
+  paymentIntentId: string;
 }

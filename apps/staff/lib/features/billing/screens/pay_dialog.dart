@@ -220,7 +220,9 @@ class _PayDialogState extends ConsumerState<_PayDialog> {
     final compact = MediaQuery.sizeOf(context).width < 600;
     final readers = ref.watch(cardReadersProvider).value ?? const <CardReader>[];
     final online = readers.where((r) => r.online).toList();
-    final tapAvailable = tapToPaySupportedPlatform && (ref.watch(terminalConfigProvider).value?.enabled ?? false);
+    final tapAvailable = tapToPaySupportedPlatform &&
+        (ref.watch(terminalConfigProvider).value?.enabled ?? false) &&
+        (ref.watch(tapToPayHardwareProvider).value?.capable ?? false);
     final tap = ref.watch(tapToPayProvider);
     final useTap = _method == 'CARD_TERMINAL' && !_manualCard && tapAvailable && (_readerId == _tapId || online.isEmpty);
     final useReader = !useTap && _useReader(readers);

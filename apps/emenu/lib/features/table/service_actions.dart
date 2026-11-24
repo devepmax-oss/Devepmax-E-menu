@@ -1,6 +1,7 @@
 import 'package:devepmax_ui/devepmax_ui.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:qr_flutter/qr_flutter.dart';
 
 import '../../core/format.dart';
 import '../../core/widgets.dart';
@@ -61,7 +62,7 @@ class _ServiceActionsState extends ConsumerState<ServiceActions> {
 
     final billButton = _ActionTile(
       icon: Icons.receipt_long_rounded,
-      label: bill == null ? 'Pedir la cuenta' : 'Cuenta pedida',
+      label: bill != null ? 'Cuenta pedida' : (session?.payUrl != null && hasOrders ? 'Cuenta y pago' : 'Pedir la cuenta'),
       caption: bill == null ? (hasOrders ? formatMoney(session!.bill.total) : null) : 'El mesero la trae',
       highlight: bill == null ? null : t.accent,
       compact: widget.compact,
@@ -154,6 +155,7 @@ class _BillDialogState extends ConsumerState<_BillDialog> {
         if (o.status != 'CANCELLED') ...o.items,
     ];
     final bill = session?.bill;
+    final canPayHere = session?.payUrl != null && bill != null && bill.due > 0 && items.isNotEmpty;
 
     Widget row(String label, double value, {bool bold = false, Color? color}) => Padding(
           padding: const EdgeInsets.only(top: 6),
@@ -218,24 +220,182 @@ class _BillDialogState extends ConsumerState<_BillDialog> {
             ),
           Padding(
             padding: const EdgeInsets.fromLTRB(28, 12, 28, 24),
-            child: request == null
-                ? FilledButton.icon(
-                    style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(60), textStyle: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
-                    onPressed: _busy || items.isEmpty ? null : () => _run(controller.requestBill),
-                    icon: const Icon(Icons.receipt_long_rounded),
-                    label: const Text('Pedir la cuenta'),
-                  )
-                : Row(children: [
-                    Icon(Icons.check_circle_rounded, color: t.success, size: 30),
-                    const SizedBox(width: 12),
-                    Expanded(child: Text('Listo: el mesero te trae la cuenta.', style: text.titleMedium)),
-                    TextButton(
-                      onPressed: _busy ? null : () => _run(() => controller.cancelRequest(request.id)),
-                      child: const Text('Cancelar'),
-                    ),
-                  ]),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, mainAxisSize: MainAxisSize.min, children: [
+              if (canPayHere) ...[
+                FilledButton.icon(
+                  style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(60), textStyle: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
+                  onPressed: () => showPayQr(context),
+                  icon: const Icon(Icons.qr_code_2_rounded),
+                  label: const Text('Pagar con mi celular'),
+                ),
+                const SizedBox(height: 6),
+                Text('Tarjeta, Apple Pay o Google Pay · todo o tu parte',
+                    textAlign: TextAlign.center, style: TextStyle(color: t.muted, fontSize: 13)),
+                const SizedBox(height: 12),
+              ],
+              if (bill != null && items.isNotEmpty && bill.due <= 0)
+                Row(children: [
+                  Icon(Icons.check_circle_rounded, color: t.success, size: 30),
+                  const SizedBox(width: 12),
+                  Expanded(child: Text('Cuenta pagada. ¡Gracias!', style: text.titleMedium)),
+                ])
+              else
+                _requestBillRow(context, request, controller, items.isEmpty, secondary: canPayHere),
+            ]),
           ),
         ]),
+      ),
+    );
+  }
+
+  Widget _requestBillRow(BuildContext context, GuestRequest? request, TableController controller, bool empty, {required bool secondary}) {
+    final t = BrandTokens.of(context);
+    final text = Theme.of(context).textTheme;
+    if (request == null) {
+      final onPressed = _busy || empty ? null : () => _run(controller.requestBill);
+      const icon = Icon(Icons.receipt_long_rounded);
+      if (secondary) {
+        return OutlinedButton.icon(
+          style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(52), textStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
+          onPressed: onPressed,
+          icon: icon,
+          label: const Text('Prefiero que el mesero me cobre'),
+        );
+      }
+      return FilledButton.icon(
+        style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(60), textStyle: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
+        onPressed: onPressed,
+        icon: icon,
+        label: const Text('Pedir la cuenta'),
+      );
+    }
+    return Row(children: [
+      Icon(Icons.check_circle_rounded, color: t.success, size: 30),
+      const SizedBox(width: 12),
+      Expanded(child: Text('Listo: el mesero te trae la cuenta.', style: text.titleMedium)),
+      TextButton(
+        onPressed: _busy ? null : () => _run(() => controller.cancelRequest(request.id)),
+        child: const Text('Cancelar'),
+      ),
+    ]);
+  }
+}
+
+/// QR "Paga con tu celular": el cliente lo escanea y paga en su teléfono. Se cierra solo al pagar.
+Future<void> showPayQr(BuildContext context) =>
+    showDialog<void>(context: context, builder: (_) => const _PayQrDialog());
+
+class _PayQrDialog extends ConsumerStatefulWidget {
+  const _PayQrDialog();
+
+  @override
+  ConsumerState<_PayQrDialog> createState() => _PayQrDialogState();
+}
+
+class _PayQrDialogState extends ConsumerState<_PayQrDialog> {
+  String? _url;
+  double? _startDue;
+  bool _closing = false;
+
+  @override
+  void initState() {
+    super.initState();
+    final session = ref.read(tableProvider).value?.session;
+    _url = session?.payUrl;
+    _startDue = session?.bill.due;
+  }
+
+  void _closeSoon() {
+    if (_closing) return;
+    _closing = true;
+    Future<void>.delayed(const Duration(seconds: 5), () {
+      // Cierra el QR y la cuenta: la mesa ya quedó pagada.
+      if (mounted) Navigator.of(context).popUntil((route) => route is! PopupRoute);
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final t = BrandTokens.of(context);
+    final text = Theme.of(context).textTheme;
+    final table = ref.watch(tableProvider).value;
+    final session = table?.session;
+    final url = _url;
+    // La mesa se cerró (todo pagado) o ya no queda nada por pagar.
+    final allPaid = table != null && (session == null || session.bill.due <= 0);
+    final due = session?.bill.due ?? 0;
+    final someonePaid = !allPaid && _startDue != null && due < _startDue! - 0.009;
+    if (allPaid) _closeSoon();
+
+    final size = MediaQuery.sizeOf(context);
+    final qrSize = (size.shortestSide * 0.5).clamp(200.0, 320.0);
+    final testLink = url != null && !url.startsWith('https://');
+
+    return Dialog(
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 520),
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.fromLTRB(28, 20, 28, 24),
+          child: Column(mainAxisSize: MainAxisSize.min, children: [
+            Align(
+              alignment: Alignment.centerRight,
+              child: IconButton(onPressed: () => Navigator.pop(context), icon: const Icon(Icons.close_rounded)),
+            ),
+            if (allPaid) ...[
+              Icon(Icons.check_circle_rounded, color: t.success, size: 96),
+              const SizedBox(height: 16),
+              Text('¡Pago recibido!', style: text.headlineMedium, textAlign: TextAlign.center),
+              const SizedBox(height: 8),
+              Text('La cuenta está pagada. ¡Gracias por tu visita!', style: text.titleMedium?.copyWith(color: t.muted), textAlign: TextAlign.center),
+              const SizedBox(height: 12),
+            ] else if (url == null) ...[
+              Text('El pago con el celular no está disponible ahora.', style: text.titleMedium, textAlign: TextAlign.center),
+            ] else ...[
+              Text('Paga con tu celular', style: text.headlineMedium, textAlign: TextAlign.center),
+              const SizedBox(height: 6),
+              Text('Abre la cámara y apunta al código', style: text.titleMedium?.copyWith(color: t.muted), textAlign: TextAlign.center),
+              const SizedBox(height: 20),
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(24)),
+                child: QrImageView(
+                  data: url,
+                  size: qrSize,
+                  backgroundColor: Colors.white,
+                  errorCorrectionLevel: QrErrorCorrectLevel.M,
+                  semanticsLabel: 'Código QR para pagar la cuenta',
+                ),
+              ),
+              const SizedBox(height: 18),
+              Text('Por pagar: ${formatMoney(due)}', style: text.headlineSmall),
+              if (someonePaid) ...[
+                const SizedBox(height: 10),
+                DmPill('Pago recibido · quedan ${formatMoney(due)}', icon: Icons.check_rounded, color: t.success),
+              ],
+              const SizedBox(height: 14),
+              Wrap(alignment: WrapAlignment.center, spacing: 18, runSpacing: 8, children: [
+                for (final (icon, label) in const [
+                  (Icons.credit_card_rounded, 'Tarjeta'),
+                  (Icons.phone_iphone_rounded, 'Apple Pay'),
+                  (Icons.android_rounded, 'Google Pay'),
+                  (Icons.call_split_rounded, 'Todo o tu parte'),
+                ])
+                  Row(mainAxisSize: MainAxisSize.min, children: [
+                    Icon(icon, size: 18, color: t.accentText),
+                    const SizedBox(width: 6),
+                    Text(label, style: TextStyle(color: t.muted)),
+                  ]),
+              ]),
+              const SizedBox(height: 12),
+              Text('Tu tarjeta nunca se escribe en esta tablet.', style: TextStyle(color: t.faint, fontSize: 12.5), textAlign: TextAlign.center),
+              if (testLink) ...[
+                const SizedBox(height: 14),
+                Text('Modo prueba · abre este enlace en el navegador:', style: TextStyle(color: t.muted, fontSize: 12)),
+                SelectableText(url, textAlign: TextAlign.center, style: TextStyle(color: t.accentText, fontSize: 12)),
+              ],
+            ],
+          ]),
+        ),
       ),
     );
   }

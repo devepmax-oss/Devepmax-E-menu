@@ -24,6 +24,8 @@ export type DomainEventName =
   | 'device.changed'
   // Interno: Stripe confirmó o canceló un cobro del lector (lo aplica la caja).
   | 'payment.terminal_intent'
+  // Interno: Stripe confirmó o canceló un pago hecho desde el celular del cliente en la mesa.
+  | 'payment.bill_intent'
   | 'employee.changed';
 
 export interface DomainEvent<T = unknown> {

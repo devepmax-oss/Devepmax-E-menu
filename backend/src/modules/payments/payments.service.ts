@@ -83,8 +83,8 @@ export class PaymentsService {
 
   /** Aplica un cobro de Stripe (desde el webhook o desde la confirmación de la web). */
   async applyPaymentIntent(intent: Stripe.PaymentIntent): Promise<PaymentOutcome> {
-    if (intent.metadata?.kind === 'terminal') {
-      this.events.emit('payment.terminal_intent', intent);
+    if (intent.metadata?.kind === 'terminal' || intent.metadata?.kind === 'table_qr') {
+      this.events.emit(intent.metadata.kind === 'terminal' ? 'payment.terminal_intent' : 'payment.bill_intent', intent);
       return intent.status === 'succeeded' ? 'succeeded' : intent.status === 'canceled' ? 'failed' : 'pending';
     }
     if (intent.status === 'succeeded') {

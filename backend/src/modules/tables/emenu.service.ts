@@ -1,6 +1,8 @@
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma, ServiceRequestType } from '@prisma/client';
 import { DeviceActor, EmployeeActor } from '../../common/auth/actor';
+import { signTablePay } from '../../common/pay-token';
+import { loadEnv } from '../../config/env';
 import { PrismaService } from '../../prisma/prisma.service';
 import { DomainEventsService } from '../../realtime/domain-events.service';
 import { AuditService } from '../audit/audit.service';
@@ -75,6 +77,8 @@ export class EmenuService {
         status: session.status,
         guestCount: session.guestCount,
         openedAt: session.openedAt,
+        // QR "Paga con tu celular" (solo con pagos en línea configurados).
+        payUrl: this.payUrl(session.id),
         requests: session.serviceRequests.map((r) => ({ id: r.id, type: r.type, status: r.status, createdAt: r.createdAt })),
         orders: orders
           .filter((o) => o.status !== 'PENDING_PAYMENT')
@@ -107,6 +111,12 @@ export class EmenuService {
         },
       },
     };
+  }
+
+  private payUrl(sessionId: string): string | null {
+    const env = loadEnv();
+    if (!env.stripe.secretKey || !env.stripe.publishableKey) return null;
+    return `${env.webUrl}/cuenta/${signTablePay(sessionId, env.jwtAccessSecret)}`;
   }
 
   /** "Llamar al mesero" o "Pedir la cuenta". Si ya hay uno igual sin atender, no se repite. */

@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mek_stripe_terminal/mek_stripe_terminal.dart';
 import 'package:permission_handler/permission_handler.dart';
@@ -11,6 +12,30 @@ import 'billing_models.dart';
 
 /// Tap to Pay solo existe en la app de Android (no en Chrome).
 bool get tapToPaySupportedPlatform => !kIsWeb && defaultTargetPlatform == TargetPlatform.android;
+
+/// Si el aparato tiene lo necesario para Tap to Pay (sin pedir permisos).
+class TapToPayHardware {
+  const TapToPayHardware({required this.nfc, required this.nfcOn, required this.android13});
+  final bool nfc;
+  final bool nfcOn;
+  final bool android13;
+
+  /// Se muestra la opción solo si el aparato tiene NFC y Android 13+.
+  bool get capable => nfc && android13;
+}
+
+const _device = MethodChannel('devepmax/device');
+
+final tapToPayHardwareProvider = FutureProvider<TapToPayHardware>((ref) async {
+  if (!tapToPaySupportedPlatform) return const TapToPayHardware(nfc: false, nfcOn: false, android13: false);
+  try {
+    final m = await _device.invokeMapMethod<String, bool>('tapToPayHardware') ?? const {};
+    return TapToPayHardware(nfc: m['nfc'] ?? false, nfcOn: m['nfcOn'] ?? false, android13: m['android13'] ?? false);
+  } on MissingPluginException {
+    // App vieja sin el canal: se deja la opción y el SDK avisa al cobrar.
+    return const TapToPayHardware(nfc: true, nfcOn: true, android13: true);
+  }
+});
 
 enum TapToPayStatus { unavailable, idle, connecting, ready, error }
 
@@ -48,6 +73,9 @@ class TapToPayController extends Notifier<TapToPayState> {
     if (state.status == TapToPayStatus.ready) return true;
     state = const TapToPayState(TapToPayStatus.connecting, 'Preparando Tap to Pay…');
     try {
+      final hw = await ref.read(tapToPayHardwareProvider.future);
+      if (!hw.capable) throw ApiException('Este aparato no tiene NFC o tiene Android anterior al 13: no puede cobrar con Tap to Pay');
+      if (!hw.nfcOn) throw ApiException('Activa el NFC en los ajustes del teléfono para cobrar con Tap to Pay');
       final permission = await Permission.locationWhenInUse.request();
       if (!permission.isGranted) {
         throw ApiException('Permite la ubicación: Stripe la exige para cobrar con el teléfono');

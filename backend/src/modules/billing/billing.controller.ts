@@ -1,9 +1,10 @@
 import { Body, Controller, Delete, Get, HttpCode, Param, Post, Query } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import type { EmployeeActor } from '../../common/auth/actor';
-import { AllowActors, CurrentActor, RequirePermissions } from '../../common/auth/decorators';
+import { AllowActors, CurrentActor, Public, RequirePermissions } from '../../common/auth/decorators';
 import { BillingService } from './billing.service';
 import { CashService } from './cash.service';
+import { TablePayService } from './table-pay.service';
 import { TerminalService } from './terminal.service';
 import {
   BillsQueryDto,
@@ -17,6 +18,8 @@ import {
   RemoveDiscountDto,
   SimulateTapDto,
   SplitDto,
+  TablePayConfirmDto,
+  TablePayIntentDto,
   TapToPayDto,
   TerminalChargeDto,
 } from './dto/billing.dto';
@@ -187,5 +190,33 @@ export class TerminalController {
   @Delete('readers/:id')
   remove(@CurrentActor() actor: EmployeeActor, @Param('id') id: string) {
     return this.terminal.remove(actor, id);
+  }
+}
+
+/**
+ * Pagar desde la mesa: lo abre el cliente en su celular al escanear el QR de la tablet.
+ * Público: el enlace firmado de la visita es la llave, y deja de servir al cerrar la mesa.
+ */
+@ApiTags('table-pay')
+@Public()
+@Controller('pay')
+export class TablePayController {
+  constructor(private readonly tablePay: TablePayService) {}
+
+  @Get(':token')
+  view(@Param('token') token: string) {
+    return this.tablePay.view(token);
+  }
+
+  @Post(':token/intent')
+  @HttpCode(200)
+  intent(@Param('token') token: string, @Body() dto: TablePayIntentDto) {
+    return this.tablePay.intent(token, dto);
+  }
+
+  @Post(':token/confirm')
+  @HttpCode(200)
+  confirm(@Param('token') token: string, @Body() dto: TablePayConfirmDto) {
+    return this.tablePay.confirm(token, dto);
   }
 }

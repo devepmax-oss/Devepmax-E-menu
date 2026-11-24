@@ -25,6 +25,8 @@ export interface Env {
   accessTokenTtlSeconds: number;
   refreshTokenDays: number;
   storage: StorageConfig;
+  /** Dirección pública de la web de clientes (los QR de pago de la mesa apuntan aquí). */
+  webUrl: string;
   /** Pagos en línea. Sin STRIPE_SECRET_KEY la web solo ofrece pagar al recoger. */
   stripe: StripeConfig;
   /** Notificaciones push (Firebase). Sin archivo, no se envían y todo lo demás sigue igual. */
@@ -105,6 +107,7 @@ export function loadEnv(): Env {
     accessTokenTtlSeconds: Number(process.env.ACCESS_TOKEN_TTL_SECONDS) || 900,
     refreshTokenDays: Number(process.env.REFRESH_TOKEN_DAYS) || 30,
     storage: loadStorage(port),
+    webUrl: stripTrailingSlash(process.env.PUBLIC_WEB_URL?.trim() || 'http://localhost:3001'),
     firebaseServiceAccountPath: process.env.FIREBASE_SERVICE_ACCOUNT_PATH?.trim() || undefined,
     stripe: {
       secretKey: process.env.STRIPE_SECRET_KEY?.trim() || undefined,

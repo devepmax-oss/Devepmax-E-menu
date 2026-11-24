@@ -23,8 +23,9 @@ export function StripePay(props: {
   clientSecret: string;
   amountLabel: string;
   returnUrl: string;
-  customer: { name: string; email: string; phone: string };
-  onPaid: () => void;
+  /** Si se conoce (pedido web), no se le vuelve a pedir nombre y teléfono. */
+  customer?: { name: string; email: string; phone: string };
+  onPaid: (paymentIntentId?: string) => void;
 }) {
   const appearance = useMemo<Appearance>(() => {
     const dark = cssVar('color-scheme', 'dark') !== 'light';
@@ -50,7 +51,17 @@ export function StripePay(props: {
   );
 }
 
-function PayForm({ amountLabel, returnUrl, customer, onPaid }: { amountLabel: string; returnUrl: string; customer: { name: string; email: string; phone: string }; onPaid: () => void }) {
+function PayForm({
+  amountLabel,
+  returnUrl,
+  customer,
+  onPaid,
+}: {
+  amountLabel: string;
+  returnUrl: string;
+  customer?: { name: string; email: string; phone: string };
+  onPaid: (paymentIntentId?: string) => void;
+}) {
   const stripe = useStripe();
   const elements = useElements();
   const [busy, setBusy] = useState(false);
@@ -61,12 +72,14 @@ function PayForm({ amountLabel, returnUrl, customer, onPaid }: { amountLabel: st
     if (!stripe || !elements) return;
     setBusy(true);
     setError(null);
-    const { error: failure } = await stripe.confirmPayment({
+    const { error: failure, paymentIntent } = await stripe.confirmPayment({
       elements,
       redirect: 'if_required',
       confirmParams: {
         return_url: returnUrl,
-        payment_method_data: { billing_details: { name: customer.name, email: customer.email || undefined, phone: customer.phone } },
+        ...(customer
+          ? { payment_method_data: { billing_details: { name: customer.name, email: customer.email || undefined, phone: customer.phone } } }
+          : {}),
       },
     });
     if (failure) {
@@ -74,7 +87,7 @@ function PayForm({ amountLabel, returnUrl, customer, onPaid }: { amountLabel: st
       setBusy(false);
       return;
     }
-    onPaid();
+    onPaid(paymentIntent?.id);
   };
 
   return (
@@ -89,7 +102,7 @@ function PayForm({ amountLabel, returnUrl, customer, onPaid }: { amountLabel: st
           <span className="h-px flex-1 bg-line" /> o con tarjeta <span className="h-px flex-1 bg-line" />
         </div>
       </div>
-      <PaymentElement options={{ layout: 'tabs', fields: { billingDetails: { name: 'never', phone: 'never' } } }} />
+      <PaymentElement options={{ layout: 'tabs', ...(customer ? { fields: { billingDetails: { name: 'never', phone: 'never' } } } : {}) }} />
       {error ? <Notice tone="danger">{error}</Notice> : null}
       <Button className="h-14 w-full text-base" onClick={confirm} loading={busy} disabled={!stripe || !elements}>
         <Lock aria-hidden className="size-4" /> Pagar {amountLabel}
