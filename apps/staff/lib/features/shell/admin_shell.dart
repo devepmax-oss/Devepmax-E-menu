@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../core/auth/auth_controller.dart';
 import '../admin/data/admin_api.dart';
+import '../tables/service_call_alerts.dart';
 
 class _Destination {
   const _Destination(this.path, this.label, this.icon, this.permission);
@@ -129,7 +130,10 @@ class AdminShell extends ConsumerWidget {
             ),
           ),
           VerticalDivider(width: 1, color: t.line),
-          Expanded(child: child),
+          Expanded(
+            // Quien atiende mesas recibe los llamados de las tablets en cualquier pantalla.
+            child: (employee?.can('tables.operate') ?? false) ? ServiceCallAlerts(child: child) : child,
+          ),
         ],
       ),
     );

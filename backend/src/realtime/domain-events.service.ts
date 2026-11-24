@@ -16,6 +16,9 @@ export type DomainEventName =
   | 'driver.location'
   // Salón: estado de cada mesa (sesión, cuenta, llamados).
   | 'table.updated'
+  // Llamados desde la tablet: "llama al mesero", "pide la cuenta".
+  | 'service_request.created'
+  | 'service_request.updated'
   // Internos: no se difunden; el gateway desconecta los sockets afectados
   // para que vuelvan a entrar con sus permisos y rooms actualizados.
   | 'device.changed'

@@ -1,0 +1,12 @@
+{
+  "name": "E-Menu",
+  "short_name": "E-Menu",
+  "start_url": ".",
+  "display": "fullscreen",
+  "background_color": "#120E0B",
+  "theme_color": "#120E0B",
+  "description": "Menú en la mesa",
+  "orientation": "landscape",
+  "prefer_related_applications": false,
+  "icons": []
+}

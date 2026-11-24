@@ -5,7 +5,9 @@ import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
+import 'package:qr_flutter/qr_flutter.dart';
 
+import '../../../app/config.dart';
 import '../../../core/ui/feedback.dart';
 import '../../menu/data/menu_models.dart' show Station;
 import '../../menu/widgets/common.dart';
@@ -124,23 +126,106 @@ class _DevicesScreenState extends ConsumerState<DevicesScreen> {
 
   void _showCode(DeviceView device) {
     if (device.pairingCode == null) return;
-    final code = device.pairingCode!;
-    showDialog<void>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text('Código para "${device.name}"'),
-        content: Column(mainAxisSize: MainAxisSize.min, children: [
-          const Text('Escríbelo en el dispositivo para vincularlo:'),
-          const SizedBox(height: 16),
-          SelectableText(
-            '${code.substring(0, 3)} ${code.substring(3)}',
-            style: Theme.of(context).textTheme.displayMedium?.copyWith(fontWeight: FontWeight.w700, letterSpacing: 6),
-          ),
-          const SizedBox(height: 8),
-          Text('Vence a las ${DateFormat.jm().format(device.pairingExpiresAt!)} (15 minutos).'),
-        ]),
-        actions: [FilledButton(onPressed: () => Navigator.pop(context), child: const Text('Listo'))],
+    showDialog<void>(context: context, builder: (_) => _PairingDialog(device: device))
+        .then((_) {
+      if (mounted) ref.invalidate(devicesProvider);
+    });
+  }
+}
+
+/// Lo que lleva el QR: el código y la dirección del servidor, para que la tablet quede lista sola.
+String pairingQrData(String code) =>
+    'devepmax://pair?code=$code&api=${Uri.encodeComponent(AppConfig.apiBaseUrl)}';
+
+/// QR + código de 6 dígitos. Se da cuenta sola cuando el dispositivo queda vinculado.
+class _PairingDialog extends ConsumerStatefulWidget {
+  const _PairingDialog({required this.device});
+  final DeviceView device;
+
+  @override
+  ConsumerState<_PairingDialog> createState() => _PairingDialogState();
+}
+
+class _PairingDialogState extends ConsumerState<_PairingDialog> {
+  Timer? _poll;
+  bool _paired = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _poll = Timer.periodic(const Duration(seconds: 3), (_) => _check());
+  }
+
+  @override
+  void dispose() {
+    _poll?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _check() async {
+    try {
+      final devices = await ref.read(adminApiProvider).devices();
+      final current = devices.firstWhereOrNull((d) => d.id == widget.device.id);
+      if (current != null && current.isPaired && current.pairingCode == null && mounted) {
+        _poll?.cancel();
+        setState(() => _paired = true);
+      }
+    } catch (_) {
+      // Se vuelve a intentar en el siguiente ciclo.
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final t = BrandTokens.of(context);
+    final code = widget.device.pairingCode!;
+    final expires = widget.device.pairingExpiresAt!;
+    return AlertDialog(
+      title: Text(_paired ? '¡Listo!' : 'Vincular "${widget.device.name}"'),
+      content: SizedBox(
+        width: 420,
+        child: AnimatedSwitcher(
+          duration: const Duration(milliseconds: 250),
+          child: _paired
+              ? Column(key: const ValueKey('ok'), mainAxisSize: MainAxisSize.min, children: [
+                  Icon(Icons.check_circle_rounded, size: 88, color: t.success),
+                  const SizedBox(height: 12),
+                  Text('"${widget.device.name}" quedó vinculado.', textAlign: TextAlign.center,
+                      style: Theme.of(context).textTheme.titleMedium),
+                ])
+              : Column(key: const ValueKey('code'), mainAxisSize: MainAxisSize.min, children: [
+                  const Text('Escanéalo con la cámara del dispositivo:', textAlign: TextAlign.center),
+                  const SizedBox(height: 16),
+                  Container(
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(20)),
+                    child: QrImageView(
+                      data: pairingQrData(code),
+                      size: 240,
+                      backgroundColor: Colors.white,
+                      errorCorrectionLevel: QrErrorCorrectLevel.M,
+                      semanticsLabel: 'Código QR de vinculación',
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  Text('o escribe este código:', style: TextStyle(color: t.muted)),
+                  const SizedBox(height: 4),
+                  SelectableText(
+                    '${code.substring(0, 3)} ${code.substring(3)}',
+                    style: Theme.of(context).textTheme.displaySmall?.copyWith(fontWeight: FontWeight.w700, letterSpacing: 6),
+                  ),
+                  const SizedBox(height: 8),
+                  Text('Vence a las ${DateFormat.jm().format(expires)} (15 minutos).', style: TextStyle(color: t.muted)),
+                  const SizedBox(height: 12),
+                  Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+                    const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2)),
+                    const SizedBox(width: 8),
+                    Text('Esperando al dispositivo…', style: TextStyle(color: t.muted)),
+                  ]),
+                ]),
+        ),
       ),
+      actions: [FilledButton(onPressed: () => Navigator.pop(context), child: Text(_paired ? 'Listo' : 'Cerrar'))],
     );
   }
 }

@@ -47,6 +47,15 @@ export class AuthController {
     return this.auth.loginWithPin(device, dto.pin);
   }
 
+  /** Tablet de mesa: el personal abre el menú oculto con su PIN (no inicia sesión). */
+  @ApiBearerAuth()
+  @AllowActors('device')
+  @Post('device/staff-check')
+  @HttpCode(200)
+  staffCheck(@CurrentActor() device: DeviceActor, @Body() dto: PinLoginDto) {
+    return this.auth.verifyStaffPin(device, dto.pin);
+  }
+
   /** Vincula un dispositivo con el código de 6 dígitos generado en el panel. */
   @Public()
   @Post('device/pair')

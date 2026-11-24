@@ -62,6 +62,10 @@ class TablesApi {
         if (seats != null) 'seats': seats,
       }));
 
+  /// Llamado de la tablet: "Voy" (ACKNOWLEDGED) o "Atendido" (DONE).
+  Future<void> resolveRequest(String id, String status) =>
+      _call(() => _dio.patch('/tables/requests/$id', data: {'status': status}));
+
   Future<void> removeTable(String id) => _call(() => _dio.delete('/tables/$id'));
 
   Future<void> saveLayout(List<TableView> tables) => _call(() => _dio.put('/tables/layout', data: {

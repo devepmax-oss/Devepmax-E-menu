@@ -109,6 +109,11 @@ export class TablesService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
+  /** Otro módulo cambió algo de la mesa (por ejemplo, un llamado): se difunde agrupado. */
+  notify(tableId: string) {
+    this.schedule(tableId);
+  }
+
   private schedule(tableId: string) {
     clearTimeout(this.pending.get(tableId));
     this.pending.set(

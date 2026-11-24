@@ -157,6 +157,30 @@ export class AuthService {
     };
   }
 
+  /**
+   * Menú del personal en una tablet de mesa: confirma que el PIN es de alguien del equipo que
+   * atiende mesas. No abre sesión ni dice de quién es el PIN si falla.
+   */
+  async verifyStaffPin(device: DeviceActor, pin: string) {
+    const key = `staff:${device.id}`;
+    this.pinLimiter.assertAllowed(key);
+    const employee = await this.prisma.employee.findUnique({
+      where: { pinHash: hashPin(pin, this.env.pinPepper) },
+      include: { role: true },
+    });
+    const allowed =
+      !!employee?.isActive &&
+      (employee.role.permissions.includes('tables.operate') || employee.role.permissions.includes('devices.manage'));
+    if (!employee || !allowed) {
+      this.pinLimiter.fail(key);
+      await this.audit.log(device, 'auth.staff_pin_failed', 'device', device.id);
+      throw new UnauthorizedException('PIN incorrecto');
+    }
+    this.pinLimiter.reset(key);
+    await this.audit.log(device, 'auth.staff_pin', 'employee', employee.id);
+    return { name: employee.name };
+  }
+
   // ───────── Dispositivos: vinculación con código ─────────
 
   async pairDevice(code: string, ip: string, appVersion?: string) {

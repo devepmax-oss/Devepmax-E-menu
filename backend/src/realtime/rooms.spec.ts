@@ -157,4 +157,11 @@ describe('salón', () => {
   it('el estado de una mesa va a caja, meseros, admin y a su tablet', () => {
     expect(roomsForEvent(event('table.updated', { id: 't3' }))).toEqual([Rooms.pos, Rooms.waiters, Rooms.admin, Rooms.table('t3')]);
   });
+
+  it('un llamado de la tablet avisa al personal y a esa misma tablet', () => {
+    const payload = { id: 'r1', type: 'CALL_WAITER', table: { id: 't3', label: '3' } };
+    const expected = [Rooms.pos, Rooms.waiters, Rooms.admin, Rooms.table('t3')];
+    expect(roomsForEvent(event('service_request.created', payload))).toEqual(expected);
+    expect(roomsForEvent(event('service_request.updated', payload))).toEqual(expected);
+  });
 });

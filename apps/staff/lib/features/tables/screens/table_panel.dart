@@ -63,6 +63,19 @@ class _TablePanelState extends ConsumerState<_TablePanel> {
     }
   }
 
+  Future<void> _resolve(String requestId, String status) async {
+    setState(() => _busy = true);
+    try {
+      await _api.resolveRequest(requestId, status);
+      // La mesa llega actualizada por tiempo real; por si acaso, se refresca.
+      await ref.read(floorProvider.notifier).refresh();
+    } catch (error) {
+      if (mounted) showError(context, error);
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
   Future<void> _seat(TableView table) async {
     final guests = await showDialog<int>(
       context: context,
@@ -237,18 +250,32 @@ class _TablePanelState extends ConsumerState<_TablePanel> {
                   for (final r in s.requests)
                     Container(
                       margin: const EdgeInsets.only(bottom: 8),
-                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                      padding: const EdgeInsets.fromLTRB(14, 10, 8, 10),
                       decoration: BoxDecoration(color: t.accentSoft, borderRadius: BorderRadius.circular(14)),
                       child: Row(children: [
                         Icon(r.type == 'REQUEST_BILL' ? Icons.receipt_long_rounded : Icons.notifications_active_rounded,
                             color: t.accentText),
                         const SizedBox(width: 10),
                         Expanded(
-                          child: Text(serviceRequestLabels[r.type] ?? r.type,
-                              style: text.titleSmall?.copyWith(color: t.accentText)),
+                          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                            Text(serviceRequestLabels[r.type] ?? r.type, style: text.titleSmall?.copyWith(color: t.accentText)),
+                            Text(
+                              r.status == 'ACKNOWLEDGED'
+                                  ? 'Alguien ya va en camino'
+                                  : 'hace ${elapsedLabel(r.createdAt).replaceAll('Recién', 'un momento')}',
+                              style: text.bodySmall?.copyWith(color: t.accentText),
+                            ),
+                          ]),
                         ),
-                        Text('hace ${elapsedLabel(r.createdAt).replaceAll('Recién', 'un momento')}',
-                            style: text.bodySmall?.copyWith(color: t.accentText)),
+                        if (r.status == 'OPEN')
+                          TextButton(
+                            onPressed: _busy ? null : () => _resolve(r.id, 'ACKNOWLEDGED'),
+                            child: const Text('Voy'),
+                          ),
+                        FilledButton(
+                          onPressed: _busy ? null : () => _resolve(r.id, 'DONE'),
+                          child: const Text('Atendido'),
+                        ),
                       ]),
                     ),
                 ],

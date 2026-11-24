@@ -72,3 +72,11 @@ export class CloseTableDto {
   /** Cerrar aunque la cuenta tenga saldo (mientras no exista el cobro en caja). */
   @IsOptional() @IsBoolean() force?: boolean;
 }
+
+export class ServiceRequestDto {
+  @IsIn(['CALL_WAITER', 'REQUEST_BILL']) type: 'CALL_WAITER' | 'REQUEST_BILL';
+}
+
+export class ResolveRequestDto {
+  @IsIn(['ACKNOWLEDGED', 'DONE']) status: 'ACKNOWLEDGED' | 'DONE';
+}

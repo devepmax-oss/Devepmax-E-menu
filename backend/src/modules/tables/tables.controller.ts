@@ -9,10 +9,12 @@ import {
   CreateTableDto,
   LayoutDto,
   OpenTableDto,
+  ResolveRequestDto,
   TableStatusDto,
   UpdateAreaDto,
   UpdateTableDto,
 } from './dto/tables.dto';
+import { EmenuService } from './emenu.service';
 import { TablesService } from './tables.service';
 
 @ApiTags('tables')
@@ -20,7 +22,17 @@ import { TablesService } from './tables.service';
 @AllowActors('employee')
 @Controller('tables')
 export class TablesController {
-  constructor(private readonly tables: TablesService) {}
+  constructor(
+    private readonly tables: TablesService,
+    private readonly emenu: EmenuService,
+  ) {}
+
+  /** Atender un llamado de la tablet: "Voy" (ACKNOWLEDGED) o "Listo" (DONE). */
+  @RequirePermissions('tables.operate')
+  @Patch('requests/:id')
+  resolveRequest(@CurrentActor() actor: EmployeeActor, @Param('id') id: string, @Body() dto: ResolveRequestDto) {
+    return this.emenu.resolveRequest(actor, id, dto.status);
+  }
 
   // ───────── Salón (meseros y caja) ─────────
 

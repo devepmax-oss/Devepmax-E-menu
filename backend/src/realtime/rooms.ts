@@ -104,6 +104,12 @@ export function roomsForEvent(event: DomainEvent): string[] {
       const { id } = event.payload as { id?: string };
       return id ? [Rooms.pos, Rooms.waiters, Rooms.admin, Rooms.table(id)] : [Rooms.pos, Rooms.waiters, Rooms.admin];
     }
+    case 'service_request.created':
+    case 'service_request.updated': {
+      // Caja, meseros y admin (aviso con sonido) y la tablet de esa mesa.
+      const { table } = event.payload as { table?: { id: string } };
+      return table?.id ? [Rooms.pos, Rooms.waiters, Rooms.admin, Rooms.table(table.id)] : [Rooms.pos, Rooms.waiters, Rooms.admin];
+    }
     case 'driver.location': {
       // Quien sigue ese pedido (solo ve la posición) y el personal.
       const { publicCode } = event.payload as { publicCode?: string };
