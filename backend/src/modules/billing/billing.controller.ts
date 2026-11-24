@@ -4,6 +4,7 @@ import type { EmployeeActor } from '../../common/auth/actor';
 import { AllowActors, CurrentActor, Public, RequirePermissions } from '../../common/auth/decorators';
 import { BillingService } from './billing.service';
 import { CashService } from './cash.service';
+import { ReceiptsService } from './receipts.service';
 import { TablePayService } from './table-pay.service';
 import { TerminalService } from './terminal.service';
 import {
@@ -14,8 +15,10 @@ import {
   MergeDto,
   OpenShiftDto,
   PaymentDto,
+  RefundDto,
   RegisterReaderDto,
   RemoveDiscountDto,
+  SendReceiptDto,
   SimulateTapDto,
   SplitDto,
   TablePayConfirmDto,
@@ -32,7 +35,29 @@ export class BillingController {
   constructor(
     private readonly billing: BillingService,
     private readonly terminal: TerminalService,
+    private readonly receipts: ReceiptsService,
   ) {}
+
+  /** Qué formas de enviar el recibo están configuradas (email, SMS). */
+  @RequirePermissions('payments.take')
+  @Get('receipts/config')
+  receiptConfig() {
+    return this.receipts.config();
+  }
+
+  /** El recibo para imprimir el ticket (con el enlace del QR). */
+  @RequirePermissions('payments.take')
+  @Get('bills/:id/receipt')
+  receipt(@Param('id') id: string) {
+    return this.receipts.forStaff(id);
+  }
+
+  @RequirePermissions('payments.take')
+  @Post('bills/:id/receipt')
+  @HttpCode(200)
+  sendReceipt(@CurrentActor() actor: EmployeeActor, @Param('id') id: string, @Body() dto: SendReceiptDto) {
+    return this.receipts.send(actor, id, dto);
+  }
 
   /** Cobro con el lector: manda el monto; el cliente paga en el lector. */
   @RequirePermissions('payments.take')
@@ -72,7 +97,7 @@ export class BillingController {
   @RequirePermissions('payments.take')
   @Get('bills')
   list(@Query() query: BillsQueryDto) {
-    return this.billing.list(query.tableId);
+    return this.billing.list(query.tableId, query.scope);
   }
 
   @RequirePermissions('payments.take')
@@ -85,6 +110,13 @@ export class BillingController {
   @Post('bills/:id/payments')
   pay(@CurrentActor() actor: EmployeeActor, @Param('id') id: string, @Body() dto: PaymentDto) {
     return this.billing.pay(actor, id, dto);
+  }
+
+  /** Reembolso: permiso payments.refund, o PIN de un gerente. */
+  @RequirePermissions('payments.take')
+  @Post('payments/:id/refunds')
+  refund(@CurrentActor() actor: EmployeeActor, @Param('id') id: string, @Body() dto: RefundDto) {
+    return this.billing.refund(actor, id, dto);
   }
 
   /** Descuento manual: permiso bills.discount, o PIN de un gerente. */
@@ -218,5 +250,18 @@ export class TablePayController {
   @HttpCode(200)
   confirm(@Param('token') token: string, @Body() dto: TablePayConfirmDto) {
     return this.tablePay.confirm(token, dto);
+  }
+}
+
+/** Recibo digital: lo abre el cliente desde el email, el SMS o el QR del ticket. */
+@ApiTags('receipts')
+@Public()
+@Controller('receipts')
+export class ReceiptsController {
+  constructor(private readonly receipts: ReceiptsService) {}
+
+  @Get(':token')
+  view(@Param('token') token: string) {
+    return this.receipts.publicView(token);
   }
 }

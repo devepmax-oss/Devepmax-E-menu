@@ -29,8 +29,20 @@ export interface Env {
   webUrl: string;
   /** Pagos en línea. Sin STRIPE_SECRET_KEY la web solo ofrece pagar al recoger. */
   stripe: StripeConfig;
+  /** Recibos por email (Resend) y SMS (Twilio). Sin claves, esa opción no aparece. */
+  receipts: ReceiptsConfig;
   /** Notificaciones push (Firebase). Sin archivo, no se envían y todo lo demás sigue igual. */
   firebaseServiceAccountPath?: string;
+}
+
+export interface ReceiptsConfig {
+  resendApiKey?: string;
+  /** Remitente verificado en Resend, p. ej. "GoPicadera <recibos@gopicadera.online>". */
+  emailFrom?: string;
+  twilioAccountSid?: string;
+  twilioAuthToken?: string;
+  /** Número de Twilio en formato +15551234567. */
+  smsFrom?: string;
 }
 
 export interface StripeConfig {
@@ -109,6 +121,13 @@ export function loadEnv(): Env {
     storage: loadStorage(port),
     webUrl: stripTrailingSlash(process.env.PUBLIC_WEB_URL?.trim() || 'http://localhost:3001'),
     firebaseServiceAccountPath: process.env.FIREBASE_SERVICE_ACCOUNT_PATH?.trim() || undefined,
+    receipts: {
+      resendApiKey: process.env.RESEND_API_KEY?.trim() || undefined,
+      emailFrom: process.env.RECEIPTS_EMAIL_FROM?.trim() || undefined,
+      twilioAccountSid: process.env.TWILIO_ACCOUNT_SID?.trim() || undefined,
+      twilioAuthToken: process.env.TWILIO_AUTH_TOKEN?.trim() || undefined,
+      smsFrom: process.env.TWILIO_FROM_NUMBER?.trim() || undefined,
+    },
     stripe: {
       secretKey: process.env.STRIPE_SECRET_KEY?.trim() || undefined,
       publishableKey: process.env.STRIPE_PUBLISHABLE_KEY?.trim() || undefined,

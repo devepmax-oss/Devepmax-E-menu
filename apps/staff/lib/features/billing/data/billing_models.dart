@@ -74,6 +74,23 @@ class BillDiscount {
       );
 }
 
+class BillRefund {
+  const BillRefund({required this.id, required this.amount, required this.reason, required this.createdAt, this.employee});
+  final String id;
+  final double amount;
+  final String reason;
+  final DateTime createdAt;
+  final String? employee;
+
+  factory BillRefund.fromJson(BJson j) => BillRefund(
+        id: j['id'] as String,
+        amount: parseMoney(j['amount']),
+        reason: j['reason'] as String? ?? '',
+        createdAt: _date(j['createdAt']),
+        employee: j['employee'] as String?,
+      );
+}
+
 class BillPayment {
   const BillPayment({
     required this.id,
@@ -85,6 +102,9 @@ class BillPayment {
     this.reference,
     required this.createdAt,
     this.employee,
+    this.stripe = false,
+    this.refunded = 0,
+    this.refunds = const [],
   });
   final String id;
   final String method;
@@ -95,6 +115,13 @@ class BillPayment {
   final String? reference;
   final DateTime createdAt;
   final String? employee;
+  /// Cobrado con Stripe: el reembolso vuelve solo a la tarjeta del cliente.
+  final bool stripe;
+  final double refunded;
+  final List<BillRefund> refunds;
+
+  /// Lo que todavía se puede devolver de este pago.
+  double get refundable => status == 'SUCCEEDED' ? (amount - refunded).clamp(0, double.infinity) : 0;
 
   factory BillPayment.fromJson(BJson j) => BillPayment(
         id: j['id'] as String,
@@ -106,21 +133,26 @@ class BillPayment {
         reference: j['reference'] as String?,
         createdAt: _date(j['createdAt']),
         employee: j['employee'] as String?,
+        stripe: j['stripe'] as bool? ?? false,
+        refunded: parseMoney(j['refunded']),
+        refunds: [for (final r in j['refunds'] as List? ?? const []) BillRefund.fromJson(r as BJson)],
       );
 }
 
 class BillOrderRef {
-  const BillOrderRef({required this.id, required this.number, required this.status, this.customerName});
+  const BillOrderRef({required this.id, required this.number, required this.status, this.customerName, this.customerPhone});
   final String id;
   final int number;
   final String status;
   final String? customerName;
+  final String? customerPhone;
 
   factory BillOrderRef.fromJson(BJson j) => BillOrderRef(
         id: j['id'] as String,
         number: (j['number'] as num).toInt(),
         status: j['status'] as String,
         customerName: j['customerName'] as String?,
+        customerPhone: j['customerPhone'] as String?,
       );
 }
 
@@ -148,6 +180,7 @@ class BillView {
     required this.total,
     required this.amountPaid,
     required this.due,
+    this.refundedTotal = 0,
   });
 
   final String id;
@@ -172,6 +205,7 @@ class BillView {
   final double total;
   final double amountPaid;
   final double due;
+  final double refundedTotal;
 
   bool get isOpen => status == 'UNPAID' || status == 'PARTIALLY_PAID';
   bool get hasPayments => payments.any((p) => p.status == 'SUCCEEDED');
@@ -203,6 +237,7 @@ class BillView {
       total: parseMoney(j['total']),
       amountPaid: parseMoney(j['amountPaid']),
       due: parseMoney(j['due']),
+      refundedTotal: parseMoney(j['refundedTotal']),
     );
   }
 }
@@ -233,6 +268,7 @@ class CashShiftView {
     required this.sales,
     required this.totalSales,
     required this.totalTips,
+    this.totalRefunds = 0,
     required this.movements,
     required this.expectedCash,
     this.countedCash,
@@ -246,6 +282,7 @@ class CashShiftView {
   final List<ShiftSale> sales;
   final double totalSales;
   final double totalTips;
+  final double totalRefunds;
   final List<ShiftMovement> movements;
   final double expectedCash;
   final double? countedCash;
@@ -268,6 +305,7 @@ class CashShiftView {
         ],
         totalSales: parseMoney(j['totalSales']),
         totalTips: parseMoney(j['totalTips']),
+        totalRefunds: parseMoney(j['totalRefunds']),
         movements: [
           for (final m in j['movements'] as List? ?? const [])
             ShiftMovement(

@@ -623,8 +623,8 @@ export class OrdersService {
       const device = await this.prisma.device.findUnique({ where: { id: actor.deviceId } });
       if (device?.type === 'WAITER') channel = 'WAITER';
     }
-    if (dto.fulfillmentType === 'DINE_IN') {
-      if (!dto.tableId) throw new BadRequestException('Elige la mesa');
+    // Comer aquí sin mesa = mostrador (barra). Con mesa, la orden se suma a la cuenta de la mesa.
+    if (dto.fulfillmentType === 'DINE_IN' && dto.tableId) {
       const table = await this.prisma.diningTable.findUnique({ where: { id: dto.tableId } });
       if (!table?.isActive) throw new BadRequestException('Mesa no encontrada');
     }

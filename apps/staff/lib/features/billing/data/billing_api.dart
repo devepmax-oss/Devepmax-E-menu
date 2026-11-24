@@ -32,8 +32,11 @@ class BillingApi {
   Future<BillView> _bill(Future<Response<Map<String, dynamic>>> request) =>
       _call(() async => BillView.fromJson((await request).data!));
 
-  Future<List<BillView>> list({String? tableId}) => _call(() async {
-        final response = await _dio.get<List<dynamic>>('/billing/bills', queryParameters: {if (tableId != null) 'tableId': tableId});
+  Future<List<BillView>> list({String? tableId, bool paid = false}) => _call(() async {
+        final response = await _dio.get<List<dynamic>>('/billing/bills', queryParameters: {
+          if (tableId != null) 'tableId': tableId,
+          if (paid) 'scope': 'paid',
+        });
         return response.data!.map((b) => BillView.fromJson(b as BJson)).toList();
       });
 
@@ -70,6 +73,34 @@ class BillingApi {
   Future<BillView> removeDiscount(String discountId, {String? managerPin}) => _bill(_dio.delete<Map<String, dynamic>>(
       '/billing/discounts/$discountId',
       data: {if (managerPin != null && managerPin.isNotEmpty) 'managerPin': managerPin}));
+
+  /// Reembolso de un pago (todo si no se dice el monto).
+  Future<BillView> refund(String paymentId, {required String requestId, double? amount, required String reason, String? managerPin}) =>
+      _bill(_dio.post<Map<String, dynamic>>('/billing/payments/$paymentId/refunds', data: {
+        'clientRequestId': requestId,
+        if (amount != null) 'amount': amount,
+        'reason': reason,
+        if (managerPin != null && managerPin.isNotEmpty) 'managerPin': managerPin,
+      }));
+
+  /// Qué envíos de recibo están configurados.
+  Future<({bool email, bool sms})> receiptConfig() => _call(() async {
+        final data = (await _dio.get<Map<String, dynamic>>('/billing/receipts/config')).data!;
+        return (email: data['email'] == true, sms: data['sms'] == true);
+      });
+
+  /// El recibo para imprimir (incluye el enlace del QR).
+  Future<Map<String, dynamic>> receipt(String billId) =>
+      _call(() async => (await _dio.get<Map<String, dynamic>>('/billing/bills/$billId/receipt')).data!);
+
+  Future<List<String>> sendReceipt(String billId, {String? email, String? phone}) => _call(() async {
+        final data = (await _dio.post<Map<String, dynamic>>('/billing/bills/$billId/receipt', data: {
+          if (email != null && email.trim().isNotEmpty) 'email': email.trim(),
+          if (phone != null && phone.trim().isNotEmpty) 'phone': phone.trim(),
+        }))
+            .data!;
+        return [for (final s in data['sent'] as List? ?? const []) '$s'];
+      });
 
   Future<BillView> split(String billId, List<String> itemIds) =>
       _bill(_dio.post<Map<String, dynamic>>('/billing/bills/$billId/split', data: {'itemIds': itemIds}));
@@ -227,4 +258,18 @@ final cardReadersProvider = FutureProvider.autoDispose<List<CardReader>>((ref) a
   final config = await ref.watch(terminalConfigProvider.future);
   if (!config.enabled) return const [];
   return ref.read(billingApiProvider).readers();
+});
+
+/// Cuentas cobradas hoy (para reenviar el recibo o reembolsar).
+final paidBillsProvider = FutureProvider.autoDispose<List<BillView>>((ref) async {
+  ref.watch(openBillsProvider); // se recalcula con cada cobro
+  return ref.read(billingApiProvider).list(paid: true);
+});
+
+final receiptConfigProvider = FutureProvider<({bool email, bool sms})>((ref) async {
+  try {
+    return await ref.read(billingApiProvider).receiptConfig();
+  } catch (_) {
+    return (email: false, sms: false);
+  }
 });

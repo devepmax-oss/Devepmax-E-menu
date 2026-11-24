@@ -171,7 +171,18 @@ class _TablePanelState extends ConsumerState<_TablePanel> {
         );
 
     final canCharge = ref.watch(authControllerProvider).value?.employee.can('payments.take') ?? false;
+    final canOrder = ref.watch(authControllerProvider).value?.employee.can('orders.create') ?? false;
     final actions = <Widget>[
+      if (canOrder && status != 'CLEANING')
+        FilledButton.icon(
+          onPressed: () {
+            final router = GoRouter.of(context);
+            Navigator.pop(context);
+            router.go('/pos?table=${table.id}');
+          },
+          icon: const Icon(Icons.add_shopping_cart_rounded),
+          label: Text(s == null ? 'Tomar pedido' : 'Agregar pedido'),
+        ),
       if (s != null) ...[
         if (canCharge && s.total > 0)
           FilledButton.tonalIcon(

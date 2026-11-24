@@ -159,6 +159,7 @@ class _ShiftDialogState extends ConsumerState<_ShiftDialog> {
             if (shift.sales.isNotEmpty) ...[
               line('Total cobrado', shift.totalSales, bold: true),
               line('Propinas incluidas', shift.totalTips, color: t.muted),
+              if (shift.totalRefunds > 0) line('Reembolsos', -shift.totalRefunds, color: t.danger),
             ],
             Divider(height: 24, color: t.line),
             Text('Efectivo en el cajón', style: text.titleMedium),

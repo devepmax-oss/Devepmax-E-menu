@@ -12,6 +12,7 @@ import '../features/menu/screens/menu_screen.dart';
 import '../features/menu/screens/menu_setup_screen.dart';
 import '../features/menu/screens/modifier_groups_screen.dart';
 import '../features/orders/screens/orders_screen.dart';
+import '../features/pos/screens/pos_screen.dart';
 import '../features/promotions/screens/promotions_screen.dart';
 import '../features/shell/admin_shell.dart';
 import '../features/tables/screens/tables_screen.dart';
@@ -47,6 +48,10 @@ final routerProvider = Provider<GoRouter>((ref) {
         routes: [
           GoRoute(path: '/orders', builder: (_, __) => const OrdersScreen()),
           GoRoute(path: '/tables', builder: (_, __) => const TablesScreen()),
+          GoRoute(
+            path: '/pos',
+            builder: (_, state) => NewOrderScreen(key: ValueKey(state.uri.toString()), tableId: state.uri.queryParameters['table']),
+          ),
           GoRoute(
             path: '/billing',
             builder: (_, state) => BillingScreen(

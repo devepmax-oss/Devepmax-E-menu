@@ -39,3 +39,46 @@ export interface TablePayIntent {
   clientSecret: string;
   amount: Money;
 }
+
+/** Recibo digital (lo que devuelve /receipts/:token). */
+export interface Receipt {
+  restaurant: {
+    name: string;
+    legalName: string | null;
+    logoUrl: string | null;
+    phone: string | null;
+    email: string | null;
+    address: string[];
+    footer: string | null;
+  };
+  currency: string;
+  timezone: string;
+  id: string;
+  status: TablePayBill['status'];
+  kind: 'TABLE' | 'COUNTER' | 'PICKUP' | 'DELIVERY';
+  label: string;
+  orderNumbers: number[];
+  date: string;
+  items: TablePayItem[];
+  discounts: { id: string; reason: string; amount: Money; item: string | null }[];
+  subtotal: Money;
+  discountTotal: Money;
+  taxTotal: Money;
+  deliveryFee: Money;
+  tipTotal: Money;
+  total: Money;
+  amountPaid: Money;
+  due: Money;
+  refundedTotal: Money;
+  payments: {
+    id: string;
+    method: string;
+    reference: string | null;
+    amount: Money;
+    tipAmount: Money;
+    cashTendered: Money | null;
+    changeGiven: Money | null;
+    createdAt: string;
+  }[];
+  refunds: { id: string; amount: Money; createdAt: string; method: string }[];
+}

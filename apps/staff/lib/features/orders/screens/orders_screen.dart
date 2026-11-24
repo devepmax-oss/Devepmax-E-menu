@@ -87,6 +87,8 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen> {
           Flexible(child: LiveIndicator(status: status)),
         ]),
         actions: [
+          if (ref.watch(authControllerProvider).value?.employee.can('orders.create') ?? false)
+            AppBarAction(icon: Icons.add_shopping_cart_rounded, label: 'Nueva orden', onPressed: () => context.go('/pos')),
           IconButton(
             tooltip: 'Actualizar',
             icon: const Icon(Icons.refresh_rounded),

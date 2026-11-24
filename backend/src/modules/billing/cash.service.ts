@@ -79,12 +79,17 @@ export class CashService {
 
   /** Ventas del turno por forma de pago, propinas, movimientos y efectivo esperado. */
   async summary(shift: CashShift) {
-    const [payments, movements, people] = await Promise.all([
+    const [payments, movements, people, refunds] = await Promise.all([
       this.prisma.payment.findMany({ where: { cashShiftId: shift.id, status: 'SUCCEEDED' } }),
       this.prisma.cashMovement.findMany({ where: { shiftId: shift.id }, orderBy: { createdAt: 'asc' } }),
       this.prisma.employee.findMany({
         where: { id: { in: [shift.openedById, ...(shift.closedById ? [shift.closedById] : [])] } },
         select: { id: true, name: true },
+      }),
+      // Reembolsos hechos durante el turno (de cualquier forma de pago).
+      this.prisma.refund.findMany({
+        where: { createdAt: { gte: shift.openedAt, ...(shift.closedAt ? { lte: shift.closedAt } : {}) } },
+        include: { payment: { select: { method: true } } },
       }),
     ]);
     const name = (id: string | null) => people.find((p) => p.id === id)?.name ?? null;
@@ -106,6 +111,10 @@ export class CashService {
       sales: [...byMethod.entries()].map(([method, v]) => ({ method, count: v.count, amount: v.amount, tips: v.tips })),
       totalSales: payments.reduce((a, p) => a.plus(p.amount), ZERO),
       totalTips: payments.reduce((a, p) => a.plus(p.tipAmount), ZERO),
+      refunds: [...refunds.reduce((m, r) => m.set(r.payment.method, (m.get(r.payment.method) ?? ZERO).plus(r.amount)), new Map<string, Prisma.Decimal>())].map(
+        ([method, amount]) => ({ method, amount }),
+      ),
+      totalRefunds: refunds.reduce((a, r) => a.plus(r.amount), ZERO),
       movements: movements.map((m) => ({ id: m.id, type: m.type, amount: m.amount, reason: m.reason, createdAt: m.createdAt })),
       expectedCash: shift.closedAt && shift.expectedCash ? shift.expectedCash : expectedCash,
       countedCash: shift.countedCash,

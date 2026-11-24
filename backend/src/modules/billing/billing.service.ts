@@ -16,9 +16,12 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { isUniqueViolation } from '../../prisma/errors';
 import { DomainEventsService } from '../../realtime/domain-events.service';
 import { AuditService } from '../audit/audit.service';
+import { businessDateFor } from '../orders/order.rules';
 import { OrdersService } from '../orders/orders.service';
+import { StripeService } from '../payments/stripe.service';
+import { SettingsService } from '../settings/settings.service';
 import { TablesService } from '../tables/tables.service';
-import { DiscountDto, PaymentDto } from './dto/billing.dto';
+import { DiscountDto, PaymentDto, RefundDto } from './dto/billing.dto';
 
 type Tx = Prisma.TransactionClient;
 const D = (v: Prisma.Decimal.Value) => new Prisma.Decimal(v);
@@ -34,7 +37,7 @@ const BILL_INCLUDE = {
     include: { modifiers: true, discounts: true, order: { select: { id: true, number: true } } },
   },
   discounts: true,
-  payments: { orderBy: { createdAt: 'asc' } },
+  payments: { orderBy: { createdAt: 'asc' }, include: { refunds: { orderBy: { createdAt: 'asc' } } } },
   orders: {
     orderBy: { createdAt: 'asc' },
     select: {
@@ -127,6 +130,15 @@ export function toBillView(bill: BillWithAll, names: Map<string, string>) {
       reference: p.reference,
       createdAt: p.createdAt,
       employee: p.employeeId ? names.get(p.employeeId) ?? null : null,
+      stripe: !!p.stripePaymentIntentId,
+      refunded: sum(p.refunds.map((r) => r.amount)),
+      refunds: p.refunds.map((r) => ({
+        id: r.id,
+        amount: r.amount,
+        reason: r.reason,
+        createdAt: r.createdAt,
+        employee: names.get(r.employeeId) ?? null,
+      })),
     })),
     subtotal: bill.subtotal,
     discountTotal: bill.discountTotal,
@@ -135,6 +147,7 @@ export function toBillView(bill: BillWithAll, names: Map<string, string>) {
     tipTotal: bill.tipTotal,
     total: bill.total,
     amountPaid: sum(succeeded.map((p) => p.amount)),
+    refundedTotal: sum(succeeded.flatMap((p) => p.refunds.map((r) => r.amount))),
     due: Prisma.Decimal.max(bill.total.minus(bill.amountPaid), 0),
   };
 }
@@ -157,12 +170,30 @@ export class BillingService {
     private readonly audit: AuditService,
     private readonly orders: OrdersService,
     private readonly tables: TablesService,
+    private readonly settings: SettingsService,
+    private readonly stripe: StripeService,
   ) {}
+
+  /** Reintentos del mismo reembolso (doble toque o red): id → cuándo se hizo. */
+  private readonly recentRefunds = new Map<string, { at: number; billId: string }>();
 
   // ───────── Consultar ─────────
 
-  /** Cuentas por cobrar (o las de una mesa). */
-  async list(tableId?: string): Promise<BillView[]> {
+  /** Cuentas por cobrar (o las de una mesa, o las ya cobradas hoy para recibos y reembolsos). */
+  async list(tableId?: string, scope: 'open' | 'paid' = 'open'): Promise<BillView[]> {
+    if (scope === 'paid' && !tableId) {
+      const settings = await this.settings.get();
+      const bills = await this.prisma.bill.findMany({
+        where: {
+          status: { in: ['PAID', 'REFUNDED'] },
+          orders: { some: { businessDate: businessDateFor(new Date(), settings.timezone) } },
+        },
+        include: BILL_INCLUDE,
+        orderBy: { closedAt: 'desc' },
+        take: 150,
+      });
+      return this.views(bills);
+    }
     const where: Prisma.BillWhereInput = tableId
       ? { tableSession: { tableId, status: { in: OPEN_SESSION } }, status: { not: 'VOID' } }
       : {
@@ -184,7 +215,10 @@ export class BillingService {
   private async views(bills: BillWithAll[]): Promise<BillView[]> {
     const ids = new Set<string>();
     for (const b of bills) {
-      b.payments.forEach((p) => p.employeeId && ids.add(p.employeeId));
+      b.payments.forEach((p) => {
+        if (p.employeeId) ids.add(p.employeeId);
+        p.refunds.forEach((r) => ids.add(r.employeeId));
+      });
       b.discounts.forEach((d) => {
         if (d.appliedById) ids.add(d.appliedById);
         if (d.authorizedById) ids.add(d.authorizedById);
@@ -328,21 +362,105 @@ export class BillingService {
   }
 
   /** Quien aplica necesita el permiso de descuentos, o el PIN de un gerente que lo tenga. */
-  private async authorize(actor: EmployeeActor, managerPin?: string): Promise<string | null> {
-    if (actor.permissions.has('bills.discount')) return null;
+  private authorize(actor: EmployeeActor, managerPin?: string): Promise<string | null> {
+    return this.authorizeFor(actor, 'bills.discount', managerPin);
+  }
+
+  /** El permiso, o el PIN de un gerente que lo tenga (queda como quien autorizó). */
+  private async authorizeFor(actor: EmployeeActor, permission: 'bills.discount' | 'payments.refund', managerPin?: string): Promise<string | null> {
+    if (actor.permissions.has(permission)) return null;
     if (!managerPin) throw new ForbiddenException('Hace falta el PIN de un gerente');
-    const key = `discount:${actor.id}`;
+    const key = `manager:${actor.id}`;
     this.pinLimiter.assertAllowed(key);
     const manager = await this.prisma.employee.findUnique({
       where: { pinHash: hashPin(managerPin, this.env.pinPepper) },
       include: { role: true },
     });
-    if (!manager?.isActive || !manager.role.permissions.includes('bills.discount')) {
+    if (!manager?.isActive || !manager.role.permissions.includes(permission)) {
       this.pinLimiter.fail(key);
       throw new UnauthorizedException('PIN de gerente incorrecto');
     }
     this.pinLimiter.reset(key);
     return manager.id;
+  }
+
+  // ───────── Reembolsos ─────────
+
+  /**
+   * Devuelve todo o parte de un pago. Tarjeta (Stripe): se devuelve a la tarjeta del cliente.
+   * Efectivo: sale de la caja (queda como salida). Otro / tarjeta manual: solo se registra.
+   */
+  async refund(actor: EmployeeActor, paymentId: string, dto: RefundDto): Promise<BillView> {
+    const recent = this.recentRefunds.get(dto.clientRequestId);
+    if (recent && Date.now() - recent.at < 10 * 60_000) return this.view(recent.billId);
+
+    const authorizedById = await this.authorizeFor(actor, 'payments.refund', dto.managerPin);
+    const payment = await this.prisma.payment.findUnique({ where: { id: paymentId }, include: { refunds: true } });
+    if (!payment) throw new NotFoundException('Pago no encontrado');
+    if (payment.status !== 'SUCCEEDED') throw new ConflictException('Solo se reembolsan pagos cobrados');
+    const available = payment.amount.minus(sum(payment.refunds.map((r) => r.amount)));
+    const amount = D(dto.amount ?? available.toNumber()).toDecimalPlaces(2);
+    if (available.lte(0)) throw new ConflictException('Este pago ya se reembolsó completo');
+    if (amount.lte(0) || amount.gt(available.plus(0.001))) {
+      throw new BadRequestException(`Se pueden reembolsar hasta $${available.toFixed(2)} de este pago`);
+    }
+    const reason = dto.reason.trim();
+
+    let shiftId: string | null = null;
+    if (payment.method === 'CASH') {
+      const shift = await this.prisma.cashShift.findFirst({ where: { closedAt: null }, orderBy: { openedAt: 'desc' } });
+      if (!shift) throw new ConflictException('Abre la caja para devolver efectivo');
+      shiftId = shift.id;
+    }
+
+    let stripeRefundId: string | null = null;
+    if (payment.stripePaymentIntentId) {
+      try {
+        const refund = await this.stripe.api.refunds.create(
+          {
+            payment_intent: payment.stripePaymentIntentId,
+            amount: amount.times(100).toDecimalPlaces(0).toNumber(),
+            reason: 'requested_by_customer',
+            metadata: { billId: payment.billId, paymentId: payment.id },
+          },
+          { idempotencyKey: `refund-${dto.clientRequestId}` },
+        );
+        if (refund.status === 'failed' || refund.status === 'canceled') throw new Error('Stripe no pudo hacer el reembolso');
+        stripeRefundId = refund.id;
+      } catch (error) {
+        const message = (error as { message?: string }).message ?? 'Stripe no pudo hacer el reembolso';
+        throw new BadRequestException(`No se pudo reembolsar la tarjeta: ${message}`);
+      }
+    }
+
+    try {
+      await this.prisma.$transaction(async (tx) => {
+        await tx.refund.create({ data: { paymentId, amount, reason, stripeRefundId, employeeId: actor.id } });
+        if (shiftId) {
+          await tx.cashMovement.create({
+            data: { shiftId, type: 'PAY_OUT', amount, reason: `Reembolso: ${reason}`.slice(0, 200), employeeId: actor.id },
+          });
+        }
+        // Todo lo cobrado de la cuenta se devolvió: queda reembolsada.
+        const payments = await tx.payment.findMany({ where: { billId: payment.billId, status: 'SUCCEEDED' }, include: { refunds: true } });
+        const paid = sum(payments.map((p) => p.amount));
+        const back = sum(payments.flatMap((p) => p.refunds.map((r) => r.amount)));
+        if (paid.gt(0) && back.gte(paid)) await tx.bill.update({ where: { id: payment.billId }, data: { status: 'REFUNDED' } });
+      });
+    } catch (error) {
+      // El mismo reembolso de Stripe llegó dos veces (misma clave): ya está guardado.
+      if (!isUniqueViolation(error)) throw error;
+    }
+    this.recentRefunds.set(dto.clientRequestId, { at: Date.now(), billId: payment.billId });
+    await this.audit.log(actor, 'payment.refund', 'bill', payment.billId, {
+      paymentId,
+      method: payment.method,
+      amount: amount.toString(),
+      reason,
+      stripeRefundId,
+      authorizedById,
+    });
+    return this.afterChange(actor, payment.billId);
   }
 
   // ───────── Dividir y juntar ─────────

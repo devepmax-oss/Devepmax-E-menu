@@ -21,6 +21,9 @@ const money = { maxDecimalPlaces: 2 } as const;
 export class BillsQueryDto {
   /** Solo las cuentas de esta mesa (también las ya pagadas de la visita en curso). */
   @IsOptional() @IsString() tableId?: string;
+
+  /** open = por cobrar (por defecto); paid = cobradas hoy (recibos y reembolsos). */
+  @IsOptional() @IsIn(['open', 'paid']) scope?: 'open' | 'paid';
 }
 
 export class PaymentDto {
@@ -130,4 +133,22 @@ export class TablePayIntentDto {
 export class TablePayConfirmDto {
   @Matches(/^pi_[A-Za-z0-9]{8,64}$/, { message: 'Pago inválido' })
   paymentIntentId: string;
+}
+
+export class RefundDto {
+  @Matches(/^[A-Za-z0-9_-]{8,64}$/, { message: 'clientRequestId inválido' })
+  clientRequestId: string;
+
+  /** Cuánto devolver (si falta, todo lo que queda del pago). */
+  @IsOptional() @Type(() => Number) @IsNumber(money) @Min(0.01) @Max(100000) amount?: number;
+
+  @IsString() @MinLength(3) @MaxLength(200) reason: string;
+
+  /** PIN de un gerente, si quien reembolsa no tiene el permiso. */
+  @IsOptional() @Matches(/^\d{4,6}$/, { message: 'PIN inválido' }) managerPin?: string;
+}
+
+export class SendReceiptDto {
+  @IsOptional() @IsEmail({}, { message: 'Correo inválido' }) @MaxLength(120) email?: string;
+  @IsOptional() @Matches(/^[0-9+()\-.\s]{7,20}$/, { message: 'Teléfono inválido' }) phone?: string;
 }

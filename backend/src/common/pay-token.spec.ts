@@ -1,4 +1,4 @@
-import { signTablePay, verifyTablePay } from './pay-token';
+import { signReceipt, signTablePay, verifyReceipt, verifyTablePay } from './pay-token';
 
 const SECRET = 'x'.repeat(40);
 
@@ -17,5 +17,12 @@ describe('enlace de pago de la mesa', () => {
     expect(verifyTablePay(`${id}.AAAAAAAAAAAAAAAAAAAAAA`, SECRET)).toBeNull();
     expect(verifyTablePay('basura', SECRET)).toBeNull();
     expect(verifyTablePay(`${token}.extra`, SECRET)).toBeNull();
+  });
+
+  it('un enlace de pago no sirve como recibo (ni al revés)', () => {
+    const id = 'clx1abc234def567ghi890';
+    expect(verifyReceipt(signReceipt(id, SECRET), SECRET)).toBe(id);
+    expect(verifyReceipt(signTablePay(id, SECRET), SECRET)).toBeNull();
+    expect(verifyTablePay(signReceipt(id, SECRET), SECRET)).toBeNull();
   });
 });

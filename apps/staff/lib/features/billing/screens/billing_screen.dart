@@ -4,6 +4,7 @@ import 'package:collection/collection.dart';
 import 'package:devepmax_ui/devepmax_ui.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
 import '../../../core/auth/auth_controller.dart';
@@ -15,6 +16,8 @@ import '../data/billing_api.dart';
 import '../data/billing_models.dart';
 import 'discount_dialog.dart';
 import 'pay_dialog.dart';
+import 'receipt_dialog.dart';
+import 'refund_dialog.dart';
 import 'shift_dialogs.dart';
 
 /// Caja: cuentas por cobrar a la izquierda, la cuenta elegida a la derecha.
@@ -60,10 +63,12 @@ class _BillingScreenState extends ConsumerState<BillingScreen> {
   @override
   Widget build(BuildContext context) {
     final t = BrandTokens.of(context);
-    final bills = ref.watch(openBillsProvider);
+    final paidMode = _filter == 'PAID';
+    final openBills = ref.watch(openBillsProvider);
+    final bills = paidMode ? ref.watch(paidBillsProvider) : openBills;
     final status = ref.watch(realtimeProvider);
     final wide = MediaQuery.sizeOf(context).width >= 1000;
-    final list = bills.value ?? const <BillView>[];
+    final list = openBills.value ?? const <BillView>[];
 
     // Si se llegó desde Mesas, se elige la cuenta de esa mesa una sola vez.
     if (!_pickedFromRoute && widget.tableId != null && bills.hasValue) {
@@ -71,18 +76,25 @@ class _BillingScreenState extends ConsumerState<BillingScreen> {
       final match = list.firstWhereOrNull((b) => b.tableId == widget.tableId);
       if (match != null) _selected = match.id;
     }
-    final visible = list.where(_matches).toList();
+    final visible = paidMode ? (bills.value ?? const <BillView>[]) : list.where(_matches).toList();
     final requested = list.where((b) => b.billRequested).length;
 
     return Scaffold(
       backgroundColor: t.bg,
       appBar: AppBar(
         title: Row(children: [const Text('Caja'), const SizedBox(width: 16), Flexible(child: LiveIndicator(status: status))]),
-        actions: [const _ShiftButton(), const SizedBox(width: 16)],
+        actions: [
+          if (ref.watch(authControllerProvider).value?.employee.can('orders.create') ?? false) ...[
+            AppBarAction(icon: Icons.add_shopping_cart_rounded, label: 'Nueva orden', filled: false, onPressed: () => context.go('/pos')),
+            const SizedBox(width: 8),
+          ],
+          const _ShiftButton(),
+          const SizedBox(width: 16),
+        ],
       ),
       body: bills.when(
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (error, _) => ErrorView(error: error, onRetry: () => ref.invalidate(openBillsProvider)),
+        error: (error, _) => ErrorView(error: error, onRetry: () => ref.invalidate(paidMode ? paidBillsProvider : openBillsProvider)),
         data: (_) {
           final listPane = Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
             Padding(
@@ -93,6 +105,7 @@ class _BillingScreenState extends ConsumerState<BillingScreen> {
                   ('TABLE', 'Mesas'),
                   ('TOGO', 'Para llevar'),
                   if (requested > 0) ('REQUESTED', 'Pidieron la cuenta · $requested'),
+                  ('PAID', 'Pagadas hoy'),
                 ])
                   ChoiceChip(
                     label: Text(label),
@@ -104,7 +117,7 @@ class _BillingScreenState extends ConsumerState<BillingScreen> {
             ),
             Expanded(
               child: visible.isEmpty
-                  ? const EmptyState(icon: Icons.point_of_sale_rounded, message: 'No hay cuentas por cobrar.')
+                  ? EmptyState(icon: Icons.point_of_sale_rounded, message: paidMode ? 'Todavía no hay cuentas cobradas hoy.' : 'No hay cuentas por cobrar.')
                   : ListView.separated(
                       padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
                       itemCount: visible.length,
@@ -269,7 +282,19 @@ class _BillPanelState extends ConsumerState<BillPanel> {
     ref.invalidate(billProvider(widget.billId));
     if (result.change > 0.004) await showChangeDialog(context, result.change);
     if (!mounted) return;
-    showSuccess(context, result.bill.status == 'PAID' ? '${bill.label}: pagada' : 'Cobro registrado · quedan ${formatMoney(result.bill.due)}');
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Text(result.bill.status == 'PAID' ? '${bill.label}: pagada' : 'Cobro registrado · quedan ${formatMoney(result.bill.due)}'),
+      action: SnackBarAction(label: 'Recibo', onPressed: () => showReceiptDialog(context, result.bill)),
+      duration: const Duration(seconds: 6),
+    ));
+  }
+
+  Future<void> _refund(BillPayment p) async {
+    final updated = await showRefundDialog(context, p);
+    if (updated == null || !mounted) return;
+    ref.invalidate(billProvider(widget.billId));
+    ref.invalidate(openBillsProvider);
+    showSuccess(context, updated.status == 'REFUNDED' ? 'Cuenta reembolsada' : 'Reembolso registrado');
   }
 
   Future<void> _removeDiscount(BillDiscount d) async {
@@ -311,7 +336,10 @@ class _BillPanelState extends ConsumerState<BillPanel> {
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Row(children: [
             Expanded(child: Text(bill.label, style: text.headlineMedium)),
-            if (!open) DmPill(bill.status == 'PAID' ? 'Pagada' : bill.status, tone: DmTone.success, icon: Icons.check_rounded),
+            if (!open)
+              bill.status == 'REFUNDED'
+                  ? const DmPill('Reembolsada', tone: DmTone.danger, icon: Icons.undo_rounded)
+                  : DmPill(bill.status == 'PAID' ? 'Pagada' : bill.status, tone: DmTone.success, icon: Icons.check_rounded),
           ]),
           const SizedBox(height: 6),
           Wrap(spacing: 8, runSpacing: 6, children: [
@@ -406,8 +434,22 @@ class _BillPanelState extends ConsumerState<BillPanel> {
                   if (p.tipAmount > 0) 'propina ${formatMoney(p.tipAmount)}',
                   if ((p.changeGiven ?? 0) > 0) 'cambio ${formatMoney(p.changeGiven!)}',
                 ].join(' · ')),
-                trailing: Text(formatMoney(p.amount), style: text.titleMedium),
+                trailing: Row(mainAxisSize: MainAxisSize.min, children: [
+                  Text(formatMoney(p.amount), style: text.titleMedium),
+                  if (p.refundable > 0.004)
+                    IconButton(tooltip: 'Reembolsar', onPressed: _busy ? null : () => _refund(p), icon: const Icon(Icons.undo_rounded)),
+                ]),
               ),
+            for (final p in bill.payments.where((p) => p.status == 'SUCCEEDED'))
+              for (final r in p.refunds)
+                ListTile(
+                  contentPadding: const EdgeInsets.only(left: 40),
+                  dense: true,
+                  leading: Icon(Icons.undo_rounded, color: t.danger, size: 20),
+                  title: Text('Reembolso · ${paymentMethodLabels[p.method] ?? p.method}'),
+                  subtitle: Text([time.format(r.createdAt), r.reason, if (r.employee != null) r.employee!].join(' · ')),
+                  trailing: Text('−${formatMoney(r.amount)}', style: text.titleSmall?.copyWith(color: t.danger)),
+                ),
           ],
           Divider(height: 28, color: t.line),
           total('Subtotal', bill.subtotal),
@@ -420,8 +462,22 @@ class _BillPanelState extends ConsumerState<BillPanel> {
             total('Pagado', bill.amountPaid, color: t.success),
             total('Por cobrar', bill.due, bold: true, color: bill.due > 0 ? t.accentText : t.success),
           ],
+          if (bill.refundedTotal > 0) total('Reembolsado', -bill.refundedTotal, color: t.danger),
         ]),
       ),
+      if (!open)
+        Container(
+          padding: const EdgeInsets.fromLTRB(24, 14, 24, 18),
+          decoration: BoxDecoration(color: t.surface, border: Border(top: BorderSide(color: t.line))),
+          child: Wrap(alignment: WrapAlignment.end, spacing: 10, runSpacing: 10, children: [
+            FilledButton.icon(
+              style: FilledButton.styleFrom(minimumSize: const Size(200, 52)),
+              onPressed: () => showReceiptDialog(context, bill),
+              icon: const Icon(Icons.receipt_rounded),
+              label: const Text('Recibo'),
+            ),
+          ]),
+        ),
       if (open)
         Container(
           padding: const EdgeInsets.fromLTRB(24, 14, 24, 18),
@@ -452,6 +508,11 @@ class _BillPanelState extends ConsumerState<BillPanel> {
                   ),
                 ])
               : Wrap(alignment: WrapAlignment.end, spacing: 10, runSpacing: 10, children: [
+                  OutlinedButton.icon(
+                    onPressed: _busy ? null : () => showReceiptDialog(context, bill),
+                    icon: const Icon(Icons.receipt_rounded),
+                    label: const Text('Cuenta / recibo'),
+                  ),
                   OutlinedButton.icon(
                     onPressed: _busy
                         ? null
