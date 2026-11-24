@@ -12,6 +12,7 @@ dependencies:
   devepmax_ui:
     path: ../packages/ui
 
+  audioplayers: ^6.6.0
   cupertino_icons: ^1.0.8
   collection: ^1.19.1
   dio: ^5.9.2
@@ -32,3 +33,4 @@ flutter:
   uses-material-design: true
   assets:
     - assets/images/
+    - assets/sounds/

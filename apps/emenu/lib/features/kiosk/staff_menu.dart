@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/api_exception.dart';
 import '../../core/device_session.dart';
 import '../../core/widgets.dart';
+import '../kitchen/kitchen_data.dart';
 import '../menu/menu_data.dart';
 import '../table/table_data.dart';
 import 'kiosk.dart';
@@ -155,7 +156,8 @@ class _StaffOptions extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final t = BrandTokens.of(context);
     final session = ref.watch(deviceSessionProvider).value;
-    final table = ref.watch(tableProvider).value;
+    final kitchen = session?.isKitchen ?? false;
+    final table = kitchen ? null : ref.watch(tableProvider).value;
 
     Widget option(IconData icon, String title, String subtitle, VoidCallback onTap, {bool danger = false}) => ListTile(
           leading: Icon(icon, color: danger ? t.danger : t.accentText),
@@ -170,25 +172,35 @@ class _StaffOptions extends ConsumerWidget {
         width: 460,
         child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
           Text(
-            '${session?.deviceName ?? 'Tablet'}${table?.label != null ? ' · Mesa ${table!.label}' : ' · sin mesa'}',
+            kitchen
+                ? '${session?.deviceName ?? 'Pantalla'} · cocina'
+                : '${session?.deviceName ?? 'Tablet'}${table?.label != null ? ' · Mesa ${table!.label}' : ' · sin mesa'}',
             style: TextStyle(color: t.muted),
           ),
           const SizedBox(height: 12),
-          option(Icons.refresh_rounded, 'Recargar', 'Vuelve a cargar el menú y la mesa', () {
-            ref.read(menuProvider.notifier).reload();
-            ref.read(tableProvider.notifier).refresh();
-            ref.invalidate(brandProvider);
-            Navigator.pop(context);
-          }),
-          option(Icons.home_rounded, 'Volver a la bienvenida', 'Vacía el pedido que estaban armando', () {
-            ref.read(kioskStageProvider.notifier).reset();
-            Navigator.pop(context);
-          }),
-          option(Icons.link_off_rounded, 'Desvincular esta tablet', 'Para usarla en otra mesa o cambiarla', () async {
+          if (kitchen)
+            option(Icons.refresh_rounded, 'Recargar', 'Vuelve a cargar los tickets de la estación', () {
+              ref.read(kitchenProvider.notifier).reload();
+              ref.invalidate(brandProvider);
+              Navigator.pop(context);
+            })
+          else ...[
+            option(Icons.refresh_rounded, 'Recargar', 'Vuelve a cargar el menú y la mesa', () {
+              ref.read(menuProvider.notifier).reload();
+              ref.read(tableProvider.notifier).refresh();
+              ref.invalidate(brandProvider);
+              Navigator.pop(context);
+            }),
+            option(Icons.home_rounded, 'Volver a la bienvenida', 'Vacía el pedido que estaban armando', () {
+              ref.read(kioskStageProvider.notifier).reset();
+              Navigator.pop(context);
+            }),
+          ],
+          option(Icons.link_off_rounded, kitchen ? 'Desvincular esta pantalla' : 'Desvincular esta tablet', 'Para usarla en otro lugar o cambiarla', () async {
             final ok = await showDialog<bool>(
               context: context,
               builder: (context) => AlertDialog(
-                title: const Text('¿Desvincular la tablet?'),
+                title: Text(kitchen ? '¿Desvincular la pantalla?' : '¿Desvincular la tablet?'),
                 content: const Text('Para volver a usarla hay que generar un código nuevo en la app Staff → Dispositivos.'),
                 actions: [
                   TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancelar')),

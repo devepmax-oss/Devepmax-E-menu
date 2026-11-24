@@ -219,7 +219,12 @@ class _PairingDialogState extends ConsumerState<_PairingDialog> {
                       style: Theme.of(context).textTheme.titleMedium),
                 ])
               : Column(key: const ValueKey('code'), mainAxisSize: MainAxisSize.min, children: [
-                  const Text('Escanéalo con la cámara del dispositivo:', textAlign: TextAlign.center),
+                  Text(
+                    widget.device.type == 'EMENU' || widget.device.type == 'KDS'
+                        ? 'Abre la app de la tablet (la misma para mesas y cocina) y escanéalo:'
+                        : 'Escanéalo con la cámara del dispositivo:',
+                    textAlign: TextAlign.center,
+                  ),
                   const SizedBox(height: 16),
                   Container(
                     padding: const EdgeInsets.all(14),

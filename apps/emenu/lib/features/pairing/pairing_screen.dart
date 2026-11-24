@@ -92,11 +92,11 @@ class _PairingScreenState extends ConsumerState<PairingScreen> {
       children: [
         Icon(Icons.tablet_android_rounded, size: 56, color: t.accentText),
         const SizedBox(height: 16),
-        Text('Vincula esta tablet', style: text.displaySmall, textAlign: wide ? TextAlign.start : TextAlign.center),
+        Text('Vincula este aparato', style: text.displaySmall, textAlign: wide ? TextAlign.start : TextAlign.center),
         const SizedBox(height: 16),
         for (final (i, step) in const [
           'En la app Staff abre Dispositivos.',
-          'Crea o edita la "Tablet de mesa" y asígnale su mesa.',
+          'Crea una "Tablet de mesa" (con su mesa) o una "Pantalla de cocina" (con su estación).',
           'Toca "Generar código" y muestra el QR a esta tablet.',
         ].indexed)
           Padding(

@@ -7,22 +7,29 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../app/config.dart';
 import 'api_exception.dart';
 
-/// La tablet vinculada: su token de dispositivo y el servidor del restaurante.
+/// El aparato vinculado: su token, el servidor del restaurante y qué es (tablet de mesa o
+/// pantalla de cocina). La misma app sirve para las dos cosas según el código con que se vincula.
 class DeviceSession {
-  const DeviceSession({required this.token, required this.apiBaseUrl, required this.deviceId, required this.deviceName});
+  const DeviceSession({required this.token, required this.apiBaseUrl, required this.deviceId, required this.deviceName, this.type = 'EMENU'});
 
   final String token;
   final String apiBaseUrl;
   final String deviceId;
   final String deviceName;
 
-  Map<String, dynamic> toJson() => {'token': token, 'api': apiBaseUrl, 'id': deviceId, 'name': deviceName};
+  /// EMENU (tablet de mesa) o KDS (pantalla de cocina).
+  final String type;
+
+  bool get isKitchen => type == 'KDS';
+
+  Map<String, dynamic> toJson() => {'token': token, 'api': apiBaseUrl, 'id': deviceId, 'name': deviceName, 'type': type};
 
   factory DeviceSession.fromJson(Map<String, dynamic> j) => DeviceSession(
         token: j['token'] as String,
         apiBaseUrl: j['api'] as String,
         deviceId: j['id'] as String,
         deviceName: j['name'] as String? ?? 'Tablet',
+        type: j['type'] as String? ?? 'EMENU',
       );
 }
 
@@ -86,14 +93,16 @@ class DeviceSessionController extends AsyncNotifier<DeviceSession?> {
       throw ApiException.from(error);
     }
     final device = data['device'] as Map<String, dynamic>;
-    if (device['type'] != 'EMENU') {
-      throw ApiException('Ese código es de otro tipo de dispositivo. En Dispositivos, crea una "Tablet de mesa".');
+    final type = device['type'] as String?;
+    if (type != 'EMENU' && type != 'KDS') {
+      throw ApiException('Ese código es de una caja o de un mesero. Aquí se vinculan tablets de mesa y pantallas de cocina.');
     }
     final session = DeviceSession(
       token: data['deviceToken'] as String,
       apiBaseUrl: base,
       deviceId: device['id'] as String,
       deviceName: device['name'] as String? ?? 'Tablet',
+      type: type!,
     );
     await _storage.write(session);
     state = AsyncData(session);

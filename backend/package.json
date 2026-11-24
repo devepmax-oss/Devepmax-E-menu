@@ -25,6 +25,7 @@
     "smoke:terminal": "tsx scripts/smoke-terminal.ts",
     "smoke:tablepay": "tsx scripts/smoke-tablepay.ts",
     "smoke:refunds": "tsx scripts/smoke-refunds.ts",
+    "smoke:kds": "tsx scripts/smoke-kds.ts",
     "demo:orders": "tsx scripts/demo-orders.ts"
   },
   "dependencies": {

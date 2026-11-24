@@ -6,6 +6,7 @@ import 'package:wakelock_plus/wakelock_plus.dart';
 
 import 'core/device_session.dart';
 import 'core/realtime.dart';
+import 'features/kitchen/kitchen_screen.dart';
 import 'features/kiosk/kiosk.dart';
 import 'features/kiosk/welcome_screen.dart';
 import 'features/menu/menu_data.dart';
@@ -41,7 +42,7 @@ class EmenuApp extends ConsumerWidget {
   }
 }
 
-/// Sin vincular → vincular. Vinculada → la mesa.
+/// Sin vincular → vincular. Tablet de mesa → la mesa. Pantalla de cocina → los tickets.
 class _Root extends ConsumerWidget {
   const _Root();
 
@@ -51,8 +52,22 @@ class _Root extends ConsumerWidget {
     return session.when(
       loading: () => const _Splash(),
       error: (_, __) => const PairingScreen(),
-      data: (s) => s == null ? const PairingScreen() : const _TabletShell(),
+      data: (s) => s == null
+          ? const PairingScreen()
+          : s.isKitchen
+              ? const _KitchenShell()
+              : const _TabletShell(),
     );
+  }
+}
+
+class _KitchenShell extends ConsumerWidget {
+  const _KitchenShell();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    ref.watch(realtimeProvider); // mantiene el socket abierto
+    return const KitchenScreen();
   }
 }
 
