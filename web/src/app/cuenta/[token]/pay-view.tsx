@@ -189,9 +189,7 @@ export function PayView({ config, token, initial, returnedIntent }: { config: On
               <p className="m-0 text-soft">
                 En la mesa quedan <span className="font-bold text-ink">{money(remaining, currency)}</span> por pagar.
               </p>
-            ) : (
-              <p className="m-0 text-soft">Todo está pagado. ¡Que tengas buen día!</p>
-            )}
+            ) : null}
             {email.trim() && done ? <p className="m-0 text-sm text-muted">Te enviamos el recibo a {email.trim()}.</p> : null}
           </div>
           {remaining > 0 && !view.closed ? (
