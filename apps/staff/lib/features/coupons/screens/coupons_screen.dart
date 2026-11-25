@@ -260,17 +260,21 @@ class _CouponEditorState extends ConsumerState<_CouponEditor> {
               decoration: const InputDecoration(labelText: 'Nombre que ve el cliente (opcional)', hintText: '10 % de bienvenida'),
             ),
             const SizedBox(height: 16),
-            FitSegmented<String>(
-              SegmentedButton<String>(
-                segments: const [
-                  ButtonSegment(value: 'PERCENT', label: Text('%'), icon: Icon(Icons.percent_rounded)),
-                  ButtonSegment(value: 'AMOUNT', label: Text('Monto'), icon: Icon(Icons.attach_money_rounded)),
-                  ButtonSegment(value: 'FREE_DELIVERY', label: Text('Envío gratis'), icon: Icon(Icons.delivery_dining_rounded)),
-                ],
-                selected: {_type},
-                onSelectionChanged: (s) => setState(() => _type = s.first),
-              ),
-            ),
+            // Chips y no SegmentedButton: dentro de un AlertDialog no se puede usar LayoutBuilder.
+            Wrap(spacing: 8, runSpacing: 8, children: [
+              for (final (value, label, icon) in const [
+                ('PERCENT', 'Porcentaje', Icons.percent_rounded),
+                ('AMOUNT', 'Monto fijo', Icons.attach_money_rounded),
+                ('FREE_DELIVERY', 'Envío gratis', Icons.delivery_dining_rounded),
+              ])
+                ChoiceChip(
+                  avatar: Icon(icon, size: 18),
+                  label: Text(label),
+                  selected: _type == value,
+                  showCheckmark: false,
+                  onSelected: (_) => setState(() => _type = value),
+                ),
+            ]),
             const SizedBox(height: 12),
             if (_type != 'FREE_DELIVERY')
               Row(children: [
