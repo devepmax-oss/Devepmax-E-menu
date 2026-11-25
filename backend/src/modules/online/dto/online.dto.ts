@@ -45,6 +45,12 @@ export class OnlineQuoteDto {
   @ValidateNested({ each: true })
   @Type(() => OrderLineDto)
   items: OrderLineDto[];
+
+  /** Código de cupón (opcional). */
+  @IsOptional() @IsString() @MaxLength(30) couponCode?: string;
+
+  /** Teléfono del cliente, para revisar cupones de un uso por cliente al cotizar. */
+  @IsOptional() @IsString() @MaxLength(20) phone?: string;
 }
 
 export class CreateOnlineOrderDto extends OnlineQuoteDto {

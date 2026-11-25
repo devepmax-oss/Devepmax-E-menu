@@ -36,7 +36,7 @@ const BILL_INCLUDE = {
     orderBy: { id: 'asc' },
     include: { modifiers: true, discounts: true, order: { select: { id: true, number: true } } },
   },
-  discounts: true,
+  discounts: { include: { coupon: { select: { code: true } } } },
   payments: { orderBy: { createdAt: 'asc' }, include: { refunds: { orderBy: { createdAt: 'asc' } } } },
   orders: {
     orderBy: { createdAt: 'asc' },
@@ -92,6 +92,11 @@ export function toBillView(bill: BillWithAll, names: Map<string, string>) {
       : null,
     billRequested: (session?.serviceRequests.length ?? 0) > 0,
     customer: bill.customer,
+    /** Cupón aplicado (se quita con DELETE /billing/bills/:id/coupon). */
+    coupon: (() => {
+      const d = bill.discounts.find((x) => x.couponId);
+      return d ? { code: d.coupon?.code ?? '', name: d.reason, amount: d.amount } : null;
+    })(),
     openedAt: bill.createdAt,
     orders: bill.orders,
     items: bill.items.map((i) => ({

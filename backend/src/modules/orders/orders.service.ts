@@ -49,6 +49,16 @@ export interface NewOrder {
   pricingChannel: 'dine_in' | 'online';
   deliveryFee?: Prisma.Decimal;
   tipTotal?: Prisma.Decimal;
+  /** Cupón ya validado (web): descuento de la cuenta y registro del uso. */
+  coupon?: {
+    id: string;
+    type: 'PERCENT' | 'AMOUNT' | 'FREE_DELIVERY';
+    value: Prisma.Decimal | null;
+    amount: Prisma.Decimal;
+    saved: Prisma.Decimal;
+    label: string;
+    customerPhone: string | null;
+  };
 }
 
 export const ORDER_INCLUDE = {
@@ -289,6 +299,24 @@ export class OrdersService {
           });
 
           await this.createItems(tx, order.id, billId, lines, allocations);
+          if (input.coupon) {
+            const c = input.coupon;
+            if (c.amount.gt(0)) {
+              await tx.discount.create({
+                data: {
+                  billId,
+                  type: c.type === 'PERCENT' ? 'PERCENT' : 'AMOUNT',
+                  value: c.type === 'PERCENT' ? (c.value ?? new Prisma.Decimal(0)) : c.amount,
+                  amount: c.amount,
+                  reason: c.label,
+                  couponId: c.id,
+                },
+              });
+            }
+            await tx.couponRedemption.create({
+              data: { couponId: c.id, orderId: order.id, billId, customerId, customerPhone: c.customerPhone, amount: c.saved },
+            });
+          }
           if (input.status === 'PLACED') await this.placeInTx(tx, order.id, settings.prepTimeMinutes);
           await this.recomputeBill(tx, billId);
           return order.id;
@@ -597,9 +625,31 @@ export class OrdersService {
   async recomputeBill(tx: Tx, billId: string): Promise<void> {
     const bill = await tx.bill.findUniqueOrThrow({
       where: { id: billId },
-      include: { items: { where: { status: 'ACTIVE' } }, discounts: true, payments: { where: { status: 'SUCCEEDED' } } },
+      include: {
+        items: { where: { status: 'ACTIVE' } },
+        discounts: { include: { coupon: { select: { maxDiscount: true } } } },
+        payments: { where: { status: 'SUCCEEDED' } },
+      },
     });
     const activeIds = new Set(bill.items.map((i) => i.id));
+    // Un cupón de % se recalcula si la cuenta cambia (por ejemplo, otra ronda en la mesa).
+    const couponPercent = bill.discounts.find((d) => d.couponId && !d.orderItemId && d.type === 'PERCENT');
+    if (couponPercent) {
+      const lineDiscounts = bill.discounts
+        .filter((d) => d.orderItemId && activeIds.has(d.orderItemId))
+        .reduce((s, d) => s.plus(d.amount), new Prisma.Decimal(0));
+      const otherBill = bill.discounts.filter((d) => !d.orderItemId && d.id !== couponPercent.id).reduce((s, d) => s.plus(d.amount), new Prisma.Decimal(0));
+      const subtotal = bill.items.reduce((s, i) => s.plus(i.lineTotal), new Prisma.Decimal(0));
+      const base = Prisma.Decimal.max(subtotal.minus(lineDiscounts).minus(otherBill), 0);
+      let amount = base.times(couponPercent.value).div(100);
+      const cap = couponPercent.coupon?.maxDiscount;
+      if (cap && cap.gt(0)) amount = Prisma.Decimal.min(amount, cap);
+      amount = Prisma.Decimal.min(amount, base).toDecimalPlaces(2, Prisma.Decimal.ROUND_HALF_UP);
+      if (!amount.eq(couponPercent.amount)) {
+        await tx.discount.update({ where: { id: couponPercent.id }, data: { amount } });
+        couponPercent.amount = amount;
+      }
+    }
     const perItem = new Map<string, Prisma.Decimal>();
     let billDiscount = new Prisma.Decimal(0);
     for (const d of bill.discounts) {

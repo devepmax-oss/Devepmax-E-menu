@@ -437,6 +437,22 @@ class _BillPanelState extends ConsumerState<BillPanel> {
                 ]),
               ),
           ],
+          if (bill.couponCode != null)
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: Icon(Icons.confirmation_number_rounded, color: t.success),
+              title: Text('Cupón ${bill.couponCode}'),
+              subtitle: bill.couponName == null || bill.couponName == 'Cupón ${bill.couponCode}' ? null : Text(bill.couponName!),
+              trailing: Row(mainAxisSize: MainAxisSize.min, children: [
+                Text(bill.couponAmount > 0 ? '−${formatMoney(bill.couponAmount)}' : '', style: TextStyle(color: t.success, fontWeight: FontWeight.w700)),
+                if (open)
+                  IconButton(
+                    tooltip: 'Quitar cupón',
+                    onPressed: _busy ? null : () => _run(() => _api.removeCoupon(bill.id), done: 'Cupón quitado'),
+                    icon: const Icon(Icons.close_rounded),
+                  ),
+              ]),
+            ),
           if (bill.payments.isNotEmpty) ...[
             Divider(height: 24, color: t.line),
             Text('Pagos', style: text.titleMedium),
@@ -550,6 +566,17 @@ class _BillPanelState extends ConsumerState<BillPanel> {
                     icon: const Icon(Icons.local_offer_rounded),
                     label: const Text('Descuento'),
                   ),
+                  if (bill.couponCode == null)
+                    OutlinedButton.icon(
+                      onPressed: _busy
+                          ? null
+                          : () async {
+                              final code = await _askCoupon(context);
+                              if (code != null) await _run(() => _api.applyCoupon(bill.id, code), done: 'Cupón aplicado');
+                            },
+                      icon: const Icon(Icons.confirmation_number_rounded),
+                      label: const Text('Cupón'),
+                    ),
                   if (bill.tableId != null && !bill.hasPayments && bill.items.length > 1)
                     OutlinedButton.icon(
                       onPressed: _busy ? null : () => setState(() => _splitting = true),
@@ -579,4 +606,27 @@ class _BillPanelState extends ConsumerState<BillPanel> {
         ),
     ]);
   }
+}
+
+/// Pide el código del cupón que da el cliente.
+Future<String?> _askCoupon(BuildContext context) {
+  final controller = TextEditingController();
+  return showDialog<String>(
+    context: context,
+    builder: (context) => AlertDialog(
+      scrollable: true,
+      title: const Text('Cupón'),
+      content: TextField(
+        controller: controller,
+        autofocus: true,
+        textCapitalization: TextCapitalization.characters,
+        decoration: const InputDecoration(labelText: 'Código del cupón', hintText: 'VERANO10'),
+        onSubmitted: (v) => Navigator.pop(context, v.trim().isEmpty ? null : v.trim()),
+      ),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancelar')),
+        FilledButton(onPressed: () => Navigator.pop(context, controller.text.trim().isEmpty ? null : controller.text.trim()), child: const Text('Aplicar')),
+      ],
+    ),
+  );
 }

@@ -19,8 +19,8 @@ export class OnlineController {
 
   @Post('quote')
   @HttpCode(200)
-  quote(@Body() dto: OnlineQuoteDto) {
-    return this.online.quote(dto);
+  quote(@Body() dto: OnlineQuoteDto, @Headers(CUSTOMER_TOKEN_HEADER) customerToken?: string) {
+    return this.online.quote(dto, customerToken);
   }
 
   @Post('orders')

@@ -8,13 +8,15 @@ import { Prisma, RestaurantSettings } from '@prisma/client';
 import { AttemptLimiter } from '../../common/attempt-limiter';
 import { PrismaService } from '../../prisma/prisma.service';
 import { computeTotals } from '../orders/order.rules';
-import { OrdersService } from '../orders/orders.service';
+import { NewOrder, OrdersService } from '../orders/orders.service';
 import { PricingService } from '../orders/pricing.service';
 import { toPublicOrderView } from '../orders/public-order.view';
 import { DeliveryService } from '../delivery/delivery.service';
 import { PaymentsService } from '../payments/payments.service';
 import { StripeService } from '../payments/stripe.service';
 import { PromotionsService } from '../promotions/promotions.service';
+import { toE164 } from '../../common/phone';
+import { CouponsService } from '../coupons/coupons.service';
 import { CustomerAuthService } from '../customers/customer-auth.service';
 import { CustomersService } from '../customers/customers.service';
 import { SettingsService } from '../settings/settings.service';
@@ -40,6 +42,7 @@ export class OnlineService {
     private readonly delivery: DeliveryService,
     private readonly customerAuth: CustomerAuthService,
     private readonly customers: CustomersService,
+    private readonly coupons: CouponsService,
   ) {}
 
   /** Todo lo que la web necesita para arrancar: marca, horario, canales, envío y pagos. */
@@ -62,7 +65,7 @@ export class OnlineService {
   }
 
   /** Cotiza el carrito: precios, promociones, impuesto, envío, propina y total. */
-  async quote(dto: OnlineQuoteDto) {
+  async quote(dto: OnlineQuoteDto, customerToken?: string) {
     const settings = await this.settings.get();
     this.assertFulfillment(settings, dto.fulfillmentType);
     const zone = dto.fulfillmentType === 'DELIVERY' ? await this.deliveryZone() : null;
@@ -73,10 +76,31 @@ export class OnlineService {
     for (const a of allocations) {
       for (const [line, amount] of a.perLine) perLine.set(line, (perLine.get(line) ?? new Prisma.Decimal(0)).plus(amount));
     }
-    const deliveryFee = zone?.fee ?? new Prisma.Decimal(0);
+    let deliveryFee = zone?.fee ?? new Prisma.Decimal(0);
+    // Cupón: se muestra el descuento o por qué no aplica (sin impedir la cotización).
+    let coupon: { code: string; name: string; amount: Prisma.Decimal; freeDelivery: boolean; saved: Prisma.Decimal } | null = null;
+    let couponError: string | null = null;
+    if (dto.couponCode?.trim()) {
+      const subtotal = lines.reduce((s, l) => s.plus(l.lineTotal), new Prisma.Decimal(0));
+      const promos = [...perLine.values()].reduce((s, v) => s.plus(v), new Prisma.Decimal(0));
+      const customer = await this.customerAuth.resolve(customerToken);
+      try {
+        const r = await this.coupons.check(dto.couponCode, {
+          channel: 'online',
+          base: subtotal.minus(promos),
+          deliveryFee,
+          customerId: customer?.id ?? null,
+          phone: dto.phone ?? customer?.phone ?? null,
+        });
+        coupon = { code: r.coupon.code, name: r.label, amount: r.amount, freeDelivery: r.freeDelivery, saved: r.saved };
+        if (r.freeDelivery) deliveryFee = new Prisma.Decimal(0);
+      } catch (e) {
+        couponError = e instanceof BadRequestException ? (e.message as string) : 'Ese cupón no se puede usar';
+      }
+    }
     const totals = computeTotals(
       lines.map((l, i) => ({ lineTotal: l.lineTotal, taxRate: l.taxRate, discount: perLine.get(i) })),
-      { deliveryFee, tipTotal: dto.tipAmount ?? 0 },
+      { deliveryFee, tipTotal: dto.tipAmount ?? 0, billDiscount: coupon?.amount ?? 0 },
     );
     const minOrder = zone?.minOrder ?? new Prisma.Decimal(0);
     return {
@@ -91,6 +115,8 @@ export class OnlineService {
         modifiers: l.modifiers.map((m) => ({ group: m.groupNameSnapshot, option: m.optionNameSnapshot })),
       })),
       promotions: allocations.map((a) => ({ promotionId: a.promotionId, name: a.name, amount: a.amount })),
+      coupon,
+      couponError,
       totals,
       minOrder,
       meetsMinimum: totals.subtotal.gte(minOrder),
@@ -135,6 +161,33 @@ export class OnlineService {
     const address = dto.deliveryAddress;
     // Con sesión de cliente, el pedido queda en su historial.
     const customer = await this.customerAuth.resolve(customerToken);
+
+    // Cupón: se valida de nuevo con el teléfono del pedido (límites por cliente y primer pedido).
+    let coupon: NewOrder['coupon'];
+    let deliveryFee = zone?.fee;
+    if (dto.couponCode?.trim()) {
+      const lines = await this.pricing.priceLines(this.prisma, 'online', dto.items);
+      const allocations = await this.promotions.applyToLines('online', lines);
+      const subtotal = lines.reduce((s, l) => s.plus(l.lineTotal), new Prisma.Decimal(0));
+      const promos = allocations.reduce((s, a) => s.plus(a.amount), new Prisma.Decimal(0));
+      const r = await this.coupons.check(dto.couponCode, {
+        channel: 'online',
+        base: subtotal.minus(promos),
+        deliveryFee: zone?.fee ?? 0,
+        customerId: customer?.id ?? null,
+        phone: dto.customer.phone,
+      });
+      coupon = {
+        id: r.coupon.id,
+        type: r.coupon.type,
+        value: r.coupon.value,
+        amount: r.amount,
+        saved: r.saved,
+        label: r.label,
+        customerPhone: toE164(dto.customer.phone),
+      };
+      if (r.freeDelivery) deliveryFee = new Prisma.Decimal(0);
+    }
     const order = await this.orders.createOrder(
       {
         clientRequestId: dto.clientRequestId,
@@ -152,8 +205,9 @@ export class OnlineService {
         notes: dto.notes,
         items: dto.items,
         pricingChannel: 'online',
-        deliveryFee: zone?.fee,
+        deliveryFee,
         tipTotal: dto.tipAmount ? new Prisma.Decimal(dto.tipAmount) : undefined,
+        coupon,
       },
       'system',
     );

@@ -267,6 +267,7 @@ export class CustomersService {
     await this.prisma.$transaction([
       this.prisma.order.updateMany({ where: { customerId: id }, data: { customerId: null } }),
       this.prisma.bill.updateMany({ where: { customerId: id }, data: { customerId: null } }),
+      this.prisma.couponRedemption.updateMany({ where: { customerId: id }, data: { customerId: null, customerPhone: null } }),
       this.prisma.customer.delete({ where: { id } }),
     ]);
     await this.audit.log(actor, 'customer.delete', 'customer', id);
@@ -291,6 +292,8 @@ export class CustomersService {
       this.prisma.customerAddress.deleteMany({ where: { id: { in: duplicated.map((a) => a.id) } } }),
       this.prisma.customerAddress.updateMany({ where: { customerId: fromId }, data: { customerId: id } }),
       this.prisma.customerSession.updateMany({ where: { customerId: fromId }, data: { customerId: id } }),
+      this.prisma.coupon.updateMany({ where: { customerId: fromId }, data: { customerId: id } }),
+      this.prisma.couponRedemption.updateMany({ where: { customerId: fromId }, data: { customerId: id } }),
       // Primero se borra la ficha vieja para liberar su teléfono, email y Google.
       this.prisma.customer.delete({ where: { id: fromId } }),
       this.prisma.customer.update({

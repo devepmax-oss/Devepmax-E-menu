@@ -1,6 +1,6 @@
 'use client';
 
-import { ChevronLeft, CreditCard, MapPin, Store, Wallet } from 'lucide-react';
+import { ChevronLeft, CreditCard, MapPin, Store, TicketPercent, Wallet, X } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useMemo, useRef, useState } from 'react';
@@ -98,7 +98,11 @@ export function CheckoutView({ config }: { config: OnlineConfig }) {
   const requestRef = useRef<{ key: string; id: string } | null>(null);
 
   const items = useMemo(() => toOrderLines(state), [state]);
-  const { quote, error: quoteError } = useQuote(mode, items, canOrder);
+  const [couponOpen, setCouponOpen] = useState(false);
+  const [couponInput, setCouponInput] = useState('');
+  const [couponCode, setCouponCode] = useState('');
+  const { quote, error: quoteError } = useQuote(mode, items, canOrder, { couponCode, phone: info.phone, customerToken: signedIn ? token : undefined });
+  const couponOk = !!couponCode && !!quote?.coupon;
 
   // Propina: sugerida en delivery, opcional en pickup.
   const presets = config.tipPresets.length ? config.tipPresets : [15, 18, 20];
@@ -163,6 +167,7 @@ export function CheckoutView({ config }: { config: OnlineConfig }) {
         ? { deliveryAddress: { street: clean.street, city: clean.city, state: clean.state.toUpperCase(), zipCode: clean.zipCode, ...(clean.instructions ? { instructions: clean.instructions } : {}) } }
         : {}),
       ...(delivery && signedIn && saveAddress && !knownAddress ? { saveAddress: true } : {}),
+      ...(couponOk ? { couponCode } : {}),
     };
     // Mismo pedido → misma clave (tocar dos veces no duplica); pedido distinto → clave nueva.
     const key = JSON.stringify(body);
@@ -369,6 +374,57 @@ export function CheckoutView({ config }: { config: OnlineConfig }) {
                 </div>
               ) : (
                 <Notice tone="accent">{delivery ? t('El delivery se paga en línea y el pago con tarjeta aún no está activo. Elige Pickup.', 'Delivery is paid online and card payments are not active yet. Choose Pickup.') : t('No hay formas de pago disponibles.', 'No payment methods available.')}</Notice>
+              )
+            ) : null}
+
+            {!locked ? (
+              couponOk ? (
+                <div className="flex items-center gap-2 rounded-2xl bg-success/10 px-4 py-3 text-sm font-semibold text-success">
+                  <TicketPercent aria-hidden className="size-4" />
+                  <span className="flex-1">
+                    {t('Cupón', 'Coupon')} {quote!.coupon!.code}
+                  </span>
+                  <button
+                    type="button"
+                    aria-label={t('Quitar cupón', 'Remove coupon')}
+                    onClick={() => {
+                      setCouponCode('');
+                      setCouponInput('');
+                    }}
+                    className="press flex size-8 cursor-pointer items-center justify-center rounded-full border-0 bg-transparent text-success"
+                  >
+                    <X aria-hidden className="size-4" />
+                  </button>
+                </div>
+              ) : couponOpen ? (
+                <form
+                  className="flex flex-col gap-2"
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    setCouponCode(couponInput.trim());
+                  }}
+                >
+                  <div className="flex gap-2">
+                    <input
+                      value={couponInput}
+                      onChange={(e) => setCouponInput(e.target.value.toUpperCase())}
+                      aria-label={t('Código del cupón', 'Coupon code')}
+                      placeholder={t('Código del cupón', 'Coupon code')}
+                      autoCapitalize="characters"
+                      autoComplete="off"
+                      maxLength={30}
+                      className="h-12 min-w-0 flex-1 rounded-2xl border border-line bg-surface-2 px-4 font-semibold tracking-wider text-ink uppercase placeholder:font-normal placeholder:tracking-normal placeholder:normal-case placeholder:text-muted"
+                    />
+                    <Button type="submit" tone="ink" className="h-12" disabled={couponInput.trim().length < 3}>
+                      {t('Aplicar', 'Apply')}
+                    </Button>
+                  </div>
+                  {couponCode && quote?.couponError ? <span className="text-sm text-danger">{quote.couponError}</span> : null}
+                </form>
+              ) : (
+                <button type="button" onClick={() => setCouponOpen(true)} className="flex cursor-pointer items-center gap-2 self-start border-0 bg-transparent p-0 text-sm font-bold text-accent-text">
+                  <TicketPercent aria-hidden className="size-4" /> {t('¿Tienes un cupón?', 'Have a coupon?')}
+                </button>
               )
             ) : null}
 

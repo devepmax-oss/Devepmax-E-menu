@@ -62,6 +62,8 @@ export function TotalsSummary({ quote, currency, tip, mode }: { quote: Quote | n
     <dl className="m-0 flex flex-col gap-1.5 text-[15px] text-soft">
       {row('Subtotal', money(t.subtotal, currency))}
       {quote.promotions.map((p) => row(p.name, `−${money(p.amount, currency)}`, 'font-semibold text-success'))}
+      {quote.coupon && toNumber(quote.coupon.amount) > 0 ? row(quote.coupon.name, `−${money(quote.coupon.amount, currency)}`, 'font-semibold text-success') : null}
+      {quote.coupon?.freeDelivery ? row(quote.coupon.name, tr('Envío gratis', 'Free delivery'), 'font-semibold text-success') : null}
       {row(tr('Impuestos', 'Tax'), money(t.taxTotal, currency))}
       {mode === 'DELIVERY' ? row(tr('Envío', 'Delivery'), toNumber(t.deliveryFee) > 0 ? money(t.deliveryFee, currency) : tr('Gratis', 'Free')) : null}
       {tip !== undefined ? row(tr('Propina', 'Tip'), money(tipValue, currency)) : null}

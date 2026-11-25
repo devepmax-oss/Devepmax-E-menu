@@ -41,8 +41,15 @@ export const api = {
   config: () => request<OnlineConfig>('/online/config'),
   menu: () => request<PublicMenu>('/menu?channel=online'),
   promotions: () => request<PublicPromotion[]>('/promotions/public?channel=online'),
-  quote: (body: { fulfillmentType: 'PICKUP' | 'DELIVERY'; items: OrderLineInput[]; tipAmount?: number }) =>
-    request<Quote>('/online/quote', { method: 'POST', body: JSON.stringify(body) }),
+  quote: (
+    body: { fulfillmentType: 'PICKUP' | 'DELIVERY'; items: OrderLineInput[]; tipAmount?: number; couponCode?: string; phone?: string },
+    customerToken?: string,
+  ) =>
+    request<Quote>('/online/quote', {
+      method: 'POST',
+      body: JSON.stringify(body),
+      ...(customerToken ? { headers: { 'x-customer-token': customerToken } } : {}),
+    }),
   createOrder: (body: unknown, customerToken?: string) =>
     request<CreatedOrder>('/online/orders', {
       method: 'POST',

@@ -127,6 +127,9 @@ export interface Quote {
     modifiers: { group: string; option: string }[];
   }[];
   promotions: { promotionId: string; name: string; amount: Money }[];
+  /** Cupón aplicado (o null) y, si no aplica, por qué. */
+  coupon?: { code: string; name: string; amount: Money; freeDelivery: boolean; saved: Money } | null;
+  couponError?: string | null;
   totals: Totals;
   minOrder: Money;
   meetsMinimum: boolean;

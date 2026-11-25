@@ -4,6 +4,7 @@ import { NotificationsModule } from './modules/notifications/notifications.modul
 import { DeliveryModule } from './modules/delivery/delivery.module';
 import { OnlineModule } from './modules/online/online.module';
 import { CustomersModule } from './modules/customers/customers.module';
+import { CouponsModule } from './modules/coupons/coupons.module';
 import { PaymentsModule } from './modules/payments/payments.module';
 import { Module } from '@nestjs/common';
 import { HealthController } from './health/health.controller';
@@ -41,6 +42,7 @@ import { StorageModule } from './storage/storage.module';
     DeliveryModule,
     OnlineModule,
     CustomersModule,
+    CouponsModule,
   ],
   controllers: [HealthController],
 })

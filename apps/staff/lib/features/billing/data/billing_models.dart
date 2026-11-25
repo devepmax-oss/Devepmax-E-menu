@@ -183,6 +183,9 @@ class BillView {
     this.refundedTotal = 0,
     this.customerId,
     this.customerName,
+    this.couponCode,
+    this.couponName,
+    this.couponAmount = 0,
   });
 
   final String id;
@@ -212,6 +215,11 @@ class BillView {
   /// Cliente identificado en la cuenta.
   final String? customerId;
   final String? customerName;
+
+  /// Cupón aplicado.
+  final String? couponCode;
+  final String? couponName;
+  final double couponAmount;
 
   bool get isOpen => status == 'UNPAID' || status == 'PARTIALLY_PAID';
   bool get hasPayments => payments.any((p) => p.status == 'SUCCEEDED');
@@ -246,6 +254,9 @@ class BillView {
       refundedTotal: parseMoney(j['refundedTotal']),
       customerId: (j['customer'] as BJson?)?['id'] as String?,
       customerName: (j['customer'] as BJson?)?['name'] as String?,
+      couponCode: (j['coupon'] as BJson?)?['code'] as String?,
+      couponName: (j['coupon'] as BJson?)?['name'] as String?,
+      couponAmount: parseMoney((j['coupon'] as BJson?)?['amount']),
     );
   }
 }

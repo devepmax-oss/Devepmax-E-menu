@@ -1,3 +1,4 @@
+import { CouponsModule } from '../coupons/coupons.module';
 import { CustomersModule } from '../customers/customers.module';
 import { Module } from '@nestjs/common';
 import { DeliveryModule } from '../delivery/delivery.module';
@@ -9,7 +10,7 @@ import { OnlineController } from './online.controller';
 import { OnlineService } from './online.service';
 
 @Module({
-  imports: [CustomersModule, DeliveryModule, OrdersModule, PaymentsModule, PromotionsModule, SettingsModule],
+  imports: [CouponsModule, CustomersModule, DeliveryModule, OrdersModule, PaymentsModule, PromotionsModule, SettingsModule],
   controllers: [OnlineController],
   providers: [OnlineService],
 })

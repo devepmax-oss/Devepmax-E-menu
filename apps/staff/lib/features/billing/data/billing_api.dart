@@ -109,6 +109,12 @@ class BillingApi {
   Future<BillView> split(String billId, List<String> itemIds) =>
       _bill(_dio.post<Map<String, dynamic>>('/billing/bills/$billId/split', data: {'itemIds': itemIds}));
 
+  /// Cupón en la cuenta (uno por cuenta). El servidor dice si no aplica y por qué.
+  Future<BillView> applyCoupon(String billId, String code) =>
+      _bill(_dio.post<Map<String, dynamic>>('/billing/bills/$billId/coupon', data: {'code': code.trim()}));
+
+  Future<BillView> removeCoupon(String billId) => _bill(_dio.delete<Map<String, dynamic>>('/billing/bills/$billId/coupon'));
+
   Future<BillView> merge(String billId, String targetBillId) =>
       _bill(_dio.post<Map<String, dynamic>>('/billing/bills/$billId/merge', data: {'targetBillId': targetBillId}));
 

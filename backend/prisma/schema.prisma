@@ -113,6 +113,7 @@ model Customer {
   orders         Order[]
   bills          Bill[]
   sessions       CustomerSession[]
+  coupons        Coupon[]
 }
 
 /// Código de un solo uso para que el cliente entre a su cuenta (SMS o email).
@@ -420,6 +421,7 @@ model Order {
   items                OrderItem[]
   tickets              KitchenTicket[]
   deliveryAssignment   DeliveryAssignment?
+  couponRedemptions    CouponRedemption[]
 
   @@unique([businessDate, number])
   @@index([status])
@@ -779,10 +781,25 @@ model PromotionComboSlot {
   @@index([promotionId])
 }
 
+enum CouponType {
+  PERCENT // 10 % de la cuenta (con tope opcional)
+  AMOUNT // $5 menos
+  FREE_DELIVERY // envío gratis (solo web)
+}
+
+/// Cupón: código que el cliente da en la caja o escribe al pagar en la web.
 model Coupon {
   id                 String             @id @default(cuid())
   code               String             @unique // en mayúsculas
-  promotionId        String
+  name               String             @default("") // lo que ve el cliente: "10 % de bienvenida"
+  type               CouponType         @default(PERCENT)
+  value              Decimal?           @db.Decimal(10, 2) // % o $ según el tipo
+  maxDiscount        Decimal?           @db.Decimal(10, 2) // tope del descuento en %
+  promotionId        String? // reservado: cupones que activan una promoción de productos
+  appliesOnline      Boolean            @default(true)
+  appliesInStore     Boolean            @default(true)
+  firstOrderOnly     Boolean            @default(false)
+  customerId         String? // cupón personal (solo ese cliente)
   maxUses            Int?
   maxUsesPerCustomer Int?
   usesCount          Int                @default(0)
@@ -791,18 +808,26 @@ model Coupon {
   endsAt             DateTime?
   isActive           Boolean            @default(true)
   createdAt          DateTime           @default(now())
-  promotion          Promotion          @relation(fields: [promotionId], references: [id], onDelete: Cascade)
+  updatedAt          DateTime           @default(now()) @updatedAt
+  promotion          Promotion?         @relation(fields: [promotionId], references: [id], onDelete: Cascade)
+  customer           Customer?          @relation(fields: [customerId], references: [id], onDelete: Cascade)
   redemptions        CouponRedemption[]
   discounts          Discount[]
 }
 
 model CouponRedemption {
-  id         String   @id @default(cuid())
-  couponId   String
-  orderId    String
-  customerId String?
-  createdAt  DateTime @default(now())
-  coupon     Coupon   @relation(fields: [couponId], references: [id], onDelete: Cascade)
+  id            String   @id @default(cuid())
+  couponId      String
+  orderId       String
+  billId        String?
+  customerId    String?
+  customerPhone String? // +1… para limitar usos por cliente sin cuenta
+  amount        Decimal  @default(0) @db.Decimal(10, 2) // lo que ahorró (incluye envío gratis)
+  createdAt     DateTime @default(now())
+  coupon        Coupon   @relation(fields: [couponId], references: [id], onDelete: Cascade)
+  order         Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
 
   @@unique([couponId, orderId])
+  @@index([couponId])
+  @@index([customerId])
 }

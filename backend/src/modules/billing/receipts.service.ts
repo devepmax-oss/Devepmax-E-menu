@@ -144,7 +144,10 @@ export class ReceiptsService {
         discount: i.discount,
         modifiers: i.modifiers,
       })),
-      discounts: bill.discounts.map((d) => ({ id: d.id, reason: d.reason, amount: d.amount, item: d.itemName })),
+      discounts: [
+        ...bill.discounts.map((d) => ({ id: d.id, reason: d.reason, amount: d.amount, item: d.itemName })),
+        ...(bill.coupon && bill.coupon.amount.gt(0) ? [{ id: `coupon-${bill.id}`, reason: bill.coupon.name, amount: bill.coupon.amount, item: null }] : []),
+      ],
       subtotal: bill.subtotal,
       discountTotal: bill.discountTotal,
       taxTotal: bill.taxTotal,
