@@ -166,7 +166,13 @@ export class CustomerAuthService {
   options() {
     const channels = loginChannels();
     const dev = this.env.nodeEnv !== 'production';
-    return { sms: channels.sms || dev, email: channels.email || dev, googleClientId: this.env.googleClientId ?? null };
+    return {
+      sms: channels.sms || dev,
+      email: channels.email || dev,
+      googleClientId: this.env.googleClientId ?? null,
+      /** Solo en desarrollo: el código se muestra en pantalla porque no hay SMS o email configurado. */
+      testMode: { sms: dev && !channels.sms, email: dev && !channels.email },
+    };
   }
 
   private async signIn(customer: Customer, channel: Channel, target: string) {

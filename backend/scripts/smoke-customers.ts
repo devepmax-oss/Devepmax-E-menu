@@ -80,20 +80,26 @@ async function main() {
     process.exit(1);
   }
   check('un dato inválido avisa', bad.status === 400, bad.data);
-  const req = await api('POST', '/customer-auth/request', { target: P });
-  check('pide el código por SMS', req.status === 200 && req.data?.channel === 'sms', req.data);
-  check('no muestra el teléfono completo', !JSON.stringify(req.data?.sentTo ?? '').includes(P.slice(0, 6)), req.data?.sentTo);
-  const code = req.data?.devCode as string | undefined;
-  if (req.status !== 200) return summary();
-  if (!code) {
-    console.log('  ⚠ Twilio está configurado: el código llegó por SMS y esta prueba no puede leerlo. Corre la prueba sin claves de Twilio.');
-    return summary();
+  const options = (await api('GET', '/customer-auth/options')).data;
+  if (!options?.testMode?.sms) {
+    // Con Twilio configurado no se envían SMS reales a números de prueba.
+    console.log('  ⚠ Twilio está configurado: se omiten las pruebas de entrar con código y de "Mi cuenta".');
+    await api('POST', '/customers', { name: 'Prueba Cliente', phone: P }, { staff: A });
   }
+  const req = options?.testMode?.sms ? await api('POST', '/customer-auth/request', { target: P }) : { status: 0, data: null as any };
+  if (options?.testMode?.sms) {
+    check('pide el código por SMS', req.status === 200 && req.data?.channel === 'sms', req.data);
+    check('no muestra el teléfono completo', !JSON.stringify(req.data?.sentTo ?? '').includes(P.slice(0, 6)), req.data?.sentTo);
+    if (req.status !== 200) return summary();
+  }
+  const code = req.data?.devCode as string | undefined;
+  let T = '';
+  if (code) {
   const wrong = await api('POST', '/customer-auth/verify', { target: P, code: code === '000000' ? '111111' : '000000' });
   check('un código equivocado no entra', wrong.status === 400, wrong.data);
   const ok = await api('POST', '/customer-auth/verify', { target: P, code });
   check('el código correcto entra', ok.status === 200 && typeof ok.data?.token === 'string', ok.data);
-  const T = ok.data?.token as string;
+  T = ok.data?.token as string;
   check('cuenta nueva: pide el nombre', ok.data?.customer?.needsName === true || ok.data?.customer?.name === 'Prueba Cliente', ok.data?.customer);
   check('guarda el teléfono como +1…', ok.data?.customer?.phone === `+1${P}`, ok.data?.customer?.phone);
   const reuse = await api('POST', '/customer-auth/verify', { target: P, code });
@@ -115,8 +121,9 @@ async function main() {
   check('edita una dirección', edited.data?.addresses?.some((x: Json) => x.label === 'Oficina'), edited.data?.addresses);
   const removed = await api('DELETE', `/me/addresses/${work?.id}`, undefined, { customer: T });
   check('borra una dirección', removed.data?.addresses?.length === 1, removed.data?.addresses);
+  }
 
-  if (open && product) {
+  if (T && open && product) {
     console.log('\nHistorial');
     const mine = await api('POST', '/online/orders', {
       clientRequestId: rid(), fulfillmentType: 'PICKUP', paymentMethod: 'pay_at_pickup',
@@ -133,11 +140,13 @@ async function main() {
   const list = await api('GET', `/customers?q=${P.slice(-4)}`, undefined, { staff: A });
   const row = (list.data?.customers as Json[] | undefined)?.find((c) => c.phone === `+1${P}`);
   check('lo encuentra por teléfono', list.status === 200 && !!row, list.data);
-  check('con sus visitas', row?.visits === (open && product ? 2 : 0), row);
+  check('con sus visitas', row?.visits === (T && open && product ? 2 : 0), row);
   const notes = await api('PATCH', `/customers/${row?.id}`, { notes: 'Prefiere mesa junto a la ventana' }, { staff: A });
   check('guarda una nota del personal', notes.data?.notes === 'Prefiere mesa junto a la ventana', notes.data);
-  const me = (await api('GET', '/me', undefined, { customer: T })).data;
-  check('el cliente no ve las notas del personal', me && !('notes' in me) && !JSON.stringify(me).includes('ventana'), me);
+  if (T) {
+    const me = (await api('GET', '/me', undefined, { customer: T })).data;
+    check('el cliente no ve las notas del personal', me && !('notes' in me) && !JSON.stringify(me).includes('ventana'), me);
+  }
   const found = await api('GET', `/customers/lookup?phone=${P}`, undefined, { staff: A });
   check('la caja lo busca por teléfono', found.data?.customer?.id === row?.id, found.data);
   const Q = phone();
@@ -182,14 +191,16 @@ async function main() {
   const merged = await api('POST', `/customers/${row?.id}/merge`, { fromId: quick.data?.customer?.id }, { staff: A });
   check('junta dos fichas de la misma persona', merged.status === 200 && merged.data?.email === mail && merged.data?.phone === `+1${P}`, merged.data);
   check('la ficha duplicada desaparece', (await api('GET', `/customers/${quick.data?.customer?.id}`, undefined, { staff: A })).status === 404);
-  check('el cliente sigue con su sesión', (await api('GET', '/me', undefined, { customer: T })).data?.email === mail);
+  if (T) check('el cliente sigue con su sesión', (await api('GET', '/me', undefined, { customer: T })).data?.email === mail);
   const R = await api('POST', '/customers', { name: 'Prueba Borrar', phone: phone() }, { staff: A });
   const del = await api('DELETE', `/customers/${R.data?.customer?.id}`, undefined, { staff: A });
   check('borra un cliente', del.status === 204 && (await api('GET', `/customers/${R.data?.customer?.id}`, undefined, { staff: A })).status === 404, del.status);
 
-  console.log('\nSalir');
-  await api('POST', '/customer-auth/logout', undefined, { customer: T });
-  check('al salir, la sesión deja de servir', (await api('GET', '/me', undefined, { customer: T })).status === 401);
+  if (T) {
+    console.log('\nSalir');
+    await api('POST', '/customer-auth/logout', undefined, { customer: T });
+    check('al salir, la sesión deja de servir', (await api('GET', '/me', undefined, { customer: T })).status === 401);
+  }
 
   summary();
 }
