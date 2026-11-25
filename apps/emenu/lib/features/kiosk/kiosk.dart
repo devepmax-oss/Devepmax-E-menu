@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/i18n.dart';
 import '../menu/cart.dart';
 import '../table/table_data.dart';
 
@@ -27,6 +28,7 @@ class KioskStageController extends Notifier<KioskStage> {
 
   void reset() {
     ref.read(cartProvider.notifier).clear();
+    ref.read(languageProvider.notifier).reset();
     state = KioskStage.welcome;
   }
 }

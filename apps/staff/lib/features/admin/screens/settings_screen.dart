@@ -82,6 +82,8 @@ class _SettingsFormState extends ConsumerState<_SettingsForm> {
   late String _mode = _s['themeMode'] as String? ?? 'dark';
   late String _fontPair = _s['fontPair'] as String? ?? 'bricolage-inter';
   late String _timezone = _s['timezone'] as String? ?? 'America/New_York';
+  /// Idioma con que abren la tablet de mesa y la web (el cliente puede cambiarlo).
+  late String _language = ((_s['locales'] as List?)?.firstOrNull as String?) == 'en' ? 'en' : 'es';
   late bool _dineIn = _s['acceptsDineIn'] as bool? ?? true;
   late bool _pickup = _s['acceptsPickup'] as bool? ?? true;
   late bool _delivery = _s['acceptsDelivery'] as bool? ?? true;
@@ -122,6 +124,7 @@ class _SettingsFormState extends ConsumerState<_SettingsForm> {
       'state': _state.text.trim(),
       'zipCode': _zip.text.trim(),
       'timezone': _timezone,
+      'locales': _language == 'en' ? ['en', 'es'] : ['es', 'en'],
       'acceptsDineIn': _dineIn,
       'acceptsPickup': _pickup,
       'acceptsDelivery': _delivery,
@@ -313,6 +316,17 @@ class _SettingsFormState extends ConsumerState<_SettingsForm> {
                         onChanged: (v) => setState(() => _timezone = v ?? _timezone),
                       ),
                     ]),
+                    LabeledControl(
+                      label: 'Idioma de los clientes',
+                      child: FitSegmented(SegmentedButton<String>(
+                        segments: const [ButtonSegment(value: 'es', label: Text('Español primero')), ButtonSegment(value: 'en', label: Text('Inglés primero'))],
+                        selected: {_language},
+                        showSelectedIcon: false,
+                        onSelectionChanged: (s) => setState(() => _language = s.first),
+                      )),
+                    ),
+                    Text('La tablet de mesa y la web abren en este idioma; el cliente puede cambiarlo. Las traducciones de cada plato se escriben en el Menú.',
+                        style: TextStyle(color: BrandTokens.of(context).muted, fontSize: 13)),
                     _row([
                       for (var i = 0; i < 3; i++) _field(_tips[i], 'Propina sugerida ${i + 1} (%)', digits: true),
                     ]),

@@ -6,6 +6,7 @@ import '../../core/format.dart';
 import '../../core/widgets.dart';
 import 'cart.dart';
 import 'menu_data.dart';
+import '../../core/i18n.dart';
 
 /// Detalle del plato: foto grande, opciones, nota para la cocina y cantidad.
 Future<bool?> showProductSheet(BuildContext context, MenuProduct product, List<Promotion> promotions) =>
@@ -113,7 +114,7 @@ class _ProductSheetState extends ConsumerState<_ProductSheet> {
         Row(children: [
           Expanded(child: Text(g.name, style: text.titleLarge)),
           DmPill(
-            g.rule,
+            g.rule(context.lang),
             tone: g.required ? (_showErrors && !_groupOk(g) ? DmTone.danger : DmTone.primary) : DmTone.neutral,
           ),
         ]),
@@ -131,7 +132,7 @@ class _ProductSheetState extends ConsumerState<_ProductSheet> {
         ]),
       ],
       const SizedBox(height: 24),
-      Text('¿Alguna indicación para la cocina?', style: text.titleMedium),
+      Text(context.tr('¿Alguna indicación para la cocina?', 'Any notes for the kitchen?'), style: text.titleMedium),
       const SizedBox(height: 8),
       TextField(
         controller: _notes,
@@ -139,7 +140,7 @@ class _ProductSheetState extends ConsumerState<_ProductSheet> {
         maxLines: 2,
         minLines: 1,
         textCapitalization: TextCapitalization.sentences,
-        decoration: const InputDecoration(hintText: 'Sin cebolla, término medio, aparte la salsa…', border: OutlineInputBorder()),
+        decoration: InputDecoration(hintText: context.tr('Sin cebolla, término medio, aparte la salsa…', 'No onion, medium, sauce on the side…'), border: const OutlineInputBorder()),
       ),
     ]);
 
@@ -156,7 +157,7 @@ class _ProductSheetState extends ConsumerState<_ProductSheet> {
               textStyle: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
             ),
             onPressed: p.isAvailable ? _add : null,
-            child: Text(p.isAvailable ? 'Agregar · ${formatMoney(_unit * _quantity)}' : 'Agotado por hoy'),
+            child: Text(p.isAvailable ? context.tr('Agregar · ${formatMoney(_unit * _quantity)}', 'Add · ${formatMoney(_unit * _quantity)}') : context.tr('Agotado por hoy', 'Sold out today')),
           ),
         ),
       ]),
@@ -186,7 +187,7 @@ class _ProductSheetState extends ConsumerState<_ProductSheet> {
               color: Colors.black45,
               shape: const CircleBorder(),
               child: IconButton(
-                tooltip: 'Cerrar',
+                tooltip: context.tr('Cerrar', 'Close'),
                 icon: const Icon(Icons.close_rounded, color: Colors.white),
                 onPressed: () => Navigator.pop(context),
               ),
@@ -230,7 +231,7 @@ class _OptionTile extends StatelessWidget {
             Text(option.name, style: TextStyle(color: fg, fontWeight: FontWeight.w700, fontSize: 15)),
             if (!option.isAvailable) ...[
               const SizedBox(width: 6),
-              Text('· agotado', style: TextStyle(color: t.faint, fontSize: 13)),
+              Text(context.tr('· agotado', '· sold out'), style: TextStyle(color: t.faint, fontSize: 13)),
             ] else if (option.price != 0) ...[
               const SizedBox(width: 6),
               Text('${option.price > 0 ? '+' : '−'}${formatMoney(option.price.abs())}',

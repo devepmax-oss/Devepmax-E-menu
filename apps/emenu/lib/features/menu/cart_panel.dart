@@ -7,6 +7,7 @@ import '../../core/widgets.dart';
 import '../table/service_actions.dart';
 import '../table/table_data.dart';
 import 'cart.dart';
+import '../../core/i18n.dart';
 
 /// Panel de la derecha: el pedido que están armando, o el estado de lo ya pedido.
 class CartPanel extends ConsumerWidget {
@@ -61,8 +62,8 @@ class _Cart extends ConsumerWidget {
       Padding(
         padding: const EdgeInsets.fromLTRB(20, 20, 12, 8),
         child: Row(children: [
-          Expanded(child: Text('Tu pedido', style: text.headlineSmall)),
-          TextButton(onPressed: sending ? null : cart.clear, child: const Text('Vaciar')),
+          Expanded(child: Text(context.tr('Tu pedido', 'Your order'), style: text.headlineSmall)),
+          TextButton(onPressed: sending ? null : cart.clear, child: Text(context.tr('Vaciar', 'Clear'))),
         ]),
       ),
       Expanded(
@@ -97,11 +98,11 @@ class _Cart extends ConsumerWidget {
           if (q != null) ...[
             row('Subtotal', q.subtotal),
             for (final p in q.promotions) row(p.name, -p.amount, color: t.success),
-            row('Impuestos', q.taxTotal),
+            row(context.tr('Impuestos', 'Tax'), q.taxTotal),
             const SizedBox(height: 4),
             row('Total', q.total, bold: true),
           ] else
-            row(quote.isLoading ? 'Calculando…' : 'Total aprox.', estimate, bold: true),
+            row(quote.isLoading ? context.tr('Calculando…', 'Calculating…') : context.tr('Total aprox.', 'Estimated total'), estimate, bold: true),
           const SizedBox(height: 14),
           FilledButton.icon(
             style: FilledButton.styleFrom(
@@ -112,7 +113,7 @@ class _Cart extends ConsumerWidget {
             icon: sending
                 ? const SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2.5))
                 : const Icon(Icons.send_rounded),
-            label: Text(sending ? 'Enviando…' : 'Enviar a cocina'),
+            label: Text(sending ? context.tr('Enviando…', 'Sending…') : context.tr('Enviar a cocina', 'Send to the kitchen')),
           ),
         ]),
       ),
@@ -137,9 +138,9 @@ class OrdersTracker extends ConsumerWidget {
         child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
           Icon(Icons.restaurant_menu_rounded, size: 64, color: t.faint),
           const SizedBox(height: 16),
-          Text('Elige tus platos', style: text.titleLarge, textAlign: TextAlign.center),
+          Text(context.tr('Elige tus platos', 'Choose your dishes'), style: text.titleLarge, textAlign: TextAlign.center),
           const SizedBox(height: 6),
-          Text('Toca un plato para verlo y agregarlo. Cuando estés listo, envía tu pedido a la cocina.',
+          Text(context.tr('Toca un plato para verlo y agregarlo. Cuando estés listo, envía tu pedido a la cocina.', 'Tap a dish to see it and add it. When you are ready, send your order to the kitchen.'),
               style: TextStyle(color: t.muted), textAlign: TextAlign.center),
         ]),
       );
@@ -148,7 +149,7 @@ class OrdersTracker extends ConsumerWidget {
     return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
       Padding(
         padding: const EdgeInsets.fromLTRB(20, 20, 20, 8),
-        child: Text('Tus pedidos', style: text.headlineSmall),
+        child: Text(context.tr('Tus pedidos', 'Your orders'), style: text.headlineSmall),
       ),
       Expanded(
         child: ListView(padding: const EdgeInsets.fromLTRB(16, 0, 16, 12), children: [
@@ -162,7 +163,7 @@ class OrdersTracker extends ConsumerWidget {
           style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(54)),
           onPressed: () => showBillSheet(context),
           icon: const Icon(Icons.receipt_long_rounded),
-          label: Text('Ver la cuenta · ${formatMoney(session!.bill.total)}'),
+          label: Text('${context.tr('Ver la cuenta', 'View the check')} · ${formatMoney(session!.bill.total)}'),
         ),
       ),
     ]);
@@ -193,17 +194,24 @@ class _OrderCard extends StatelessWidget {
       ),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Row(children: [
-          Expanded(child: Text('Pedido ${order.number}', style: text.titleMedium)),
-          Text(elapsedLabel(order.createdAt), style: TextStyle(color: t.muted, fontSize: 12.5)),
+          Expanded(child: Text('${context.tr('Pedido', 'Order')} ${order.number}', style: text.titleMedium)),
+          Text(_ago(context, order.createdAt), style: TextStyle(color: t.muted, fontSize: 12.5)),
         ]),
         const SizedBox(height: 6),
-        DmPill(orderStatusForGuests[order.status] ?? order.status, tone: tone, icon: icon),
+        DmPill(guestOrderStatus(order.status, context.lang), tone: tone, icon: icon),
         const SizedBox(height: 8),
         for (final i in order.items)
           Text('${i.quantity}× ${i.name}', style: TextStyle(color: t.muted), maxLines: 1, overflow: TextOverflow.ellipsis),
       ]),
     );
   }
+}
+
+String _ago(BuildContext context, DateTime since) {
+  final minutes = DateTime.now().difference(since).inMinutes;
+  if (minutes < 1) return context.tr('Recién', 'Just now');
+  if (minutes < 60) return context.tr('hace $minutes min', '$minutes min ago');
+  return context.tr('hace ${minutes ~/ 60} h', '${minutes ~/ 60} h ago');
 }
 
 /// "¡Pedido enviado!" — se cierra solo a los pocos segundos.
@@ -221,10 +229,10 @@ Future<void> showOrderSent(BuildContext context, {required bool pending}) {
           child: Column(mainAxisSize: MainAxisSize.min, children: [
             Icon(Icons.check_circle_rounded, size: 96, color: t.success),
             const SizedBox(height: 16),
-            Text('¡Pedido enviado!', style: Theme.of(context).textTheme.headlineMedium),
+            Text(context.tr('¡Pedido enviado!', 'Order sent!'), style: Theme.of(context).textTheme.headlineMedium),
             const SizedBox(height: 8),
             Text(
-              pending ? 'Un mesero lo confirmará en un momento.' : 'La cocina ya lo tiene. Aquí verás cuándo esté listo.',
+              pending ? context.tr('Un mesero lo confirmará en un momento.', 'A server will confirm it in a moment.') : context.tr('La cocina ya lo tiene. Aquí verás cuándo esté listo.', 'The kitchen has it. You will see here when it is ready.'),
               textAlign: TextAlign.center,
               style: TextStyle(color: t.muted, fontSize: 16),
             ),

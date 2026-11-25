@@ -8,16 +8,19 @@ import '../../core/realtime.dart';
 
 typedef Json = Map<String, dynamic>;
 
-/// Cómo ve el cliente el estado de su pedido.
-const orderStatusForGuests = <String, String>{
-  'PENDING_APPROVAL': 'Esperando al mesero',
-  'PLACED': 'Recibido en cocina',
-  'ACCEPTED': 'Recibido en cocina',
-  'PREPARING': 'Preparándose',
-  'READY': '¡Listo! Ya te lo llevan',
-  'COMPLETED': 'Servido',
-  'CANCELLED': 'Cancelado',
-};
+/// Cómo ve el cliente el estado de su pedido, en su idioma.
+String guestOrderStatus(String status, String lang) {
+  final en = lang == 'en';
+  return switch (status) {
+    'PENDING_APPROVAL' => en ? 'Waiting for your server' : 'Esperando al mesero',
+    'PLACED' || 'ACCEPTED' => en ? 'Received in the kitchen' : 'Recibido en cocina',
+    'PREPARING' => en ? 'Being prepared' : 'Preparándose',
+    'READY' => en ? 'Ready! On its way' : '¡Listo! Ya te lo llevan',
+    'COMPLETED' => en ? 'Served' : 'Servido',
+    'CANCELLED' => en ? 'Cancelled' : 'Cancelado',
+    _ => status,
+  };
+}
 
 class GuestItem {
   const GuestItem({required this.name, required this.quantity, required this.lineTotal, required this.discount, this.notes, required this.modifiers});

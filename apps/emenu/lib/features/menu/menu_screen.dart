@@ -11,6 +11,7 @@ import 'cart.dart';
 import 'cart_panel.dart';
 import 'menu_data.dart';
 import 'product_sheet.dart';
+import '../../core/i18n.dart';
 
 /// El menú de la mesa. En tablet horizontal: categorías a la izquierda, platos al centro y el
 /// pedido a la derecha. En pantallas angostas, categorías arriba y el pedido en una barra abajo.
@@ -38,7 +39,7 @@ class _MenuScreenState extends ConsumerState<MenuScreen> {
 
   Future<void> _open(MenuCategory category, MenuProduct product, MenuData menu) async {
     final added = await showProductSheet(context, product, menu.promotionsFor(category, product));
-    if (added == true && mounted) showMessage(context, '${product.name} agregado a tu pedido');
+    if (added == true && mounted) showMessage(context, context.tr('${product.name} agregado a tu pedido', '${product.name} added to your order'));
   }
 
   @override
@@ -55,7 +56,7 @@ class _MenuScreenState extends ConsumerState<MenuScreen> {
           error: (error, _) => _Problem(message: '$error', onRetry: () => ref.read(menuProvider.notifier).reload()),
           data: (data) {
             if (data.categories.isEmpty) {
-              return const _Problem(message: 'El menú todavía no tiene platos para mesa.');
+              return _Problem(message: context.tr('El menú todavía no tiene platos para mesa.', 'The menu has no dishes yet.'));
             }
             final category = data.categories.firstWhereOrNull((c) => c.id == _categoryId) ?? data.categories.first;
             final grid = _ProductGrid(
@@ -107,7 +108,9 @@ class _CategoryRail extends ConsumerWidget {
       decoration: BoxDecoration(color: t.rail, border: Border(right: BorderSide(color: t.line))),
       child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
         const Padding(padding: EdgeInsets.fromLTRB(20, 24, 20, 8), child: Center(child: StaffLogo(height: 64))),
-        if (table?.label != null) Center(child: DmPill('Mesa ${table!.label}', tone: DmTone.accent, icon: Icons.table_restaurant_rounded)),
+        if (table?.label != null) Center(child: DmPill('${context.tr('Mesa', 'Table')} ${table!.label}', tone: DmTone.accent, icon: Icons.table_restaurant_rounded)),
+        const SizedBox(height: 12),
+        const Center(child: LanguageToggle(compact: true)),
         const SizedBox(height: 16),
         Expanded(
           child: ListView(padding: const EdgeInsets.symmetric(horizontal: 12), children: [
@@ -187,7 +190,9 @@ class _TopBar extends ConsumerWidget {
         Row(children: [
           const StaffLogo(height: 40),
           const SizedBox(width: 12),
-          if (table?.label != null) DmPill('Mesa ${table!.label}', tone: DmTone.accent),
+          if (table?.label != null) DmPill('${context.tr('Mesa', 'Table')} ${table!.label}', tone: DmTone.accent),
+          const SizedBox(width: 8),
+          const LanguageToggle(compact: true),
           const SizedBox(width: 12),
           const Expanded(child: ServiceActions(vertical: false, compact: true)),
         ]),
@@ -232,7 +237,7 @@ class _ProductGrid extends StatelessWidget {
         sliver: SliverToBoxAdapter(
           child: Row(crossAxisAlignment: CrossAxisAlignment.end, children: [
             Expanded(child: Text(category.name, style: text.displaySmall)),
-            Text('${category.products.length} ${category.products.length == 1 ? 'plato' : 'platos'}', style: TextStyle(color: t.muted)),
+            Text('${category.products.length} ${category.products.length == 1 ? context.tr('plato', 'dish') : context.tr('platos', 'dishes')}', style: TextStyle(color: t.muted)),
           ]),
         ),
       ),
@@ -296,7 +301,7 @@ class _ProductCard extends ConsumerWidget {
                 Container(
                   color: Colors.black45,
                   alignment: Alignment.center,
-                  child: const DmPill('Agotado', tone: DmTone.danger),
+                  child: DmPill(context.tr('Agotado', 'Sold out'), tone: DmTone.danger),
                 ),
               if (inCart > 0)
                 Positioned(
@@ -305,7 +310,7 @@ class _ProductCard extends ConsumerWidget {
                   child: Container(
                     padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                     decoration: BoxDecoration(color: t.primary, borderRadius: BorderRadius.circular(99)),
-                    child: Text('$inCart en tu pedido',
+                    child: Text(context.tr('$inCart en tu pedido', '$inCart in your order'),
                         style: TextStyle(color: t.onPrimary, fontWeight: FontWeight.w800, fontSize: 12.5)),
                   ),
                 ),
@@ -373,7 +378,7 @@ class _CartBar extends ConsumerWidget {
           builder: (context) => SizedBox(height: MediaQuery.sizeOf(context).height * 0.85, child: const CartPanel(inSheet: true)),
         ),
         child: Text(
-          count > 0 ? 'Ver tu pedido ($count) · ${formatMoney(total)}' : 'Tus pedidos y la cuenta',
+          count > 0 ? context.tr('Ver tu pedido ($count) · ${formatMoney(total)}', 'View your order ($count) · ${formatMoney(total)}') : context.tr('Tus pedidos y la cuenta', 'Your orders and the check'),
           style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w800),
         ),
       ),
@@ -396,7 +401,7 @@ class _Problem extends StatelessWidget {
         Text(message, textAlign: TextAlign.center, style: Theme.of(context).textTheme.titleMedium),
         if (onRetry != null) ...[
           const SizedBox(height: 16),
-          FilledButton(onPressed: onRetry, child: const Text('Reintentar')),
+          FilledButton(onPressed: onRetry, child: Text(context.tr('Reintentar', 'Try again'))),
         ],
       ]),
     );

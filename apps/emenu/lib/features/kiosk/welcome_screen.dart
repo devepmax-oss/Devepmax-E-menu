@@ -8,6 +8,7 @@ import '../menu/menu_data.dart';
 import '../table/service_actions.dart';
 import '../table/table_data.dart';
 import 'kiosk.dart';
+import '../../core/i18n.dart';
 
 /// Pantalla de bienvenida: el logo grande y un solo botón para empezar.
 class WelcomeScreen extends ConsumerWidget {
@@ -42,11 +43,11 @@ class WelcomeScreen extends ConsumerWidget {
                   child: Column(mainAxisSize: MainAxisSize.min, children: [
                     const StaffLogo(height: 132),
                     const SizedBox(height: 28),
-                    Text('Bienvenidos', style: text.displayMedium, textAlign: TextAlign.center),
+                    Text(context.tr('Bienvenidos', 'Welcome'), style: text.displayMedium, textAlign: TextAlign.center),
                     const SizedBox(height: 8),
                     Text(brand.name, style: text.titleLarge?.copyWith(color: t.muted), textAlign: TextAlign.center),
                     const SizedBox(height: 20),
-                    DmPill('Mesa ${table.label}', tone: DmTone.accent, icon: Icons.table_restaurant_rounded),
+                    DmPill('${context.tr('Mesa', 'Table')} ${table.label}', tone: DmTone.accent, icon: Icons.table_restaurant_rounded),
                     const SizedBox(height: 40),
                     FilledButton.icon(
                       style: FilledButton.styleFrom(
@@ -56,18 +57,19 @@ class WelcomeScreen extends ConsumerWidget {
                       ),
                       onPressed: () => ref.read(kioskStageProvider.notifier).start(),
                       icon: const Icon(Icons.restaurant_menu_rounded, size: 28),
-                      label: const Text('Ver el menú'),
+                      label: Text(context.tr('Ver el menú', 'See the menu')),
                     ),
                     const SizedBox(height: 24),
                     const SizedBox(width: 340, child: ServiceActions(vertical: false, compact: true)),
                   ]),
                 ),
               ),
+              const Positioned(top: 16, right: 16, child: LanguageToggle()),
               Positioned(
                 bottom: 16,
                 left: 0,
                 right: 0,
-                child: Text('Toca la pantalla para empezar', textAlign: TextAlign.center, style: TextStyle(color: t.faint)),
+                child: Text(context.tr('Toca la pantalla para empezar', 'Tap the screen to start'), textAlign: TextAlign.center, style: TextStyle(color: t.faint)),
               ),
             ]),
           ),

@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/device_session.dart';
 import '../../core/format.dart';
+import '../../core/i18n.dart';
 import '../../core/realtime.dart';
 
 typedef Json = Map<String, dynamic>;
@@ -16,9 +17,9 @@ class MenuOption {
   final bool isDefault;
   final bool isAvailable;
 
-  factory MenuOption.fromJson(Json j) => MenuOption(
+  factory MenuOption.fromJson(Json j, [String lang = 'es']) => MenuOption(
         id: j['id'] as String,
-        name: j['name'] as String,
+        name: translated(j['translations'], lang, 'name', j['name'] as String),
         price: parseMoney(j['priceAdjustment']),
         isDefault: j['isDefault'] as bool? ?? false,
         isAvailable: j['isAvailable'] as bool? ?? true,
@@ -45,20 +46,26 @@ class ModifierGroup {
   int? get max => single ? 1 : maxSelect;
   bool get required => minSelect > 0;
 
-  String get rule {
+  String rule([String lang = 'es']) {
     final m = max;
-    if (minSelect > 0 && m == minSelect) return 'Elige $minSelect';
-    if (minSelect > 0) return 'Elige al menos $minSelect${m != null ? ' (hasta $m)' : ''}';
+    final en = lang == 'en';
+    if (minSelect > 0 && m == minSelect) return en ? 'Choose $minSelect' : 'Elige $minSelect';
+    if (minSelect > 0) {
+      return en
+          ? 'Choose at least $minSelect${m != null ? ' (up to $m)' : ''}'
+          : 'Elige al menos $minSelect${m != null ? ' (hasta $m)' : ''}';
+    }
+    if (en) return m != null ? 'Optional · up to $m' : 'Optional';
     return m != null ? 'Opcional · hasta $m' : 'Opcional';
   }
 
-  factory ModifierGroup.fromJson(Json j) => ModifierGroup(
+  factory ModifierGroup.fromJson(Json j, [String lang = 'es']) => ModifierGroup(
         id: j['id'] as String,
-        name: j['name'] as String,
+        name: translated(j['translations'], lang, 'name', j['name'] as String),
         single: j['selectionType'] == 'SINGLE',
         minSelect: (j['minSelect'] as num?)?.toInt() ?? 0,
         maxSelect: (j['maxSelect'] as num?)?.toInt(),
-        options: [for (final o in j['options'] as List? ?? const []) MenuOption.fromJson(o as Json)],
+        options: [for (final o in j['options'] as List? ?? const []) MenuOption.fromJson(o as Json, lang)],
       );
 }
 
@@ -84,17 +91,20 @@ class MenuProduct {
   final int? prepTimeMinutes;
   final List<ModifierGroup> groups;
 
-  factory MenuProduct.fromJson(Json j) => MenuProduct(
+  factory MenuProduct.fromJson(Json j, [String lang = 'es']) {
+    final description = translated(j['translations'], lang, 'description', (j['description'] as String?)?.trim() ?? '');
+    return MenuProduct(
         id: j['id'] as String,
-        name: j['name'] as String,
-        description: (j['description'] as String?)?.trim().isEmpty ?? true ? null : (j['description'] as String).trim(),
+        name: translated(j['translations'], lang, 'name', j['name'] as String),
+        description: description.isEmpty ? null : description,
         price: parseMoney(j['price']),
         imageUrl: j['imageUrl'] as String?,
         isAvailable: j['isAvailable'] as bool? ?? true,
         allergens: [for (final a in j['allergens'] as List? ?? const []) '$a'],
         prepTimeMinutes: (j['prepTimeMinutes'] as num?)?.toInt(),
-        groups: [for (final g in j['modifierGroups'] as List? ?? const []) ModifierGroup.fromJson(g as Json)],
+        groups: [for (final g in j['modifierGroups'] as List? ?? const []) ModifierGroup.fromJson(g as Json, lang)],
       );
+  }
 }
 
 class MenuCategory {
@@ -104,11 +114,11 @@ class MenuCategory {
   final String? imageUrl;
   final List<MenuProduct> products;
 
-  factory MenuCategory.fromJson(Json j) => MenuCategory(
+  factory MenuCategory.fromJson(Json j, [String lang = 'es']) => MenuCategory(
         id: j['id'] as String,
-        name: j['name'] as String,
+        name: translated(j['translations'], lang, 'name', j['name'] as String),
         imageUrl: j['imageUrl'] as String?,
-        products: [for (final p in j['products'] as List? ?? const []) MenuProduct.fromJson(p as Json)],
+        products: [for (final p in j['products'] as List? ?? const []) MenuProduct.fromJson(p as Json, lang)],
       );
 }
 
@@ -142,10 +152,10 @@ class Promotion {
         _ => 'Combo',
       };
 
-  factory Promotion.fromJson(Json j) => Promotion(
+  factory Promotion.fromJson(Json j, [String lang = 'es']) => Promotion(
         id: j['id'] as String,
-        name: j['name'] as String,
-        description: j['description'] as String?,
+        name: translated(j['translations'], lang, 'name', j['name'] as String),
+        description: (j['description'] as String?) == null ? null : translated(j['translations'], lang, 'description', j['description'] as String),
         type: j['type'] as String,
         value: parseMoney(j['value']),
         buyQuantity: (j['buyQuantity'] as num?)?.toInt(),
@@ -182,10 +192,16 @@ final menuProvider = AsyncNotifierProvider<MenuController, MenuData>(MenuControl
 class MenuController extends AsyncNotifier<MenuData> {
   Timer? _debounce;
 
+  /// Lo último que mandó el servidor: al cambiar de idioma se vuelve a armar sin pedirlo otra vez.
+  Json? _menu;
+  List<dynamic>? _promotions;
+  String? _token;
+
   @override
   Future<MenuData> build() async {
     // Si se vuelve a vincular (otro token o servidor), se carga de nuevo.
-    ref.watch(deviceSessionProvider.select((s) => s.value?.token));
+    final token = ref.watch(deviceSessionProvider.select((s) => s.value?.token));
+    final lang = ref.watch(languageProvider);
     final sub = ref.read(realtimeProvider.notifier).events.listen((e) {
       if (e.name == 'ready' || e.name == 'product.availability' || e.name == 'option.availability') {
         _debounce?.cancel();
@@ -196,24 +212,30 @@ class MenuController extends AsyncNotifier<MenuData> {
       sub.cancel();
       _debounce?.cancel();
     });
-    return _load();
+    if (_menu == null || token != _token) {
+      _token = token;
+      await _fetch();
+    }
+    return _build(lang);
   }
 
-  Future<MenuData> _load() async {
+  Future<void> _fetch() async {
     final dio = ref.read(dioProvider);
-    final promosRequest = _promotions();
-    final menu = await apiCall(() async => (await dio.get<Json>('/menu', queryParameters: {'channel': 'dine_in'})).data!);
-    return MenuData(
-      categories: [for (final c in menu['categories'] as List? ?? const []) MenuCategory.fromJson(c as Json)],
-      promotions: await promosRequest,
-    );
+    final promosRequest = _fetchPromotions();
+    _menu = await apiCall(() async => (await dio.get<Json>('/menu', queryParameters: {'channel': 'dine_in'})).data!);
+    _promotions = await promosRequest;
   }
+
+  MenuData _build(String lang) => MenuData(
+        categories: [for (final c in _menu?['categories'] as List? ?? const []) MenuCategory.fromJson(c as Json, lang)],
+        promotions: [for (final p in _promotions ?? const []) Promotion.fromJson(p as Json, lang)],
+      );
 
   /// Si las promociones fallan, el menú se muestra igual (sin etiquetas).
-  Future<List<Promotion>> _promotions() async {
+  Future<List<dynamic>> _fetchPromotions() async {
     try {
       final response = await ref.read(dioProvider).get<List<dynamic>>('/promotions/public', queryParameters: {'channel': 'dine_in'});
-      return [for (final p in response.data ?? const []) Promotion.fromJson(p as Json)];
+      return response.data ?? const [];
     } catch (_) {
       return const [];
     }
@@ -221,7 +243,8 @@ class MenuController extends AsyncNotifier<MenuData> {
 
   Future<void> reload() async {
     try {
-      state = AsyncData(await _load());
+      await _fetch();
+      state = AsyncData(_build(ref.read(languageProvider)));
     } catch (error, stack) {
       if (!state.hasValue) state = AsyncError(error, stack);
     }

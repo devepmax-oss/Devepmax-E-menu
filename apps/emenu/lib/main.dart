@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 
 import 'core/device_session.dart';
+import 'core/i18n.dart';
 import 'core/realtime.dart';
 import 'features/kitchen/kitchen_screen.dart';
 import 'features/kiosk/kiosk.dart';
@@ -33,10 +34,17 @@ class EmenuApp extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final brand = ref.watch(brandProvider).value;
+    // El idioma principal del restaurante es el primero de sus idiomas (Ajustes).
+    ref.listen(brandProvider, (_, next) {
+      final locales = next.value?['locales'];
+      if (locales is List) ref.read(languageProvider.notifier).setDefault([for (final l in locales) '$l']);
+    });
+    final lang = ref.watch(languageProvider);
     return MaterialApp(
       title: brand?['name'] as String? ?? 'E-Menu',
       debugShowCheckedModeBanner: false,
       theme: buildBrandTheme(BrandConfig.fromJson(brand)),
+      builder: (context, child) => LanguageScope(lang: lang, child: child ?? const SizedBox.shrink()),
       home: const _Root(),
     );
   }
@@ -119,7 +127,7 @@ class _Offline extends StatelessWidget {
           const SizedBox(height: 12),
           Text(message, textAlign: TextAlign.center, style: Theme.of(context).textTheme.titleMedium),
           const SizedBox(height: 16),
-          FilledButton(onPressed: onRetry, child: const Text('Reintentar')),
+          FilledButton(onPressed: onRetry, child: Text(context.tr('Reintentar', 'Try again'))),
         ]),
       ),
     );

@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 
 import '../../core/format.dart';
+import '../../core/i18n.dart';
 import '../../core/widgets.dart';
 import 'table_data.dart';
 
@@ -45,15 +46,15 @@ class _ServiceActionsState extends ConsumerState<ServiceActions> {
     if (call == null) {
       callButton = _ActionTile(
         icon: Icons.notifications_active_rounded,
-        label: 'Llamar al mesero',
+        label: context.tr('Llamar al mesero', 'Call the server'),
         compact: widget.compact,
-        onTap: _busy ? null : () => _run(controller.callWaiter, done: 'Listo, avisamos al mesero'),
+        onTap: _busy ? null : () => _run(controller.callWaiter, done: context.tr('Listo, avisamos al mesero', 'Done, we let your server know')),
       );
     } else {
       callButton = _ActionTile(
         icon: call.status == 'ACKNOWLEDGED' ? Icons.directions_walk_rounded : Icons.hourglass_top_rounded,
-        label: call.status == 'ACKNOWLEDGED' ? 'El mesero ya viene' : 'Avisamos al mesero',
-        caption: call.status == 'ACKNOWLEDGED' ? null : 'Toca para cancelar',
+        label: call.status == 'ACKNOWLEDGED' ? context.tr('El mesero ya viene', 'Your server is on the way') : context.tr('Avisamos al mesero', 'Server notified'),
+        caption: call.status == 'ACKNOWLEDGED' ? null : context.tr('Toca para cancelar', 'Tap to cancel'),
         highlight: t.accent,
         compact: widget.compact,
         onTap: _busy || call.status == 'ACKNOWLEDGED' ? null : () => _run(() => controller.cancelRequest(call.id)),
@@ -62,8 +63,8 @@ class _ServiceActionsState extends ConsumerState<ServiceActions> {
 
     final billButton = _ActionTile(
       icon: Icons.receipt_long_rounded,
-      label: bill != null ? 'Cuenta pedida' : (session?.payUrl != null && hasOrders ? 'Cuenta y pago' : 'Pedir la cuenta'),
-      caption: bill == null ? (hasOrders ? formatMoney(session!.bill.total) : null) : 'El mesero la trae',
+      label: bill != null ? context.tr('Cuenta pedida', 'Check requested') : (session?.payUrl != null && hasOrders ? context.tr('Cuenta y pago', 'Check & pay') : context.tr('Pedir la cuenta', 'Ask for the check')),
+      caption: bill == null ? (hasOrders ? formatMoney(session!.bill.total) : null) : context.tr('El mesero la trae', 'Your server will bring it'),
       highlight: bill == null ? null : t.accent,
       compact: widget.compact,
       onTap: hasOrders ? () => showBillSheet(context) : null,
@@ -173,13 +174,13 @@ class _BillDialogState extends ConsumerState<_BillDialog> {
           Padding(
             padding: const EdgeInsets.fromLTRB(28, 24, 12, 4),
             child: Row(children: [
-              Expanded(child: Text('Tu cuenta${table?.label != null ? ' · Mesa ${table!.label}' : ''}', style: text.headlineMedium)),
+              Expanded(child: Text('${context.tr('Tu cuenta', 'Your check')}${table?.label != null ? ' · ${context.tr('Mesa', 'Table')} ${table!.label}' : ''}', style: text.headlineMedium)),
               IconButton(onPressed: () => Navigator.pop(context), icon: const Icon(Icons.close_rounded)),
             ]),
           ),
           Expanded(
             child: items.isEmpty
-                ? Center(child: Text('Todavía no hay nada en la cuenta.', style: TextStyle(color: t.muted)))
+                ? Center(child: Text(context.tr('Todavía no hay nada en la cuenta.', 'Nothing on the check yet.'), style: TextStyle(color: t.muted)))
                 : ListView(padding: const EdgeInsets.fromLTRB(28, 8, 28, 8), children: [
                     for (final i in items)
                       Padding(
@@ -207,14 +208,14 @@ class _BillDialogState extends ConsumerState<_BillDialog> {
               decoration: BoxDecoration(border: Border(top: BorderSide(color: t.line))),
               child: Column(children: [
                 row('Subtotal', bill.subtotal),
-                if (bill.discountTotal > 0) row('Descuentos', -bill.discountTotal, color: t.success),
-                row('Impuestos', bill.taxTotal),
-                if (bill.tipTotal > 0) row('Propina', bill.tipTotal),
+                if (bill.discountTotal > 0) row(context.tr('Descuentos', 'Discounts'), -bill.discountTotal, color: t.success),
+                row(context.tr('Impuestos', 'Tax'), bill.taxTotal),
+                if (bill.tipTotal > 0) row(context.tr('Propina', 'Tip'), bill.tipTotal),
                 const SizedBox(height: 4),
                 row('Total', bill.total, bold: true),
                 if (bill.paid > 0) ...[
-                  row('Pagado', bill.paid, color: t.success),
-                  row('Por pagar', bill.due, bold: true),
+                  row(context.tr('Pagado', 'Paid'), bill.paid, color: t.success),
+                  row(context.tr('Por pagar', 'Balance due'), bill.due, bold: true),
                 ],
               ]),
             ),
@@ -226,10 +227,10 @@ class _BillDialogState extends ConsumerState<_BillDialog> {
                   style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(60), textStyle: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
                   onPressed: () => showPayQr(context),
                   icon: const Icon(Icons.qr_code_2_rounded),
-                  label: const Text('Pagar con mi celular'),
+                  label: Text(context.tr('Pagar con mi celular', 'Pay with my phone')),
                 ),
                 const SizedBox(height: 6),
-                Text('Tarjeta, Apple Pay o Google Pay · todo o tu parte',
+                Text(context.tr('Tarjeta, Apple Pay o Google Pay · todo o tu parte', 'Card, Apple Pay or Google Pay · all or your share'),
                     textAlign: TextAlign.center, style: TextStyle(color: t.muted, fontSize: 13)),
                 const SizedBox(height: 12),
               ],
@@ -237,7 +238,7 @@ class _BillDialogState extends ConsumerState<_BillDialog> {
                 Row(children: [
                   Icon(Icons.check_circle_rounded, color: t.success, size: 30),
                   const SizedBox(width: 12),
-                  Expanded(child: Text('Cuenta pagada. ¡Gracias!', style: text.titleMedium)),
+                  Expanded(child: Text(context.tr('Cuenta pagada. ¡Gracias!', 'Check paid. Thank you!'), style: text.titleMedium)),
                 ])
               else
                 _requestBillRow(context, request, controller, items.isEmpty, secondary: canPayHere),
@@ -259,23 +260,23 @@ class _BillDialogState extends ConsumerState<_BillDialog> {
           style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(52), textStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
           onPressed: onPressed,
           icon: icon,
-          label: const Text('Prefiero que el mesero me cobre'),
+          label: Text(context.tr('Prefiero que el mesero me cobre', 'I’d rather pay my server')),
         );
       }
       return FilledButton.icon(
         style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(60), textStyle: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
         onPressed: onPressed,
         icon: icon,
-        label: const Text('Pedir la cuenta'),
+        label: Text(context.tr('Pedir la cuenta', 'Ask for the check')),
       );
     }
     return Row(children: [
       Icon(Icons.check_circle_rounded, color: t.success, size: 30),
       const SizedBox(width: 12),
-      Expanded(child: Text('Listo: el mesero te trae la cuenta.', style: text.titleMedium)),
+      Expanded(child: Text(context.tr('Listo: el mesero te trae la cuenta.', 'Done: your server is bringing the check.'), style: text.titleMedium)),
       TextButton(
         onPressed: _busy ? null : () => _run(() => controller.cancelRequest(request.id)),
-        child: const Text('Cancelar'),
+        child: Text(context.tr('Cancelar', 'Cancel')),
       ),
     ]);
   }
@@ -344,16 +345,16 @@ class _PayQrDialogState extends ConsumerState<_PayQrDialog> {
             if (allPaid) ...[
               Icon(Icons.check_circle_rounded, color: t.success, size: 96),
               const SizedBox(height: 16),
-              Text('¡Pago recibido!', style: text.headlineMedium, textAlign: TextAlign.center),
+              Text(context.tr('¡Pago recibido!', 'Payment received!'), style: text.headlineMedium, textAlign: TextAlign.center),
               const SizedBox(height: 8),
-              Text('La cuenta está pagada. ¡Gracias por tu visita!', style: text.titleMedium?.copyWith(color: t.muted), textAlign: TextAlign.center),
+              Text(context.tr('La cuenta está pagada. ¡Gracias por tu visita!', 'The check is paid. Thanks for your visit!'), style: text.titleMedium?.copyWith(color: t.muted), textAlign: TextAlign.center),
               const SizedBox(height: 12),
             ] else if (url == null) ...[
-              Text('El pago con el celular no está disponible ahora.', style: text.titleMedium, textAlign: TextAlign.center),
+              Text(context.tr('El pago con el celular no está disponible ahora.', 'Paying with your phone is not available right now.'), style: text.titleMedium, textAlign: TextAlign.center),
             ] else ...[
-              Text('Paga con tu celular', style: text.headlineMedium, textAlign: TextAlign.center),
+              Text(context.tr('Paga con tu celular', 'Pay with your phone'), style: text.headlineMedium, textAlign: TextAlign.center),
               const SizedBox(height: 6),
-              Text('Abre la cámara y apunta al código', style: text.titleMedium?.copyWith(color: t.muted), textAlign: TextAlign.center),
+              Text(context.tr('Abre la cámara y apunta al código', 'Open your camera and point it at the code'), style: text.titleMedium?.copyWith(color: t.muted), textAlign: TextAlign.center),
               const SizedBox(height: 20),
               Container(
                 padding: const EdgeInsets.all(16),
@@ -363,22 +364,22 @@ class _PayQrDialogState extends ConsumerState<_PayQrDialog> {
                   size: qrSize,
                   backgroundColor: Colors.white,
                   errorCorrectionLevel: QrErrorCorrectLevel.M,
-                  semanticsLabel: 'Código QR para pagar la cuenta',
+                  semanticsLabel: context.tr('Código QR para pagar la cuenta', 'QR code to pay the check'),
                 ),
               ),
               const SizedBox(height: 18),
-              Text('Por pagar: ${formatMoney(due)}', style: text.headlineSmall),
+              Text('${context.tr('Por pagar', 'Balance due')}: ${formatMoney(due)}', style: text.headlineSmall),
               if (someonePaid) ...[
                 const SizedBox(height: 10),
-                DmPill('Pago recibido · quedan ${formatMoney(due)}', icon: Icons.check_rounded, color: t.success),
+                DmPill(context.tr('Pago recibido · quedan ${formatMoney(due)}', 'Payment received · ${formatMoney(due)} left'), icon: Icons.check_rounded, color: t.success),
               ],
               const SizedBox(height: 14),
               Wrap(alignment: WrapAlignment.center, spacing: 18, runSpacing: 8, children: [
-                for (final (icon, label) in const [
-                  (Icons.credit_card_rounded, 'Tarjeta'),
+                for (final (icon, label) in [
+                  (Icons.credit_card_rounded, context.tr('Tarjeta', 'Card')),
                   (Icons.phone_iphone_rounded, 'Apple Pay'),
                   (Icons.android_rounded, 'Google Pay'),
-                  (Icons.call_split_rounded, 'Todo o tu parte'),
+                  (Icons.call_split_rounded, context.tr('Todo o tu parte', 'All or your share')),
                 ])
                   Row(mainAxisSize: MainAxisSize.min, children: [
                     Icon(icon, size: 18, color: t.accentText),
@@ -387,10 +388,10 @@ class _PayQrDialogState extends ConsumerState<_PayQrDialog> {
                   ]),
               ]),
               const SizedBox(height: 12),
-              Text('Tu tarjeta nunca se escribe en esta tablet.', style: TextStyle(color: t.faint, fontSize: 12.5), textAlign: TextAlign.center),
+              Text(context.tr('Tu tarjeta nunca se escribe en esta tablet.', 'Your card is never entered on this tablet.'), style: TextStyle(color: t.faint, fontSize: 12.5), textAlign: TextAlign.center),
               if (testLink) ...[
                 const SizedBox(height: 14),
-                Text('Modo prueba · abre este enlace en el navegador:', style: TextStyle(color: t.muted, fontSize: 12)),
+                Text(context.tr('Modo prueba · abre este enlace en el navegador:', 'Test mode · open this link in a browser:'), style: TextStyle(color: t.muted, fontSize: 12)),
                 SelectableText(url, textAlign: TextAlign.center, style: TextStyle(color: t.accentText, fontSize: 12)),
               ],
             ],
