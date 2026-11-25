@@ -59,9 +59,12 @@ class _ServiceCallAlertsState extends ConsumerState<ServiceCallAlerts> {
     );
   }
 
-  /// La cocina terminó un pedido de una mesa: avisa a quien la atiende (o a todos si no tiene mesero).
+  /// La cocina terminó un pedido de una mesa: avisa solo al mesero que la atiende (la caja y la
+  /// administración ya lo ven en Órdenes y no necesitan otro sonido).
   void _onOrder(Map<String, dynamic>? json) {
     if (json == null || !mounted || json['status'] != 'READY' || json['fulfillmentType'] != 'DINE_IN') return;
+    final employee = ref.read(authControllerProvider).value?.employee;
+    if (employee == null || employee.can('payments.take')) return;
     final table = json['table'] as Map?;
     final id = json['id'] as String?;
     if (table == null || id == null || !_readyAlerted.add(id)) return;
@@ -72,7 +75,7 @@ class _ServiceCallAlertsState extends ConsumerState<ServiceCallAlerts> {
         .where((t) => t.id == tableId)
         .map((t) => t.session)
         .firstOrNull;
-    if (session?.waiterId != null && session!.waiterId != me) return;
+    if (session == null || session.waiterId != me) return;
     _alert(tableId: tableId, icon: Icons.room_service_rounded, message: 'Mesa ${table['label']} · pedido #${json['number']} listo para llevar');
   }
 

@@ -1,4 +1,5 @@
-import { Body, Controller, Delete, ForbiddenException, Get, HttpCode, Param, Post, Query } from '@nestjs/common';
+import { Body, Controller, Delete, ForbiddenException, Get, HttpCode, Param, Post, Query, Res } from '@nestjs/common';
+import type { Response } from 'express';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import type { EmployeeActor } from '../../common/auth/actor';
 import { AllowActors, CurrentActor, Public, RequirePermissions } from '../../common/auth/decorators';
@@ -299,5 +300,37 @@ export class ReportsController {
   @Get('day')
   day(@Query('date') date?: string) {
     return this.reports.day(date);
+  }
+
+  /** Período: ?from=AAAA-MM-DD&to=AAAA-MM-DD (incluidos; hasta 400 días), con el período anterior para comparar. */
+  @RequirePermissions('reports.view')
+  @Get('sales')
+  sales(@Query('from') from?: string, @Query('to') to?: string) {
+    return this.reports.range(from, to);
+  }
+
+  /** Enlace para descargar el Excel (vence en 10 minutos). */
+  @RequirePermissions('reports.view')
+  @Post('export-link')
+  @HttpCode(200)
+  exportLink(@Body() body: { from?: string; to?: string }) {
+    return this.reports.exportLink(body?.from, body?.to);
+  }
+}
+
+/** Descarga del Excel con el enlace firmado (lo abre el navegador, sin sesión). */
+@ApiTags('reports')
+@Public()
+@Controller('reports/export')
+export class ReportExportController {
+  constructor(private readonly reports: ReportsService) {}
+
+  @Get(':token')
+  async download(@Param('token') token: string, @Res() res: Response) {
+    const { name, buffer } = await this.reports.exportFromToken(token);
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename="${name}"`);
+    res.setHeader('Cache-Control', 'no-store');
+    res.send(buffer);
   }
 }

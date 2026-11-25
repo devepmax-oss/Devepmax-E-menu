@@ -27,6 +27,8 @@ export interface Env {
   storage: StorageConfig;
   /** Dirección pública de la web de clientes (los QR de pago de la mesa apuntan aquí). */
   webUrl: string;
+  /** Dirección pública de esta API (enlaces de descarga, por ejemplo exportar a Excel). */
+  publicApiUrl: string;
   /** Pagos en línea. Sin STRIPE_SECRET_KEY la web solo ofrece pagar al recoger. */
   stripe: StripeConfig;
   /** Recibos por email (Resend) y SMS (Twilio). Sin claves, esa opción no aparece. */
@@ -120,6 +122,9 @@ export function loadEnv(): Env {
     refreshTokenDays: Number(process.env.REFRESH_TOKEN_DAYS) || 30,
     storage: loadStorage(port),
     webUrl: stripTrailingSlash(process.env.PUBLIC_WEB_URL?.trim() || 'http://localhost:3001'),
+    publicApiUrl: stripTrailingSlash(
+      process.env.PUBLIC_API_URL?.trim() || `${stripTrailingSlash(process.env.PUBLIC_BASE_URL?.trim() || `http://localhost:${port}`)}/api/v1`,
+    ),
     firebaseServiceAccountPath: process.env.FIREBASE_SERVICE_ACCOUNT_PATH?.trim() || undefined,
     receipts: {
       resendApiKey: process.env.RESEND_API_KEY?.trim() || undefined,

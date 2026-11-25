@@ -1,4 +1,4 @@
-import { signReceipt, signTablePay, verifyReceipt, verifyTablePay } from './pay-token';
+import { signPayload, signReceipt, signTablePay, verifyPayload, verifyReceipt, verifyTablePay } from './pay-token';
 
 const SECRET = 'x'.repeat(40);
 
@@ -24,5 +24,13 @@ describe('enlace de pago de la mesa', () => {
     expect(verifyReceipt(signReceipt(id, SECRET), SECRET)).toBe(id);
     expect(verifyReceipt(signTablePay(id, SECRET), SECRET)).toBeNull();
     expect(verifyTablePay(signReceipt(id, SECRET), SECRET)).toBeNull();
+  });
+
+  it('un enlace de descarga firmado no se puede alterar', () => {
+    const token = signPayload('report-export:v1', '2026-11-01|2026-11-24|9999999999999', SECRET);
+    expect(verifyPayload('report-export:v1', token, SECRET)).toBe('2026-11-01|2026-11-24|9999999999999');
+    const forged = `${Buffer.from('2020-01-01|2026-11-24|9999999999999').toString('base64url')}.${token.split('.')[1]}`;
+    expect(verifyPayload('report-export:v1', forged, SECRET)).toBeNull();
+    expect(verifyPayload('otra-cosa', token, SECRET)).toBeNull();
   });
 });

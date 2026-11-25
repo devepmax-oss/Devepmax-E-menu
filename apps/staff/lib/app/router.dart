@@ -14,7 +14,7 @@ import '../features/menu/screens/modifier_groups_screen.dart';
 import '../features/orders/screens/orders_screen.dart';
 import '../features/pos/screens/pos_screen.dart';
 import '../features/promotions/screens/promotions_screen.dart';
-import '../features/reports/screens/report_screen.dart';
+import '../features/reports/screens/reports_screen.dart';
 import '../features/shell/admin_shell.dart';
 import '../features/tables/screens/tables_screen.dart';
 import '../features/tables/screens/waiter_screen.dart';
@@ -65,7 +65,7 @@ final routerProvider = Provider<GoRouter>((ref) {
               billId: state.uri.queryParameters['bill'],
             ),
           ),
-          GoRoute(path: '/reports', builder: (_, __) => const ReportScreen()),
+          GoRoute(path: '/reports', builder: (_, __) => const ReportsScreen()),
           GoRoute(path: '/menu', builder: (_, __) => const MenuScreen()),
           GoRoute(path: '/modifiers', builder: (_, __) => const ModifierGroupsScreen()),
           GoRoute(path: '/menu-setup', builder: (_, __) => const MenuSetupScreen()),

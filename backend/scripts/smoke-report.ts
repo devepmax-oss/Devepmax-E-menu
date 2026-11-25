@@ -1,6 +1,6 @@
 /**
- * Prueba de humo del cierre del día: hace una venta con descuento, propina y un reembolso, y
- * cancela otra orden; revisa que el reporte de hoy lo refleje.
+ * Prueba de humo de los reportes: hace una venta con descuento, propina y un reembolso, y
+ * cancela otra orden; revisa el cierre de hoy, un período de 7 días y la exportación a Excel.
  * Uso:  npm run smoke:report   (backend encendido y seed hecho)
  *
  * Si la caja estaba cerrada, la abre para la prueba y la cierra al final.
@@ -102,6 +102,36 @@ async function main() {
   check('para llevar suma una orden', (after.fulfillment as Json[]).find((f) => f.type === 'TAKEOUT')?.orders === ((b.fulfillment as Json[]).find((f) => f.type === 'TAKEOUT')?.orders ?? 0) + 1);
   check('la venta aparece en su hora', (after.hours as Json[]).reduce((a, h) => a + h.orders, 0) === s1.orders);
   check('trae el turno de caja de hoy', (after.shifts as Json[]).length >= 1, after.shifts?.length);
+
+  console.log('\nPeríodos');
+  const today = after.date as string;
+  const start = new Date(`${today}T00:00:00Z`);
+  start.setUTCDate(start.getUTCDate() - 6);
+  const weekFrom = start.toISOString().slice(0, 10);
+  const week = await api('GET', `/reports/sales?from=${weekFrom}&to=${today}`, undefined, A);
+  check('un período de 7 días trae un dato por día', week.status === 200 && week.data?.days === 7 && week.data?.byDay?.length === 7, week.data?.byDay?.length);
+  check('incluye las ventas de hoy', week.data?.summary?.orders >= s1.orders, week.data?.summary?.orders);
+  check('y el período anterior para comparar (7 días antes)', week.data?.previous?.to < weekFrom && typeof week.data?.previous?.summary?.orders === 'number', week.data?.previous);
+  check('ventas por día de la semana', week.data?.byWeekday?.length >= 1);
+  const backwards = await api('GET', `/reports/sales?from=${today}&to=${weekFrom}`, undefined, A);
+  check('si la fecha final es anterior, avisa', backwards.status === 400, backwards.status);
+  const huge = await api('GET', '/reports/sales?from=2020-01-01&to=2026-01-01', undefined, A);
+  check('un período de más de 400 días avisa', huge.status === 400, huge.status);
+
+  console.log('\nExportar a Excel');
+  const link = await api('POST', '/reports/export-link', { from: weekFrom, to: today }, A);
+  check('la app obtiene un enlace de descarga', link.status === 200 && String(link.data?.url).includes('/reports/export/'), link.data);
+  const file = await fetch(link.data.url);
+  const bytes = Buffer.from(await file.arrayBuffer());
+  check('el enlace descarga un archivo de Excel', file.status === 200 && (file.headers.get('content-type') ?? '').includes('spreadsheetml') && bytes.subarray(0, 2).toString() === 'PK', {
+    status: file.status,
+    type: file.headers.get('content-type'),
+  });
+  check('con el nombre del período', (file.headers.get('content-disposition') ?? '').includes(`ventas-${weekFrom}-a-${today}.xlsx`), file.headers.get('content-disposition'));
+  const tampered = await fetch(String(link.data.url).replace(/\.[^.]+$/, '.AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA'));
+  check('un enlace alterado no descarga nada', tampered.status === 401, tampered.status);
+  const noAuth = await api('POST', '/reports/export-link', { from: weekFrom, to: today });
+  check('sin sesión no se puede pedir el enlace', noAuth.status === 401, noAuth.status);
 
   if (openedShift) {
     const s = (await api('GET', '/cash/shift', undefined, A)).data.shift;

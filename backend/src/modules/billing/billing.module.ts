@@ -7,6 +7,7 @@ import {
   BillingController,
   CashController,
   ReceiptsController,
+  ReportExportController,
   ReportsController,
   TablePayController,
   TerminalController,
@@ -20,7 +21,7 @@ import { TerminalService } from './terminal.service';
 
 @Module({
   imports: [OrdersModule, TablesModule, PaymentsModule, SettingsModule],
-  controllers: [BillingController, CashController, TerminalController, TablePayController, ReceiptsController, ReportsController],
+  controllers: [BillingController, CashController, TerminalController, TablePayController, ReceiptsController, ReportsController, ReportExportController],
   providers: [BillingService, CashService, TerminalService, TablePayService, ReceiptsService, ReportsService],
   exports: [BillingService],
 })

@@ -23,6 +23,7 @@ dependencies:
   flutter_native_splash: ^2.4.8
   socket_io_client: ^3.1.2
   qr_flutter: ^4.1.0
+  url_launcher: ^6.3.1
   mek_stripe_terminal: ^5.7.0
   permission_handler: ^12.0.0
   audioplayers: ^6.6.0

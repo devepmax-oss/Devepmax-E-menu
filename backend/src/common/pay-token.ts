@@ -32,3 +32,26 @@ export const verifyTablePay = (token: string, secret: string) => verify('table-p
 /** Enlace del recibo digital de una cuenta (lo que llega por email o SMS y el QR del ticket). */
 export const signReceipt = (billId: string, secret: string) => sign('receipt:v1', billId, secret);
 export const verifyReceipt = (token: string, secret: string) => verify('receipt:v1', token, secret);
+
+/**
+ * Enlace firmado con datos y vencimiento (por ejemplo, descargar un reporte en el navegador,
+ * que no puede mandar el token de sesión).
+ */
+export function signPayload(scope: string, payload: string, secret: string): string {
+  return `${Buffer.from(payload, 'utf8').toString('base64url')}.${macOf(scope, payload, secret)}`;
+}
+
+export function verifyPayload(scope: string, token: string, secret: string): string | null {
+  if (typeof token !== 'string' || token.length > 400) return null;
+  const [encoded, signature, extra] = token.split('.');
+  if (!encoded || !signature || extra !== undefined) return null;
+  const payload = Buffer.from(encoded, 'base64url').toString('utf8');
+  const expected = Buffer.from(macOf(scope, payload, secret));
+  const given = Buffer.from(signature);
+  return expected.length === given.length && timingSafeEqual(expected, given) ? payload : null;
+}
+
+function macOf(scope: string, payload: string, secret: string): string {
+  const key = createHmac('sha256', secret).update(scope).digest();
+  return createHmac('sha256', key).update(payload).digest('base64url').slice(0, 32);
+}
