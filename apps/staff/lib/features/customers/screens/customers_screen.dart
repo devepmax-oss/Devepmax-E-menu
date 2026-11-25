@@ -507,7 +507,7 @@ class _PickDuplicateDialogState extends ConsumerState<_PickDuplicateDialog> {
 
 const _months = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
 
-/** Puntos, premios vigentes, ajuste manual y cumpleaños. */
+/// Puntos, premios vigentes, ajuste manual y cumpleaños.
 class _LoyaltySection extends ConsumerWidget {
   const _LoyaltySection({required this.customerId, required this.detail, required this.onChanged});
   final String customerId;
