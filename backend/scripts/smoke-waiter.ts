@@ -62,8 +62,11 @@ async function main() {
   const A = login.data.accessToken as string;
   const adminId = (login.data.employee?.id ?? (await api('GET', '/auth/me', undefined, login.data.accessToken)).data?.id) as string;
 
+  // Limpieza de una corrida anterior que se haya cortado (incluye pedidos que quedaron abiertos).
+  const active = ((await api('GET', '/orders?scope=active', undefined, A)).data ?? []) as Json[];
   for (const area of ((await api('GET', '/tables/floor', undefined, A)).data as Json[]).filter((a) => a.name === 'Prueba automática')) {
     for (const t of area.tables) {
+      for (const o of active.filter((o) => o.table?.id === t.id)) await api('POST', `/orders/${o.id}/cancel`, { reason: 'Prueba automática' }, A);
       await api('POST', `/tables/${t.id}/close`, { force: true }, A);
       await api('DELETE', `/tables/${t.id}`, undefined, A);
     }
@@ -98,7 +101,7 @@ async function main() {
   const optionIds: string[] = [];
   for (const g of product?.modifierGroups ?? []) optionIds.push(...(g.options ?? []).slice(0, g.minSelect ?? 0).map((o: Json) => o.id));
   const items = [{ productId: product.id, quantity: 1, optionIds }];
-  await api('POST', '/orders', { clientRequestId: rid(), fulfillmentType: 'DINE_IN', tableId: w2.id, items }, A);
+  const w2Order = (await api('POST', '/orders', { clientRequestId: rid(), fulfillmentType: 'DINE_IN', tableId: w2.id, items }, A)).data;
   check('quien toma el primer pedido de una mesa libre la atiende', (await table(w2.id))?.session?.waiter?.id === adminId);
   const claim = await api('PATCH', `/tables/${w2.id}/waiter`, {}, W);
   check('el mesero puede tomar una mesa', claim.status === 200 && claim.data?.session?.waiter?.id === waiterId, claim.data?.session);
@@ -137,6 +140,7 @@ async function main() {
 
   console.log('\nLimpieza');
   socket?.close();
+  await api('POST', `/orders/${w2Order.id}/cancel`, { reason: 'Prueba automática' }, A);
   for (const t of [w1, w2]) {
     await api('POST', `/tables/${t.id}/close`, { force: true }, A);
     await api('DELETE', `/tables/${t.id}`, undefined, A);
