@@ -20,7 +20,7 @@ export function useQuote(mode: FulfillmentType, items: OrderLineInput[], enabled
       api
         .quote({ fulfillmentType: mode, items })
         .then((quote) => !cancelled && setState({ key, quote, error: null }))
-        .catch((e: unknown) => !cancelled && setState({ key, quote: null, error: e instanceof ApiError ? e.message : 'No se pudo calcular el total' }));
+        .catch((e: unknown) => !cancelled && setState({ key, quote: null, error: e instanceof ApiError ? e.message : (document.documentElement.lang === 'en' ? 'Could not calculate the total' : 'No se pudo calcular el total') }));
     }, 250);
     return () => {
       cancelled = true;

@@ -2,11 +2,15 @@ import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import { Unavailable } from '@/components/unavailable';
 import { api, ApiError } from '@/lib/api';
+import { pick } from '@/lib/i18n';
+import { getLang } from '@/lib/lang-server';
 import { getConfig } from '@/lib/server';
 import type { PublicOrder } from '@/lib/types';
 import { TrackingView } from './tracking-view';
 
-export const metadata: Metadata = { title: 'Seguimiento de tu pedido', robots: { index: false } };
+export async function generateMetadata(): Promise<Metadata> {
+  return { title: pick(await getLang(), 'Seguimiento de tu pedido', 'Track your order'), robots: { index: false } };
+}
 
 export default async function TrackingPage({
   params,

@@ -2,6 +2,7 @@
 
 import { CheckCircle2, ChevronDown, Receipt, Users } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { LanguageSwitch, useT } from '@/components/i18n';
 import { BrandMark, Button, Notice, Stepper } from '@/components/ui';
 import { api, ApiError } from '@/lib/api';
 import { money, round2, toNumber } from '@/lib/format';
@@ -61,6 +62,7 @@ function Row({ label, value, strong, tone }: { label: string; value: string; str
  * un monto, deja propina y paga con tarjeta, Apple Pay o Google Pay.
  */
 export function PayView({ config, token, initial, returnedIntent }: { config: OnlineConfig; token: string; initial: TablePayView; returnedIntent: string | null }) {
+  const t = useT();
   const currency = config.currency;
   const [view, setView] = useState(initial);
   const [billId, setBillId] = useState<string>(() => (initial.bills.find((b) => toNumber(b.due) > 0) ?? initial.bills[0])?.id ?? '');
@@ -86,7 +88,7 @@ export function PayView({ config, token, initial, returnedIntent }: { config: On
   }, [bill, due, share]);
   const tip = tipChoice.kind === 'percent' ? round2((amount * tipChoice.value) / 100) : tipChoice.kind === 'custom' ? Math.max(0, round2(toNumber(tipChoice.value))) : 0;
   const total = round2(amount + tip);
-  const emailError = email.trim() && !EMAIL.test(email.trim()) ? 'Revisa el correo' : null;
+  const emailError = email.trim() && !EMAIL.test(email.trim()) ? t('Revisa el correo', 'Check the email') : null;
 
   const refresh = useCallback(async () => {
     try {
@@ -115,17 +117,17 @@ export function PayView({ config, token, initial, returnedIntent }: { config: On
           const after = result.view.bills.find((b) => b.id === billId) ?? result.view.bills[0];
           setDone({ amount: paid?.amount ?? 0, tip: paid?.tip ?? 0, due: toNumber(after?.due) });
         } else if (result.status === 'failed') {
-          setError('El pago no se completó. Intenta de nuevo.');
+          setError(t('El pago no se completó. Intenta de nuevo.', 'The payment did not go through. Please try again.'));
         } else {
-          setError('Tu banco todavía está procesando el pago. Si no se completa en un momento, intenta de nuevo.');
+          setError(t('Tu banco todavía está procesando el pago. Si no se completa en un momento, intenta de nuevo.', 'Your bank is still processing the payment. If it does not complete in a moment, please try again.'));
         }
       } catch (e) {
-        setError(e instanceof ApiError ? e.message : 'No pudimos confirmar el pago. Recarga la página.');
+        setError(e instanceof ApiError ? e.message : t('No pudimos confirmar el pago. Recarga la página.', 'We could not confirm the payment. Please reload the page.'));
       } finally {
         setBusy(false);
       }
     },
-    [billId, token],
+    [billId, token, t],
   );
 
   // Volvió de una página externa del método de pago.
@@ -151,7 +153,7 @@ export function PayView({ config, token, initial, returnedIntent }: { config: On
       });
       setIntent({ ...created, amount, tip });
     } catch (e) {
-      setError(e instanceof ApiError ? e.message : 'No pudimos preparar el pago. Intenta de nuevo.');
+      setError(e instanceof ApiError ? e.message : t('No pudimos preparar el pago. Intenta de nuevo.', 'We could not set up the payment. Please try again.'));
       requestId.current = newRequestId();
       void refresh();
     } finally {
@@ -162,7 +164,12 @@ export function PayView({ config, token, initial, returnedIntent }: { config: On
   const header = (
     <header className="flex items-center justify-between gap-3 py-4">
       <BrandMark name={config.name} logoUrl={config.logoUrl} size={40} />
-      <span className="rounded-full border border-line bg-surface px-3 py-1.5 text-sm font-bold text-ink">Mesa {view.table}</span>
+      <div className="flex items-center gap-2">
+        <LanguageSwitch offered={config.locales} />
+        <span className="rounded-full border border-line bg-surface px-3 py-1.5 text-sm font-bold text-ink">
+          {t('Mesa', 'Table')} {view.table}
+        </span>
+      </div>
     </header>
   );
 
@@ -178,19 +185,19 @@ export function PayView({ config, token, initial, returnedIntent }: { config: On
             <CheckCircle2 aria-hidden className="size-11" />
           </span>
           <div className="flex flex-col gap-2">
-            <h1 className="m-0 text-3xl font-extrabold">{done ? '¡Gracias! Pago recibido' : 'Esta cuenta ya está pagada'}</h1>
+            <h1 className="m-0 text-3xl font-extrabold">{done ? t('¡Gracias! Pago recibido', 'Thank you! Payment received') : t('Esta cuenta ya está pagada', 'This check is already paid')}</h1>
             {done && done.amount > 0 ? (
               <p className="m-0 text-soft">
-                Pagaste <span className="font-bold text-ink">{money(done.amount + done.tip, currency)}</span>
-                {done.tip > 0 ? ` (incluye ${money(done.tip, currency)} de propina)` : ''}.
+                {t('Pagaste', 'You paid')} <span className="font-bold text-ink">{money(done.amount + done.tip, currency)}</span>
+                {done.tip > 0 ? t(` (incluye ${money(done.tip, currency)} de propina)`, ` (includes ${money(done.tip, currency)} tip)`) : ''}.
               </p>
             ) : null}
             {remaining > 0 ? (
               <p className="m-0 text-soft">
-                En la mesa quedan <span className="font-bold text-ink">{money(remaining, currency)}</span> por pagar.
+                {t('En la mesa quedan', 'The table still has')} <span className="font-bold text-ink">{money(remaining, currency)}</span> {t('por pagar.', 'left to pay.')}
               </p>
             ) : null}
-            {email.trim() && done ? <p className="m-0 text-sm text-muted">Te enviamos el recibo a {email.trim()}.</p> : null}
+            {email.trim() && done ? <p className="m-0 text-sm text-muted">{t(`Te enviamos el recibo a ${email.trim()}.`, `We sent the receipt to ${email.trim()}.`)}</p> : null}
           </div>
           {remaining > 0 && !view.closed ? (
             <Button
@@ -200,7 +207,7 @@ export function PayView({ config, token, initial, returnedIntent }: { config: On
                 setShare({ kind: 'all' });
               }}
             >
-              Pagar otra parte
+              {t('Pagar otra parte', 'Pay another part')}
             </Button>
           ) : null}
         </div>
@@ -212,7 +219,7 @@ export function PayView({ config, token, initial, returnedIntent }: { config: On
     return (
       <main className="mx-auto flex min-h-dvh w-full max-w-lg flex-col px-4">
         {header}
-        <Notice>Todavía no hay nada en la cuenta de esta mesa.</Notice>
+        <Notice>{t('Todavía no hay nada en la cuenta de esta mesa.', 'There is nothing on this table’s check yet.')}</Notice>
       </main>
     );
   }
@@ -226,12 +233,12 @@ export function PayView({ config, token, initial, returnedIntent }: { config: On
       {header}
       <div className="flex flex-col gap-5">
         <div className="flex flex-col gap-1">
-          <h1 className="m-0 text-3xl font-extrabold">Paga desde tu celular</h1>
-          <p className="m-0 text-soft">Todo, tu parte o el monto que quieras. Nadie más ve tu tarjeta.</p>
+          <h1 className="m-0 text-3xl font-extrabold">{t('Paga desde tu celular', 'Pay from your phone')}</h1>
+          <p className="m-0 text-soft">{t('Todo, tu parte o el monto que quieras. Nadie más ve tu tarjeta.', 'All of it, your share or any amount. No one else sees your card.')}</p>
         </div>
 
         {view.bills.length > 1 ? (
-          <div role="radiogroup" aria-label="Cuenta" className="flex flex-wrap gap-2">
+          <div role="radiogroup" aria-label={t('Cuenta', 'Check')} className="flex flex-wrap gap-2">
             {view.bills.map((b) => (
               <button
                 key={b.id}
@@ -242,7 +249,7 @@ export function PayView({ config, token, initial, returnedIntent }: { config: On
                 onClick={() => setBillId(b.id)}
                 className={`press cursor-pointer rounded-full border px-4 py-2 text-sm font-bold ${b.id === bill.id ? 'border-brand bg-brand-soft text-ink' : 'border-line bg-surface-2 text-soft'}`}
               >
-                {b.label} · {toNumber(b.due) > 0 ? money(b.due, currency) : 'Pagada'}
+                {b.label} · {toNumber(b.due) > 0 ? money(b.due, currency) : t('Pagada', 'Paid')}
               </button>
             ))}
           </div>
@@ -258,7 +265,7 @@ export function PayView({ config, token, initial, returnedIntent }: { config: On
             aria-expanded={showItems}
             className="flex cursor-pointer items-center justify-between rounded-2xl border border-line bg-surface-2 px-4 py-3 text-left text-sm font-semibold text-ink"
           >
-            Ver lo que pidieron ({bill.items.reduce((a, i) => a + i.quantity, 0)})
+            {t('Ver lo que pidieron', 'See what was ordered')} ({bill.items.reduce((a, i) => a + i.quantity, 0)})
             <ChevronDown aria-hidden className={`size-4 transition-transform ${showItems ? 'rotate-180' : ''}`} />
           </button>
           {showItems ? (
@@ -278,45 +285,45 @@ export function PayView({ config, token, initial, returnedIntent }: { config: On
           ) : null}
           <div className="flex flex-col gap-1.5 border-t border-line pt-3">
             <Row label="Subtotal" value={money(bill.subtotal, currency)} />
-            {discount > 0 ? <Row label="Descuentos" value={`−${money(discount, currency)}`} tone="success" /> : null}
-            <Row label="Impuestos" value={money(bill.taxTotal, currency)} />
-            {toNumber(bill.tipTotal) > 0 ? <Row label="Propinas ya dejadas" value={money(bill.tipTotal, currency)} /> : null}
+            {discount > 0 ? <Row label={t('Descuentos', 'Discounts')} value={`−${money(discount, currency)}`} tone="success" /> : null}
+            <Row label={t('Impuestos', 'Tax')} value={money(bill.taxTotal, currency)} />
+            {toNumber(bill.tipTotal) > 0 ? <Row label={t('Propinas ya dejadas', 'Tips already left')} value={money(bill.tipTotal, currency)} /> : null}
             <Row label="Total" value={money(bill.total, currency)} />
-            {paidSoFar > 0 ? <Row label="Ya pagado" value={`−${money(paidSoFar, currency)}`} tone="success" /> : null}
-            <Row label="Por pagar" value={money(due, currency)} strong />
+            {paidSoFar > 0 ? <Row label={t('Ya pagado', 'Already paid')} value={`−${money(paidSoFar, currency)}`} tone="success" /> : null}
+            <Row label={t('Por pagar', 'Left to pay')} value={money(due, currency)} strong />
           </div>
         </Section>
 
-        <Section title="¿Cuánto vas a pagar?" aside={<Users aria-hidden className="size-5 text-accent-text" />}>
-          <div role="radiogroup" aria-label="Cuánto pagar" className="grid grid-cols-3 gap-2">
-            <Choice on={share.kind === 'all'} disabled={locked} onClick={() => setShare({ kind: 'all' })} label="Todo" sub={money(due, currency)} />
+        <Section title={t('¿Cuánto vas a pagar?', 'How much will you pay?')} aside={<Users aria-hidden className="size-5 text-accent-text" />}>
+          <div role="radiogroup" aria-label={t('Cuánto pagar', 'How much to pay')} className="grid grid-cols-3 gap-2">
+            <Choice on={share.kind === 'all'} disabled={locked} onClick={() => setShare({ kind: 'all' })} label={t('Todo', 'All')} sub={money(due, currency)} />
             <Choice
               on={share.kind === 'split'}
               disabled={locked}
               onClick={() => setShare({ kind: 'split', people: share.kind === 'split' ? share.people : 2 })}
-              label="Dividir"
-              sub="en partes iguales"
+              label={t('Dividir', 'Split')}
+              sub={t('en partes iguales', 'evenly')}
             />
             <Choice
               on={share.kind === 'custom'}
               disabled={locked}
               onClick={() => setShare({ kind: 'custom', value: share.kind === 'custom' ? share.value : '' })}
-              label="Otro"
-              sub="monto"
+              label={t('Otro', 'Other')}
+              sub={t('monto', 'amount')}
             />
           </div>
           {share.kind === 'split' ? (
             <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-line bg-surface-2 px-4 py-3">
               <span className="text-sm text-soft">
-                Entre <span className="font-bold text-ink">{share.people}</span> personas:{' '}
-                <span className="font-bold text-ink">{money(amount, currency)}</span> cada una
+                {t('Entre', 'Split')} <span className="font-bold text-ink">{share.people}</span> {t('personas', 'ways')}:{' '}
+                <span className="font-bold text-ink">{money(amount, currency)}</span> {t('cada una', 'each')}
               </span>
-              <Stepper label="personas" size="sm" min={2} max={20} value={share.people} onChange={(people) => !locked && setShare({ kind: 'split', people })} />
+              <Stepper label={t('personas', 'people')} size="sm" min={2} max={20} value={share.people} onChange={(people) => !locked && setShare({ kind: 'split', people })} />
             </div>
           ) : null}
           {share.kind === 'custom' ? (
             <label className="flex flex-col gap-1.5">
-              <span className="text-sm font-semibold text-soft">Monto (máximo {money(due, currency)})</span>
+              <span className="text-sm font-semibold text-soft">{t(`Monto (máximo ${money(due, currency)})`, `Amount (max ${money(due, currency)})`)}</span>
               <input
                 inputMode="decimal"
                 value={share.value}
@@ -325,13 +332,13 @@ export function PayView({ config, token, initial, returnedIntent }: { config: On
                 placeholder="0.00"
                 className="h-12 rounded-2xl border border-line bg-surface-2 px-4 text-base text-ink placeholder:text-muted"
               />
-              {toNumber(share.value) > due ? <span className="text-sm text-danger">Es más de lo que falta: se cobrarán {money(due, currency)}</span> : null}
+              {toNumber(share.value) > due ? <span className="text-sm text-danger">{t(`Es más de lo que falta: se cobrarán ${money(due, currency)}`, `That is more than what is left: ${money(due, currency)} will be charged`)}</span> : null}
             </label>
           ) : null}
         </Section>
 
-        <Section title="Propina">
-          <div role="radiogroup" aria-label="Propina" className="grid grid-cols-3 gap-2 sm:grid-cols-5">
+        <Section title={t('Propina', 'Tip')}>
+          <div role="radiogroup" aria-label={t('Propina', 'Tip')} className="grid grid-cols-3 gap-2 sm:grid-cols-5">
             {presets.map((p) => (
               <Choice
                 key={p}
@@ -342,12 +349,12 @@ export function PayView({ config, token, initial, returnedIntent }: { config: On
                 sub={money(round2((amount * p) / 100), currency)}
               />
             ))}
-            <Choice on={tipChoice.kind === 'custom'} disabled={locked} onClick={() => setTipChoice({ kind: 'custom', value: '' })} label="Otra" sub="monto" />
-            <Choice on={tipChoice.kind === 'none'} disabled={locked} onClick={() => setTipChoice({ kind: 'none' })} label="Sin" sub="propina" />
+            <Choice on={tipChoice.kind === 'custom'} disabled={locked} onClick={() => setTipChoice({ kind: 'custom', value: '' })} label={t('Otra', 'Other')} sub={t('monto', 'amount')} />
+            <Choice on={tipChoice.kind === 'none'} disabled={locked} onClick={() => setTipChoice({ kind: 'none' })} label={t('Sin', 'No')} sub={t('propina', 'tip')} />
           </div>
           {tipChoice.kind === 'custom' ? (
             <input
-              aria-label="Monto de propina"
+              aria-label={t('Monto de propina', 'Tip amount')}
               inputMode="decimal"
               value={tipChoice.value}
               disabled={locked}
@@ -356,12 +363,12 @@ export function PayView({ config, token, initial, returnedIntent }: { config: On
               className="h-12 rounded-2xl border border-line bg-surface-2 px-4 text-base text-ink placeholder:text-muted"
             />
           ) : null}
-          <p className="m-0 text-xs text-muted">El 100 % de la propina es para el equipo.</p>
+          <p className="m-0 text-xs text-muted">{t('El 100 % de la propina es para el equipo.', '100% of the tip goes to the team.')}</p>
         </Section>
 
-        <Section title="Pagar">
+        <Section title={t('Pagar', 'Pay')}>
           <label className="flex flex-col gap-1.5">
-            <span className="text-sm font-semibold text-soft">Email para el recibo (opcional)</span>
+            <span className="text-sm font-semibold text-soft">{t('Email para el recibo (opcional)', 'Email for the receipt (optional)')}</span>
             <input
               type="email"
               autoComplete="email"
@@ -373,13 +380,13 @@ export function PayView({ config, token, initial, returnedIntent }: { config: On
             {emailError ? <span className="text-sm text-danger">{emailError}</span> : null}
           </label>
           <div className="flex flex-col gap-1.5 border-t border-line pt-3">
-            <Row label="Tu parte" value={money(amount, currency)} />
-            <Row label="Propina" value={money(tip, currency)} />
-            <Row label="Total a pagar" value={money(total, currency)} strong />
+            <Row label={t('Tu parte', 'Your share')} value={money(amount, currency)} />
+            <Row label={t('Propina', 'Tip')} value={money(tip, currency)} />
+            <Row label={t('Total a pagar', 'Total to pay')} value={money(total, currency)} strong />
           </div>
           {error ? <Notice tone="danger">{error}</Notice> : null}
           {!view.payable ? (
-            <Notice>El pago con el celular no está disponible ahora. Pide la cuenta a tu mesero.</Notice>
+            <Notice>{t('El pago con el celular no está disponible ahora. Pide la cuenta a tu mesero.', 'Paying by phone is not available right now. Ask your server for the check.')}</Notice>
           ) : intent && view.publishableKey ? (
             <div className="flex flex-col gap-3">
               <StripePay
@@ -399,12 +406,12 @@ export function PayView({ config, token, initial, returnedIntent }: { config: On
                 }}
                 className="cursor-pointer self-center border-0 bg-transparent text-sm font-semibold text-muted underline"
               >
-                Cambiar el monto
+                {t('Cambiar el monto', 'Change the amount')}
               </button>
             </div>
           ) : (
             <Button className="h-14 w-full text-base" onClick={start} loading={busy} disabled={amount < 0.5 || !!emailError}>
-              {amount < 0.5 ? 'Elige cuánto pagar' : `Continuar · ${money(total, currency)}`}
+              {amount < 0.5 ? t('Elige cuánto pagar', 'Choose how much to pay') : `${t('Continuar', 'Continue')} · ${money(total, currency)}`}
             </Button>
           )}
         </Section>

@@ -2,16 +2,23 @@
 
 import { Check, X } from 'lucide-react';
 import { useEffect, useId, useMemo, useRef, useState } from 'react';
+import { useLang, useT } from '@/components/i18n';
 import { Button, Pill, Stepper } from '@/components/ui';
+import { pick, type Lang } from '@/lib/i18n';
 import { cart } from '@/lib/cart';
 import { money, toNumber } from '@/lib/format';
 import type { MenuModifierGroup, MenuProduct } from '@/lib/types';
 
-function groupRule(g: MenuModifierGroup) {
+function groupRule(g: MenuModifierGroup, lang: Lang) {
   const max = g.selectionType === 'SINGLE' ? 1 : g.maxSelect;
-  if (g.minSelect > 0 && max === g.minSelect) return { text: `Elige ${g.minSelect}`, required: true, max };
-  if (g.minSelect > 0) return { text: `Elige al menos ${g.minSelect}${max ? ` (hasta ${max})` : ''}`, required: true, max };
-  return { text: max ? `Opcional · hasta ${max}` : 'Opcional', required: false, max };
+  if (g.minSelect > 0 && max === g.minSelect) return { text: pick(lang, `Elige ${g.minSelect}`, `Choose ${g.minSelect}`), required: true, max };
+  if (g.minSelect > 0)
+    return {
+      text: pick(lang, `Elige al menos ${g.minSelect}${max ? ` (hasta ${max})` : ''}`, `Choose at least ${g.minSelect}${max ? ` (up to ${max})` : ''}`),
+      required: true,
+      max,
+    };
+  return { text: max ? pick(lang, `Opcional · hasta ${max}`, `Optional · up to ${max}`) : pick(lang, 'Opcional', 'Optional'), required: false, max };
 }
 
 function initialSelection(product: MenuProduct) {
@@ -39,6 +46,8 @@ export function ProductSheet({
   onClose: () => void;
   onAdded: () => void;
 }) {
+  const lang = useLang();
+  const t = useT();
   const [selected, setSelected] = useState(() => initialSelection(product));
   const [quantity, setQuantity] = useState(1);
   const [notes, setNotes] = useState('');
@@ -113,7 +122,7 @@ export function ProductSheet({
         <button
           type="button"
           onClick={onClose}
-          aria-label="Cerrar"
+          aria-label={t('Cerrar', 'Close')}
           className="press absolute top-3 right-3 z-10 flex size-11 cursor-pointer items-center justify-center rounded-full border border-line-strong bg-bg/80 text-ink backdrop-blur"
         >
           <X aria-hidden className="size-5" />
@@ -144,11 +153,11 @@ export function ProductSheet({
               </h2>
               {product.description ? <p className="m-0 leading-relaxed text-soft">{product.description}</p> : null}
               <span className="font-heading text-xl font-bold">{money(product.price, currency)}</span>
-              {product.allergens.length ? <span className="text-xs text-muted">Contiene: {product.allergens.join(', ')}</span> : null}
+              {product.allergens.length ? <span className="text-xs text-muted">{t('Contiene', 'Contains')}: {product.allergens.join(', ')}</span> : null}
             </div>
 
             {product.modifierGroups.map((g) => {
-              const rule = groupRule(g);
+              const rule = groupRule(g, lang);
               const count = selected[g.id]?.length ?? 0;
               const missing = showErrors && problems.includes(g.id);
               return (
@@ -156,7 +165,7 @@ export function ProductSheet({
                   <legend className="mb-2 flex w-full items-center justify-between gap-3 p-0">
                     <span className="text-lg font-bold">{g.name}</span>
                     <span className={`rounded-full px-2.5 py-1 text-xs font-bold ${missing ? 'bg-danger text-white' : rule.required ? (count >= g.minSelect ? 'bg-success/15 text-success' : 'bg-surface-3 text-soft') : 'text-muted'}`}>
-                      {rule.required && count >= g.minSelect ? 'Listo' : rule.text}
+                      {rule.required && count >= g.minSelect ? t('Listo', 'Done') : rule.text}
                     </span>
                   </legend>
                   {g.options.map((o) => {
@@ -181,7 +190,7 @@ export function ProductSheet({
                         </span>
                         <span className="flex-1 font-semibold text-ink">{o.name}</span>
                         <span className="text-sm text-soft">
-                          {!o.isAvailable ? 'Agotado' : toNumber(o.priceAdjustment) ? `+${money(o.priceAdjustment, currency)}` : ''}
+                          {!o.isAvailable ? t('Agotado', 'Sold out') : toNumber(o.priceAdjustment) ? `+${money(o.priceAdjustment, currency)}` : ''}
                         </span>
                       </button>
                     );
@@ -191,13 +200,13 @@ export function ProductSheet({
             })}
 
             <label className="flex flex-col gap-2">
-              <span className="text-lg font-bold">Instrucciones especiales</span>
+              <span className="text-lg font-bold">{t('Instrucciones especiales', 'Special instructions')}</span>
               <textarea
                 value={notes}
                 onChange={(e) => setNotes(e.target.value)}
                 maxLength={200}
                 rows={2}
-                placeholder="Ej.: sin cebolla, salsa aparte"
+                placeholder={t('Ej.: sin cebolla, salsa aparte', 'E.g. no onions, sauce on the side')}
                 className="resize-none rounded-2xl border border-line bg-surface-2 px-4 py-3 text-ink placeholder:text-muted"
               />
             </label>
@@ -207,7 +216,7 @@ export function ProductSheet({
         <div className="flex items-center gap-3 border-t border-line bg-surface px-5 pt-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
           <Stepper value={quantity} onChange={setQuantity} min={1} label={product.name} />
           <Button className="h-14 flex-1 text-base" onClick={add} disabled={!canOrder || !product.isAvailable}>
-            {!product.isAvailable ? 'Agotado' : !canOrder ? 'Pedidos cerrados' : `Agregar · ${money(unitPrice * quantity, currency)}`}
+            {!product.isAvailable ? t('Agotado', 'Sold out') : !canOrder ? t('Pedidos cerrados', 'Ordering closed') : `${t('Agregar', 'Add')} · ${money(unitPrice * quantity, currency)}`}
           </Button>
         </div>
       </div>

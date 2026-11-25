@@ -1,5 +1,6 @@
 import type { ButtonHTMLAttributes, ReactNode } from 'react';
 import { LoaderCircle } from 'lucide-react';
+import { useT } from './i18n';
 
 type Tone = 'brand' | 'ink' | 'ghost' | 'surface';
 
@@ -60,6 +61,7 @@ export function Stepper({
   size?: 'sm' | 'md';
 }) {
   const btn = size === 'sm' ? 'size-9' : 'size-11';
+  const t = useT();
   return (
     <div className="inline-flex items-center gap-1 rounded-full border border-line bg-surface-2 p-1" role="group" aria-label={label}>
       <button
@@ -67,7 +69,7 @@ export function Stepper({
         className={`press ${btn} flex cursor-pointer items-center justify-center rounded-full text-ink hover:bg-surface-3`}
         onClick={() => onChange(value - 1)}
         disabled={value <= min}
-        aria-label={value - 1 <= 0 && min === 0 ? `Quitar ${label}` : `Uno menos de ${label}`}
+        aria-label={value - 1 <= 0 && min === 0 ? t(`Quitar ${label}`, `Remove ${label}`) : t(`Uno menos de ${label}`, `One less ${label}`)}
       >
         <span aria-hidden className="text-xl leading-none font-bold">−</span>
       </button>
@@ -77,7 +79,7 @@ export function Stepper({
         className={`press ${btn} flex cursor-pointer items-center justify-center rounded-full text-ink hover:bg-surface-3`}
         onClick={() => onChange(value + 1)}
         disabled={value >= max}
-        aria-label={`Uno más de ${label}`}
+        aria-label={t(`Uno más de ${label}`, `One more ${label}`)}
       >
         <span aria-hidden className="text-xl leading-none font-bold">+</span>
       </button>

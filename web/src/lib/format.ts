@@ -18,9 +18,9 @@ export const toNumber = (value: string | number | null | undefined) => {
 
 export const round2 = (n: number) => Math.round(n * 100) / 100;
 
-/** 8:41 p. m. en la zona del restaurante. */
-export function clockTime(iso: string, timezone: string): string {
-  return new Intl.DateTimeFormat('es-US', { hour: 'numeric', minute: '2-digit', timeZone: timezone }).format(new Date(iso));
+/** 8:41 p. m. (o 8:41 PM) en la zona del restaurante. */
+export function clockTime(iso: string, timezone: string, lang: 'es' | 'en' = 'es'): string {
+  return new Intl.DateTimeFormat(lang === 'en' ? 'en-US' : 'es-US', { hour: 'numeric', minute: '2-digit', timeZone: timezone }).format(new Date(iso));
 }
 
 export function plural(n: number, one: string, many: string) {

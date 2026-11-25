@@ -4,6 +4,7 @@ import { ChevronLeft, CreditCard, MapPin, Store, Wallet } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useMemo, useRef, useState } from 'react';
+import { useLang, useT } from '@/components/i18n';
 import { Button, Notice } from '@/components/ui';
 import { api, ApiError } from '@/lib/api';
 import { cart, cartCount, saveCustomer, saveLastOrder, toOrderLines, useCart, useCustomer, type CustomerInfo } from '@/lib/cart';
@@ -67,7 +68,9 @@ export function CheckoutView({ config }: { config: OnlineConfig }) {
   const state = useCart();
   const saved = useCustomer();
   const currency = config.currency;
-  const { modes, canOrder, reason } = orderingState(config);
+  const lang = useLang();
+  const t = useT();
+  const { modes, canOrder, reason } = orderingState(config, lang);
   const mode: FulfillmentType = modes.includes(state.mode) ? state.mode : (modes[0] ?? 'PICKUP');
   const delivery = mode === 'DELIVERY';
 
@@ -101,7 +104,7 @@ export function CheckoutView({ config }: { config: OnlineConfig }) {
   if (leaving) {
     return (
       <main className="flex min-h-dvh items-center justify-center text-soft" aria-live="polite">
-        Abriendo tu pedido…
+        {t('Abriendo tu pedido…', 'Opening your order…')}
       </main>
     );
   }
@@ -109,10 +112,10 @@ export function CheckoutView({ config }: { config: OnlineConfig }) {
   if (cartCount(state) === 0 && !created) {
     return (
       <main className="mx-auto flex min-h-dvh max-w-md flex-col items-center justify-center gap-5 px-6 text-center">
-        <h1 className="m-0 text-3xl font-extrabold">Tu pedido está vacío</h1>
-        <p className="m-0 text-soft">Elige algo rico del menú y vuelve aquí para pagar.</p>
+        <h1 className="m-0 text-3xl font-extrabold">{t('Tu pedido está vacío', 'Your order is empty')}</h1>
+        <p className="m-0 text-soft">{t('Elige algo rico del menú y vuelve aquí para pagar.', 'Pick something tasty from the menu and come back here to pay.')}</p>
         <Link href="/" className="press rounded-full bg-brand px-6 py-3 font-bold text-on-brand no-underline">
-          Ver el menú
+          {t('Ver el menú', 'See the menu')}
         </Link>
       </main>
     );
@@ -120,14 +123,14 @@ export function CheckoutView({ config }: { config: OnlineConfig }) {
 
   const validate = () => {
     const e: Record<string, string> = {};
-    if (info.name.trim().length < 2) e.name = 'Escribe tu nombre';
-    if (!PHONE.test(info.phone.trim())) e.phone = 'Escribe un teléfono válido';
-    if (info.email.trim() && !EMAIL.test(info.email.trim())) e.email = 'Revisa el email';
+    if (info.name.trim().length < 2) e.name = t('Escribe tu nombre', 'Enter your name');
+    if (!PHONE.test(info.phone.trim())) e.phone = t('Escribe un teléfono válido', 'Enter a valid phone number');
+    if (info.email.trim() && !EMAIL.test(info.email.trim())) e.email = t('Revisa el email', 'Check the email');
     if (delivery) {
-      if (info.street.trim().length < 3) e.street = 'Escribe la dirección';
-      if (info.city.trim().length < 2) e.city = 'Escribe la ciudad';
-      if (info.state.trim().length < 2) e.state = 'Escribe el estado';
-      if (!ZIP.test(info.zipCode.trim())) e.zipCode = 'Código postal de 5 dígitos';
+      if (info.street.trim().length < 3) e.street = t('Escribe la dirección', 'Enter the address');
+      if (info.city.trim().length < 2) e.city = t('Escribe la ciudad', 'Enter the city');
+      if (info.state.trim().length < 2) e.state = t('Escribe el estado', 'Enter the state');
+      if (!ZIP.test(info.zipCode.trim())) e.zipCode = t('Código postal de 5 dígitos', '5-digit ZIP code');
     }
     setErrors(e);
     const first = Object.keys(e)[0];
@@ -165,7 +168,7 @@ export function CheckoutView({ config }: { config: OnlineConfig }) {
         finish(result.order.publicCode);
       }
     } catch (e) {
-      setSubmitError(e instanceof ApiError ? e.message : 'No pudimos enviar tu pedido. Intenta de nuevo.');
+      setSubmitError(e instanceof ApiError ? e.message : t('No pudimos enviar tu pedido. Intenta de nuevo.', 'We could not send your order. Please try again.'));
     } finally {
       setSubmitting(false);
     }
@@ -193,17 +196,17 @@ export function CheckoutView({ config }: { config: OnlineConfig }) {
   return (
     <div className="mx-auto w-full max-w-6xl px-4 pb-16 sm:px-6">
       <header className="flex items-center gap-3 py-4">
-        <Link href="/" aria-label="Volver al menú" className="press flex size-11 items-center justify-center rounded-full border border-line-strong bg-surface text-ink">
+        <Link href="/" aria-label={t('Volver al menú', 'Back to the menu')} className="press flex size-11 items-center justify-center rounded-full border border-line-strong bg-surface text-ink">
           <ChevronLeft aria-hidden className="size-5" />
         </Link>
-        <h1 className="m-0 text-3xl font-extrabold">Tu pedido</h1>
+        <h1 className="m-0 text-3xl font-extrabold">{t('Tu pedido', 'Your order')}</h1>
       </header>
 
       <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_400px] lg:items-start lg:gap-8">
         <div className="flex min-w-0 flex-col gap-5">
           {reason ? <Notice tone="accent">{reason}</Notice> : null}
 
-          <Section title="¿Cómo lo quieres?">
+          <Section title={t('¿Cómo lo quieres?', 'How do you want it?')}>
             {locked ? (
               <p className="m-0 flex items-center gap-2 font-semibold">
                 {delivery ? <MapPin aria-hidden className="size-4 text-accent-text" /> : <Store aria-hidden className="size-4 text-accent-text" />}
@@ -212,61 +215,61 @@ export function CheckoutView({ config }: { config: OnlineConfig }) {
             ) : (
               <ModeToggle modes={modes} mode={mode} />
             )}
-            <p className="m-0 text-sm text-soft">{modeInfo(config, mode)}</p>
+            <p className="m-0 text-sm text-soft">{modeInfo(config, mode, lang)}</p>
             {!delivery && config.address.line ? (
               <p className="m-0 text-sm text-soft">
-                Recoges en <span className="font-semibold text-ink">{[config.address.line, config.address.city].filter(Boolean).join(', ')}</span>
+                {t('Recoges en', 'Pick up at')} <span className="font-semibold text-ink">{[config.address.line, config.address.city].filter(Boolean).join(', ')}</span>
               </p>
             ) : null}
           </Section>
 
-          <Section title="Productos">
+          <Section title={t('Productos', 'Items')}>
             <CartLines lines={state.lines} currency={currency} editable={!locked} />
             {!locked ? (
               <Link href="/" className="self-start text-sm font-bold">
-                + Agregar algo más
+                {t('+ Agregar algo más', '+ Add something else')}
               </Link>
             ) : null}
             {quoteError ? <Notice tone="danger">{quoteError}</Notice> : null}
           </Section>
 
-          <Section title="Tus datos" id="datos">
+          <Section title={t('Tus datos', 'Your details')} id="datos">
             <div className="grid gap-4 sm:grid-cols-2">
-              <Field label="Nombre" name="name" autoComplete="name" value={info.name} onChange={set('name')} error={errors.name} disabled={locked} />
-              <Field label="Teléfono" name="phone" type="tel" autoComplete="tel" inputMode="tel" value={info.phone} onChange={set('phone')} error={errors.phone} disabled={locked} hint="Te avisamos si hay algún cambio" />
-              <Field label="Email (opcional)" name="email" type="email" autoComplete="email" value={info.email} onChange={set('email')} error={errors.email} disabled={locked} hint="Para enviarte el recibo" className="sm:col-span-2" />
+              <Field label={t('Nombre', 'Name')} name="name" autoComplete="name" value={info.name} onChange={set('name')} error={errors.name} disabled={locked} />
+              <Field label={t('Teléfono', 'Phone')} name="phone" type="tel" autoComplete="tel" inputMode="tel" value={info.phone} onChange={set('phone')} error={errors.phone} disabled={locked} hint={t('Te avisamos si hay algún cambio', 'We will let you know if anything changes')} />
+              <Field label={t('Email (opcional)', 'Email (optional)')} name="email" type="email" autoComplete="email" value={info.email} onChange={set('email')} error={errors.email} disabled={locked} hint={t('Para enviarte el recibo', 'To send you the receipt')} className="sm:col-span-2" />
             </div>
           </Section>
 
           {delivery ? (
-            <Section title="Dirección de entrega">
+            <Section title={t('Dirección de entrega', 'Delivery address')}>
               <div className="grid gap-4 sm:grid-cols-6">
-                <Field label="Dirección" name="street" autoComplete="address-line1" value={info.street} onChange={set('street')} error={errors.street} disabled={locked} placeholder="123 Main St, Apt 4" className="sm:col-span-6" />
-                <Field label="Ciudad" name="city" autoComplete="address-level2" value={info.city} onChange={set('city')} error={errors.city} disabled={locked} className="sm:col-span-3" />
-                <Field label="Estado" name="state" autoComplete="address-level1" value={info.state} onChange={set('state')} error={errors.state} disabled={locked} placeholder="FL" maxLength={50} className="sm:col-span-1" />
-                <Field label="Código postal" name="zipCode" autoComplete="postal-code" inputMode="numeric" value={info.zipCode} onChange={set('zipCode')} error={errors.zipCode} disabled={locked} className="sm:col-span-2" />
-                <Field label="Instrucciones para el repartidor (opcional)" name="instructions" value={info.instructions} onChange={set('instructions')} disabled={locked} placeholder="Portón azul, timbre 2" maxLength={300} className="sm:col-span-6" />
+                <Field label={t('Dirección', 'Street address')} name="street" autoComplete="address-line1" value={info.street} onChange={set('street')} error={errors.street} disabled={locked} placeholder="123 Main St, Apt 4" className="sm:col-span-6" />
+                <Field label={t('Ciudad', 'City')} name="city" autoComplete="address-level2" value={info.city} onChange={set('city')} error={errors.city} disabled={locked} className="sm:col-span-3" />
+                <Field label={t('Estado', 'State')} name="state" autoComplete="address-level1" value={info.state} onChange={set('state')} error={errors.state} disabled={locked} placeholder="FL" maxLength={50} className="sm:col-span-1" />
+                <Field label={t('Código postal', 'ZIP code')} name="zipCode" autoComplete="postal-code" inputMode="numeric" value={info.zipCode} onChange={set('zipCode')} error={errors.zipCode} disabled={locked} className="sm:col-span-2" />
+                <Field label={t('Instrucciones para el repartidor (opcional)', 'Instructions for the driver (optional)')} name="instructions" value={info.instructions} onChange={set('instructions')} disabled={locked} placeholder={t('Portón azul, timbre 2', 'Blue gate, buzzer 2')} maxLength={300} className="sm:col-span-6" />
               </div>
             </Section>
           ) : null}
 
-          <Section title="Nota para la cocina">
+          <Section title={t('Nota para la cocina', 'Note for the kitchen')}>
             <textarea
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
               disabled={locked}
               maxLength={500}
               rows={2}
-              placeholder="Opcional: alergias, cubiertos, etc."
+              placeholder={t('Opcional: alergias, cubiertos, etc.', 'Optional: allergies, utensils, etc.')}
               className="resize-none rounded-2xl border border-line bg-surface-2 px-4 py-3 text-base text-ink placeholder:text-muted"
             />
           </Section>
 
-          <Section title="Propina">
-            <div role="radiogroup" aria-label="Propina" className="grid grid-cols-3 gap-2 sm:grid-cols-5">
+          <Section title={t('Propina', 'Tip')}>
+            <div role="radiogroup" aria-label={t('Propina', 'Tip')} className="grid grid-cols-3 gap-2 sm:grid-cols-5">
               {[...presets.map((p) => ({ id: `p${p}`, label: `${p}%`, sub: money(round2((tipBase * p) / 100), currency), choice: { kind: 'percent', value: p } as Tip })),
-                { id: 'custom', label: 'Otra', sub: 'monto', choice: { kind: 'custom', value: tip.kind === 'custom' ? tip.value : '' } as Tip },
-                { id: 'none', label: 'Sin', sub: 'propina', choice: { kind: 'none' } as Tip },
+                { id: 'custom', label: t('Otra', 'Other'), sub: t('monto', 'amount'), choice: { kind: 'custom', value: tip.kind === 'custom' ? tip.value : '' } as Tip },
+                { id: 'none', label: t('Sin', 'No'), sub: t('propina', 'tip'), choice: { kind: 'none' } as Tip },
               ].map((o) => {
                 const on = o.choice.kind === tip.kind && (o.choice.kind !== 'percent' || (tip.kind === 'percent' && o.choice.value === tip.value));
                 return (
@@ -286,17 +289,17 @@ export function CheckoutView({ config }: { config: OnlineConfig }) {
               })}
             </div>
             {tip.kind === 'custom' ? (
-              <Field label="Monto de propina" name="tip" inputMode="decimal" value={tip.value} disabled={locked} onChange={(e) => setTipChoice({ kind: 'custom', value: e.target.value.replace(/[^0-9.]/g, '') })} placeholder="0.00" />
+              <Field label={t('Monto de propina', 'Tip amount')} name="tip" inputMode="decimal" value={tip.value} disabled={locked} onChange={(e) => setTipChoice({ kind: 'custom', value: e.target.value.replace(/[^0-9.]/g, '') })} placeholder="0.00" />
             ) : null}
-            <p className="m-0 text-xs text-muted">{delivery ? 'El 100 % de la propina es para quien te lleva el pedido.' : 'El 100 % de la propina es para el equipo.'}</p>
+            <p className="m-0 text-xs text-muted">{delivery ? t('El 100 % de la propina es para quien te lleva el pedido.', '100% of the tip goes to your driver.') : t('El 100 % de la propina es para el equipo.', '100% of the tip goes to the team.')}</p>
           </Section>
         </div>
 
         <aside className="flex flex-col gap-5 lg:sticky lg:top-6">
-          <Section title="Pago" id="pago">
+          <Section title={t('Pago', 'Payment')} id="pago">
             {!locked ? (
               payOptions.length ? (
-                <div role="radiogroup" aria-label="Forma de pago" className="flex flex-col gap-2">
+                <div role="radiogroup" aria-label={t('Forma de pago', 'Payment method')} className="flex flex-col gap-2">
                   {payOptions.map((p) => {
                     const on = p === pay;
                     return (
@@ -310,8 +313,8 @@ export function CheckoutView({ config }: { config: OnlineConfig }) {
                       >
                         {p === 'card' ? <CreditCard aria-hidden className="size-5 text-accent-text" /> : <Wallet aria-hidden className="size-5 text-accent-text" />}
                         <span className="flex flex-1 flex-col">
-                          <span className="font-bold text-ink">{p === 'card' ? 'Pagar ahora' : 'Pagar al recoger'}</span>
-                          <span className="text-xs text-muted">{p === 'card' ? 'Tarjeta, Apple Pay o Google Pay' : 'En efectivo o tarjeta en el local'}</span>
+                          <span className="font-bold text-ink">{p === 'card' ? t('Pagar ahora', 'Pay now') : t('Pagar al recoger', 'Pay at pickup')}</span>
+                          <span className="text-xs text-muted">{p === 'card' ? t('Tarjeta, Apple Pay o Google Pay', 'Card, Apple Pay or Google Pay') : t('En efectivo o tarjeta en el local', 'Cash or card at the restaurant')}</span>
                         </span>
                         <span aria-hidden className={`size-5 rounded-full border-2 ${on ? 'border-brand bg-brand shadow-[inset_0_0_0_3px_var(--surface-2)]' : 'border-line-strong'}`} />
                       </button>
@@ -319,18 +322,19 @@ export function CheckoutView({ config }: { config: OnlineConfig }) {
                   })}
                 </div>
               ) : (
-                <Notice tone="accent">{delivery ? 'El delivery se paga en línea y el pago con tarjeta aún no está activo. Elige Pickup.' : 'No hay formas de pago disponibles.'}</Notice>
+                <Notice tone="accent">{delivery ? t('El delivery se paga en línea y el pago con tarjeta aún no está activo. Elige Pickup.', 'Delivery is paid online and card payments are not active yet. Choose Pickup.') : t('No hay formas de pago disponibles.', 'No payment methods available.')}</Notice>
               )
             ) : null}
 
             <TotalsSummary quote={quote} currency={currency} tip={tipAmount} mode={mode} />
-            {quote && delivery && !quote.meetsMinimum ? <Notice tone="danger">El pedido mínimo para delivery es de {money(quote.minOrder, currency)}.</Notice> : null}
+            {quote && delivery && !quote.meetsMinimum ? <Notice tone="danger">{t(`El pedido mínimo para delivery es de ${money(quote.minOrder, currency)}.`, `The delivery minimum is ${money(quote.minOrder, currency)}.`)}</Notice> : null}
             {submitError ? <Notice tone="danger">{submitError}</Notice> : null}
 
             {created?.payment && publishableKey ? (
               <div className="flex flex-col gap-3 border-t border-line pt-4">
                 <p className="m-0 text-sm text-soft">
-                  Pedido <span className="font-bold text-ink">#{created.order.number}</span> listo. Completa el pago para enviarlo a la cocina.
+                  {t('Pedido', 'Order')} <span className="font-bold text-ink">#{created.order.number}</span>{' '}
+                  {t('listo. Completa el pago para enviarlo a la cocina.', 'is ready. Complete the payment to send it to the kitchen.')}
                 </p>
                 <StripePay
                   publishableKey={publishableKey}
@@ -341,7 +345,7 @@ export function CheckoutView({ config }: { config: OnlineConfig }) {
                   onPaid={paid}
                 />
                 <button type="button" onClick={() => setCreated(null)} className="cursor-pointer self-center border-0 bg-transparent text-sm font-semibold text-muted underline">
-                  Cambiar el pedido
+                  {t('Cambiar el pedido', 'Change the order')}
                 </button>
               </div>
             ) : (
@@ -351,7 +355,7 @@ export function CheckoutView({ config }: { config: OnlineConfig }) {
                 loading={submitting}
                 disabled={!canOrder || !quote || !pay || !!quoteError || (delivery && !quote.meetsMinimum)}
               >
-                {pay === 'pay_at_pickup' ? `Hacer pedido · ${money(total, currency)}` : `Continuar al pago · ${money(total, currency)}`}
+                {pay === 'pay_at_pickup' ? `${t('Hacer pedido', 'Place order')} · ${money(total, currency)}` : `${t('Continuar al pago', 'Continue to payment')} · ${money(total, currency)}`}
               </Button>
             )}
           </Section>

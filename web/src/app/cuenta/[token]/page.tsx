@@ -2,11 +2,15 @@ import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import { Unavailable } from '@/components/unavailable';
 import { api, ApiError } from '@/lib/api';
+import { pick } from '@/lib/i18n';
+import { getLang } from '@/lib/lang-server';
 import { getConfig } from '@/lib/server';
 import type { TablePayView } from '@/lib/table-pay';
 import { PayView } from './pay-view';
 
-export const metadata: Metadata = { title: 'Paga tu cuenta', robots: { index: false } };
+export async function generateMetadata(): Promise<Metadata> {
+  return { title: pick(await getLang(), 'Paga tu cuenta', 'Pay your check'), robots: { index: false } };
+}
 
 /** Lo abre el cliente al escanear el QR de la tablet de su mesa. */
 export default async function TablePayPage({

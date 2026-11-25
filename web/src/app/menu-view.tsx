@@ -3,43 +3,47 @@
 import { Bike, Clock, Plus, Receipt, RotateCcw, Store } from 'lucide-react';
 import Link from 'next/link';
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { LanguageSwitch, useLang, useT } from '@/components/i18n';
 import { SiteFooter } from '@/components/site-footer';
 import { BrandMark, Notice, Pill } from '@/components/ui';
 import { cart, cartCount, toOrderLines, useCart, useLastOrder } from '@/lib/cart';
 import { money, plural, toNumber } from '@/lib/format';
 import { hoursLabel } from '@/lib/hours';
+import { pick, type Lang } from '@/lib/i18n';
 import { promoBadge, promotionsByProduct } from '@/lib/promos';
 import type { FulfillmentType, MenuProduct, OnlineConfig, PublicMenu, PublicPromotion } from '@/lib/types';
 import { useQuote } from '@/lib/use-quote';
 import { CartPanel } from './cart-panel';
 import { ProductSheet } from './product-sheet';
 
-export function orderingState(config: OnlineConfig) {
+export function orderingState(config: OnlineConfig, lang: Lang = 'es') {
   const modes: FulfillmentType[] = [];
   if (config.channels.pickup) modes.push('PICKUP');
   if (config.channels.delivery) modes.push('DELIVERY');
   const reason = config.channels.onlineOrderingPaused
-    ? 'Ahora mismo no estamos recibiendo pedidos en línea.'
+    ? pick(lang, 'Ahora mismo no estamos recibiendo pedidos en línea.', 'We are not taking online orders right now.')
     : !config.isOpenNow
-      ? 'Estamos cerrados. Puedes ver el menú y pedir cuando abramos.'
+      ? pick(lang, 'Estamos cerrados. Puedes ver el menú y pedir cuando abramos.', 'We are closed. You can browse the menu and order when we open.')
       : modes.length === 0
-        ? 'Los pedidos en línea no están disponibles.'
+        ? pick(lang, 'Los pedidos en línea no están disponibles.', 'Online ordering is not available.')
         : null;
   return { modes, canOrder: reason === null, reason };
 }
 
-export function modeInfo(config: OnlineConfig, mode: FulfillmentType) {
+export function modeInfo(config: OnlineConfig, mode: FulfillmentType, lang: Lang = 'es') {
   const prep = config.prepTimeMinutes;
-  if (mode === 'PICKUP') return `Recoges en el local · listo en ${prep}–${prep + 5} min`;
+  if (mode === 'PICKUP') return pick(lang, `Recoges en el local · listo en ${prep}–${prep + 5} min`, `Pickup at the restaurant · ready in ${prep}–${prep + 5} min`);
   const eta = config.delivery.etaMinutes;
   const fee = toNumber(config.delivery.fee);
-  return `A domicilio · llega en ${eta}–${eta + 10} min · ${fee > 0 ? `envío ${money(fee, config.currency)}` : 'envío gratis'}`;
+  const feeText = fee > 0 ? pick(lang, `envío ${money(fee, config.currency)}`, `${money(fee, config.currency)} delivery fee`) : pick(lang, 'envío gratis', 'free delivery');
+  return pick(lang, `A domicilio · llega en ${eta}–${eta + 10} min · ${feeText}`, `Delivery · arrives in ${eta}–${eta + 10} min · ${feeText}`);
 }
 
 export function ModeToggle({ modes, mode }: { modes: FulfillmentType[]; mode: FulfillmentType }) {
+  const t = useT();
   if (modes.length < 2) return null;
   return (
-    <div role="radiogroup" aria-label="Cómo quieres tu pedido" className="grid grid-cols-2 gap-1 rounded-full border border-line bg-surface p-1">
+    <div role="radiogroup" aria-label={t('Cómo quieres tu pedido', 'How do you want your order')} className="grid grid-cols-2 gap-1 rounded-full border border-line bg-surface p-1">
       {modes.map((m) => {
         const on = m === mode;
         return (
@@ -63,7 +67,9 @@ export function ModeToggle({ modes, mode }: { modes: FulfillmentType[]; mode: Fu
 export function MenuView({ config, menu, promotions }: { config: OnlineConfig; menu: PublicMenu; promotions: PublicPromotion[] }) {
   const state = useCart();
   const lastOrder = useLastOrder();
-  const { modes, canOrder, reason } = orderingState(config);
+  const lang = useLang();
+  const t = useT();
+  const { modes, canOrder, reason } = orderingState(config, lang);
   const mode: FulfillmentType = modes.includes(state.mode) ? state.mode : (modes[0] ?? 'PICKUP');
   const [open, setOpen] = useState<MenuProduct | null>(null);
   const [bump, setBump] = useState(0);
@@ -113,8 +119,8 @@ export function MenuView({ config, menu, promotions }: { config: OnlineConfig; m
     const targets = menu.categories.flatMap((c) => c.products.filter((p) => promo.productIds.includes(p.id) || promo.categoryIds.includes(c.id)));
     const withImage = targets.find((p) => p.imageUrl) ?? menu.categories.flatMap((c) => c.products).find((p) => p.imageUrl);
     const endsToday = promo.endsAt && new Date(promo.endsAt).getTime() - now < 24 * 3600_000;
-    return { promo, product: targets.length === 1 ? targets[0] : null, image: withImage?.imageUrl ?? null, chip: endsToday ? 'Solo hoy' : promoBadge(promo, currency), firstTarget: targets[0] };
-  }, [promotions, menu.categories, currency, now]);
+    return { promo, product: targets.length === 1 ? targets[0] : null, image: withImage?.imageUrl ?? null, chip: endsToday ? pick(lang, 'Solo hoy', 'Today only') : promoBadge(promo, currency), firstTarget: targets[0] };
+  }, [promotions, menu.categories, currency, now, lang]);
 
   const repeatable = lastOrder?.lines.filter((l) => products.get(l.productId)?.isAvailable) ?? [];
   const recentOrder = lastOrder && now - new Date(lastOrder.placedAt).getTime() < 12 * 3600_000 ? lastOrder : null;
@@ -125,11 +131,14 @@ export function MenuView({ config, menu, promotions }: { config: OnlineConfig; m
         <main className="flex min-w-0 flex-col gap-5 pt-4">
           <header className="flex items-center justify-between gap-3">
             <BrandMark name={config.name} logoUrl={config.logoUrl} />
-            {recentOrder ? (
-              <Link href={`/pedido/${recentOrder.code}`} className="press flex h-11 items-center gap-2 rounded-full border border-line-strong bg-surface px-4 text-sm font-bold text-ink no-underline">
-                <Receipt aria-hidden className="size-4 text-accent-text" /> Pedido #{recentOrder.number}
-              </Link>
-            ) : null}
+            <div className="flex items-center gap-2">
+              {recentOrder ? (
+                <Link href={`/pedido/${recentOrder.code}`} className="press flex h-11 items-center gap-2 rounded-full border border-line-strong bg-surface px-4 text-sm font-bold text-ink no-underline">
+                  <Receipt aria-hidden className="size-4 text-accent-text" /> {t('Pedido', 'Order')} #{recentOrder.number}
+                </Link>
+              ) : null}
+              <LanguageSwitch offered={config.locales} />
+            </div>
           </header>
 
           <div className="flex flex-col gap-2.5">
@@ -137,11 +146,11 @@ export function MenuView({ config, menu, promotions }: { config: OnlineConfig; m
             <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-soft">
               <span className="flex items-center gap-2">
                 <Clock aria-hidden className="size-4 text-accent-text" />
-                {modeInfo(config, mode)}
+                {modeInfo(config, mode, lang)}
               </span>
               <span className={`flex items-center gap-1.5 font-semibold ${config.isOpenNow ? 'text-success' : 'text-danger'}`}>
                 <span aria-hidden className="size-2 rounded-full bg-current" />
-                {hoursLabel(config.openingHours, config.timezone, config.isOpenNow)}
+                {hoursLabel(config.openingHours, config.timezone, config.isOpenNow, new Date(), lang)}
               </span>
             </div>
           </div>
@@ -175,7 +184,7 @@ export function MenuView({ config, menu, promotions }: { config: OnlineConfig; m
                 <RotateCcw aria-hidden className="size-5" />
               </span>
               <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-                <span className="font-bold">Pide otra vez</span>
+                <span className="font-bold">{t('Pide otra vez', 'Order again')}</span>
                 <span className="truncate text-sm text-muted">{repeatable.map((l) => (l.quantity > 1 ? `${l.quantity} ${l.name}` : l.name)).join(' + ')}</span>
               </div>
               <button
@@ -186,12 +195,12 @@ export function MenuView({ config, menu, promotions }: { config: OnlineConfig; m
                 }}
                 className="press h-11 cursor-pointer rounded-full border-0 bg-ink px-4 text-sm font-bold text-bg"
               >
-                Repetir
+                {t('Repetir', 'Reorder')}
               </button>
             </div>
           ) : null}
 
-          <nav aria-label="Categorías" className="no-scrollbar sticky top-0 z-20 -mx-4 flex gap-2 overflow-x-auto bg-bg/90 px-4 py-2 backdrop-blur sm:-mx-6 sm:px-6">
+          <nav aria-label={t('Categorías', 'Categories')} className="no-scrollbar sticky top-0 z-20 -mx-4 flex gap-2 overflow-x-auto bg-bg/90 px-4 py-2 backdrop-blur sm:-mx-6 sm:px-6">
             {menu.categories.map((c) => {
               const on = c.id === activeCat;
               return (
@@ -222,7 +231,7 @@ export function MenuView({ config, menu, promotions }: { config: OnlineConfig; m
             </section>
           ))}
 
-          {menu.categories.length === 0 ? <Notice>Todavía no hay productos en el menú en línea.</Notice> : null}
+          {menu.categories.length === 0 ? <Notice>{t('Todavía no hay productos en el menú en línea.', 'There are no products on the online menu yet.')}</Notice> : null}
 
           <SiteFooter config={config} />
         </main>
@@ -242,13 +251,13 @@ export function MenuView({ config, menu, promotions }: { config: OnlineConfig; m
             className={`press flex h-[62px] items-center gap-3 rounded-[20px] bg-brand pr-5 pl-2.5 text-on-brand no-underline shadow-float ${bump ? 'bump' : ''}`}
           >
             <span className="flex h-[42px] min-w-[42px] items-center justify-center rounded-[14px] bg-black/15 px-2 text-[17px] font-extrabold">{count}</span>
-            <span className="flex-1 text-[17px] font-extrabold">Ver mi pedido</span>
+            <span className="flex-1 text-[17px] font-extrabold">{t('Ver mi pedido', 'View my order')}</span>
             <span className="font-heading text-[19px] font-extrabold">
               {quote ? money(toNumber(quote.totals.subtotal) - toNumber(quote.totals.discountTotal), currency) : money(state.lines.reduce((n, l) => n + l.unitPrice * l.quantity, 0), currency)}
             </span>
           </Link>
           <span className="sr-only" aria-live="polite">
-            {plural(count, 'producto', 'productos')} en tu pedido
+            {t(`${plural(count, 'producto', 'productos')} en tu pedido`, `${plural(count, 'item', 'items')} in your order`)}
           </span>
         </div>
       ) : null}
@@ -274,6 +283,7 @@ function ProductCard({
   onAdd: () => void;
 }) {
   const soldOut = !p.isAvailable;
+  const t = useT();
   return (
     <article onClick={onOpen} className={`group flex cursor-pointer gap-3.5 rounded-[22px] border border-line bg-surface p-2.5 transition-colors hover:border-line-strong ${soldOut ? 'opacity-60' : ''}`}>
       {p.imageUrl ? (
@@ -296,11 +306,11 @@ function ProductCard({
         {p.description ? <p className="m-0 line-clamp-2 text-[13px] leading-snug text-muted">{p.description}</p> : null}
         <div className="flex-1" />
         <div className="flex items-center justify-between gap-2">
-          <span className="font-heading text-lg font-bold">{soldOut ? <span className="text-sm font-semibold text-muted">Agotado</span> : money(p.price, currency)}</span>
+          <span className="font-heading text-lg font-bold">{soldOut ? <span className="text-sm font-semibold text-muted">{t('Agotado', 'Sold out')}</span> : money(p.price, currency)}</span>
           {!soldOut ? (
             <button
               type="button"
-              aria-label={`Agregar ${p.name}`}
+              aria-label={t(`Agregar ${p.name}`, `Add ${p.name}`)}
               disabled={!canOrder}
               onClick={(e) => {
                 e.stopPropagation();

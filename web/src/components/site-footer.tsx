@@ -1,4 +1,7 @@
+'use client';
+
 import { Clock, MapPin, Phone } from 'lucide-react';
+import { useLang, useT } from '@/components/i18n';
 import { weekSchedule } from '@/lib/hours';
 import type { OnlineConfig } from '@/lib/types';
 
@@ -6,7 +9,9 @@ export function SiteFooter({ config }: { config: OnlineConfig }) {
   const { address } = config;
   const addressText = [address.line, address.city, [address.state, address.zipCode].filter(Boolean).join(' ')].filter(Boolean).join(', ');
   const mapsUrl = addressText ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${config.name} ${addressText}`)}` : null;
-  const schedule = weekSchedule(config.openingHours);
+  const lang = useLang();
+  const t = useT();
+  const schedule = weekSchedule(config.openingHours, lang);
   const social = Object.entries(config.socialLinks ?? {}).filter(([, url]) => typeof url === 'string' && url.startsWith('http'));
 
   return (
@@ -39,20 +44,20 @@ export function SiteFooter({ config }: { config: OnlineConfig }) {
         {config.openingHours.length ? (
           <div className="flex flex-col gap-2">
             <h2 className="flex items-center gap-2 text-lg font-bold text-ink">
-              <Clock aria-hidden className="size-4 text-accent-text" /> Horario
+              <Clock aria-hidden className="size-4 text-accent-text" /> {t('Horario', 'Hours')}
             </h2>
             <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1">
               {schedule.map((d) => (
                 <div key={d.name} className="contents">
                   <dt className="capitalize">{d.name}</dt>
-                  <dd className="m-0 text-ink">{d.windows.length ? d.windows.join(' · ') : 'Cerrado'}</dd>
+                  <dd className="m-0 text-ink">{d.windows.length ? d.windows.join(' · ') : t('Cerrado', 'Closed')}</dd>
                 </div>
               ))}
             </dl>
           </div>
         ) : null}
       </div>
-      <p className="mt-8 text-xs text-muted">Pedidos en línea con Devepmax E‑Menu</p>
+      <p className="mt-8 text-xs text-muted">{t('Pedidos en línea con Devepmax E‑Menu', 'Online ordering by Devepmax E‑Menu')}</p>
     </footer>
   );
 }

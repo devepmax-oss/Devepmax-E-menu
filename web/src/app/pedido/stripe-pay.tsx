@@ -4,6 +4,7 @@ import { Elements, ExpressCheckoutElement, PaymentElement, useElements, useStrip
 import { loadStripe, type Appearance, type Stripe } from '@stripe/stripe-js';
 import { Lock } from 'lucide-react';
 import { useMemo, useState } from 'react';
+import { useLang, useT } from '@/components/i18n';
 import { Button, Notice } from '@/components/ui';
 
 const stripes = new Map<string, Promise<Stripe | null>>();
@@ -27,6 +28,7 @@ export function StripePay(props: {
   customer?: { name: string; email: string; phone: string };
   onPaid: (paymentIntentId?: string) => void;
 }) {
+  const lang = useLang();
   const appearance = useMemo<Appearance>(() => {
     const dark = cssVar('color-scheme', 'dark') !== 'light';
     return {
@@ -45,7 +47,7 @@ export function StripePay(props: {
   }, []);
 
   return (
-    <Elements stripe={getStripe(props.publishableKey)} options={{ clientSecret: props.clientSecret, appearance, locale: 'es' }}>
+    <Elements stripe={getStripe(props.publishableKey)} options={{ clientSecret: props.clientSecret, appearance, locale: lang }}>
       <PayForm {...props} />
     </Elements>
   );
@@ -64,6 +66,7 @@ function PayForm({
 }) {
   const stripe = useStripe();
   const elements = useElements();
+  const t = useT();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [express, setExpress] = useState(false);
@@ -83,7 +86,7 @@ function PayForm({
       },
     });
     if (failure) {
-      setError(failure.message ?? 'No se pudo completar el pago. Revisa los datos de la tarjeta.');
+      setError(failure.message ?? t('No se pudo completar el pago. Revisa los datos de la tarjeta.', 'The payment could not be completed. Check your card details.'));
       setBusy(false);
       return;
     }
@@ -99,15 +102,15 @@ function PayForm({
           options={{ buttonHeight: 52, buttonType: { applePay: 'order', googlePay: 'order' } }}
         />
         <div className="flex items-center gap-3 text-xs font-semibold tracking-wide text-muted uppercase">
-          <span className="h-px flex-1 bg-line" /> o con tarjeta <span className="h-px flex-1 bg-line" />
+          <span className="h-px flex-1 bg-line" /> {t('o con tarjeta', 'or pay by card')} <span className="h-px flex-1 bg-line" />
         </div>
       </div>
       <PaymentElement options={{ layout: 'tabs', ...(customer ? { fields: { billingDetails: { name: 'never', phone: 'never' } } } : {}) }} />
       {error ? <Notice tone="danger">{error}</Notice> : null}
       <Button className="h-14 w-full text-base" onClick={confirm} loading={busy} disabled={!stripe || !elements}>
-        <Lock aria-hidden className="size-4" /> Pagar {amountLabel}
+        <Lock aria-hidden className="size-4" /> {t('Pagar', 'Pay')} {amountLabel}
       </Button>
-      <p className="m-0 text-center text-xs text-muted">Pago seguro con Stripe. Tus datos de tarjeta no pasan por el restaurante.</p>
+      <p className="m-0 text-center text-xs text-muted">{t('Pago seguro con Stripe. Tus datos de tarjeta no pasan por el restaurante.', 'Secure payment with Stripe. Your card details never reach the restaurant.')}</p>
     </div>
   );
 }

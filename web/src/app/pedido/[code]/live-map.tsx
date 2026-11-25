@@ -70,5 +70,5 @@ export function LiveMap({ driver, destination, store }: { driver: Point | null; 
     }
   }, [driver, destination]);
 
-  return <div ref={box} className="absolute inset-0 z-0" role="img" aria-label="Mapa con la ubicación del repartidor" />;
+  return <div ref={box} className="absolute inset-0 z-0" role="img" aria-label={document.documentElement.lang === 'en' ? 'Map with the driver location' : 'Mapa con la ubicación del repartidor'} />;
 }
