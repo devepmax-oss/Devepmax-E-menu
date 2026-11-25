@@ -162,6 +162,31 @@ async function main() {
   check('y se puede quitar', detached.data?.customer === null, detached.data?.customer);
   await api('POST', `/orders/${order.id}/cancel`, { reason: 'Prueba de clientes' }, { staff: A });
 
+  console.log('\nAdministrar clientes');
+  await api('PATCH', `/customers/${row?.id}`, { marketingOptIn: true }, { staff: A });
+  const optIn = (await api('GET', `/customers?filter=optIn&q=${P.slice(-4)}`, undefined, { staff: A })).data;
+  check('filtra a quienes aceptan promociones', optIn?.customers?.some((c: Json) => c.id === row?.id) && !optIn.customers.some((c: Json) => c.id === quick.data?.customer?.id), optIn);
+  const bySpent = await api('GET', '/customers?sort=spent', undefined, { staff: A });
+  check('ordena por lo que más gastan', bySpent.status === 200 && Array.isArray(bySpent.data?.customers), bySpent.data);
+  const taken = await api('PATCH', `/customers/${quick.data?.customer?.id}`, { phone: P }, { staff: A });
+  check('no deja repetir el teléfono de otro cliente', taken.status === 409, taken.data);
+  const mail = `prueba${Q}@example.com`;
+  const edited2 = await api('PATCH', `/customers/${quick.data?.customer?.id}`, { name: 'Prueba Caja Editado', email: mail }, { staff: A });
+  check('edita nombre y email', edited2.data?.name === 'Prueba Caja Editado' && edited2.data?.email === mail, edited2.data);
+  const link = await api('POST', '/customers/export-link', { filter: 'all' }, { staff: A });
+  const file = link.data?.url ? await fetch(link.data.url) : null;
+  const bytes = file ? Buffer.from(await file.arrayBuffer()) : Buffer.alloc(0);
+  check('exporta la lista a Excel', file?.status === 200 && bytes.subarray(0, 2).toString() === 'PK', { status: file?.status });
+  const fake = await fetch(`${BASE}/customers/export/abc.def`);
+  check('un enlace alterado no descarga nada', fake.status === 401, fake.status);
+  const merged = await api('POST', `/customers/${row?.id}/merge`, { fromId: quick.data?.customer?.id }, { staff: A });
+  check('junta dos fichas de la misma persona', merged.status === 200 && merged.data?.email === mail && merged.data?.phone === `+1${P}`, merged.data);
+  check('la ficha duplicada desaparece', (await api('GET', `/customers/${quick.data?.customer?.id}`, undefined, { staff: A })).status === 404);
+  check('el cliente sigue con su sesión', (await api('GET', '/me', undefined, { customer: T })).data?.email === mail);
+  const R = await api('POST', '/customers', { name: 'Prueba Borrar', phone: phone() }, { staff: A });
+  const del = await api('DELETE', `/customers/${R.data?.customer?.id}`, undefined, { staff: A });
+  check('borra un cliente', del.status === 204 && (await api('GET', `/customers/${R.data?.customer?.id}`, undefined, { staff: A })).status === 404, del.status);
+
   console.log('\nSalir');
   await api('POST', '/customer-auth/logout', undefined, { customer: T });
   check('al salir, la sesión deja de servir', (await api('GET', '/me', undefined, { customer: T })).status === 401);

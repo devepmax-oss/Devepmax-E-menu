@@ -1,4 +1,5 @@
-import { Body, Controller, Delete, ForbiddenException, Get, Headers, HttpCode, Ip, Param, Patch, Post, Query, UnauthorizedException } from '@nestjs/common';
+import { Body, Controller, Delete, ForbiddenException, Get, Headers, HttpCode, Ip, Param, Patch, Post, Query, Res, UnauthorizedException } from '@nestjs/common';
+import type { Response } from 'express';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import type { EmployeeActor } from '../../common/auth/actor';
 import { AllowActors, CurrentActor, Public, RequirePermissions } from '../../common/auth/decorators';
@@ -9,8 +10,10 @@ import {
   AttachCustomerDto,
   CreateCustomerDto,
   CustomersQueryDto,
+  ExportCustomersDto,
   GoogleSignInDto,
   LookupDto,
+  MergeCustomerDto,
   RequestCodeDto,
   UpdateCustomerDto,
   UpdateMeDto,
@@ -139,6 +142,24 @@ export class CustomersController {
     return this.customers.list(query);
   }
 
+  @RequirePermissions('customers.manage')
+  @Post('customers/export-link')
+  @HttpCode(200)
+  exportLink(@Body() dto: ExportCustomersDto) {
+    return this.customers.exportLink(dto);
+  }
+
+  /** Descarga del Excel con el enlace firmado (se abre en el navegador, sin sesión). */
+  @Public()
+  @Get('customers/export/:token')
+  async exportFile(@Param('token') token: string, @Res() res: Response) {
+    const { name, buffer } = await this.customers.exportFromToken(token);
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename="${name}"`);
+    res.setHeader('Cache-Control', 'no-store');
+    res.send(buffer);
+  }
+
   @Get('customers/lookup')
   lookup(@CurrentActor() actor: EmployeeActor, @Query() query: LookupDto) {
     this.assertFrontOfHouse(actor);
@@ -161,6 +182,20 @@ export class CustomersController {
   @Patch('customers/:id')
   update(@CurrentActor() actor: EmployeeActor, @Param('id') id: string, @Body() dto: UpdateCustomerDto) {
     return this.customers.update(actor, id, dto);
+  }
+
+  @RequirePermissions('customers.manage')
+  @Delete('customers/:id')
+  @HttpCode(204)
+  async remove(@CurrentActor() actor: EmployeeActor, @Param('id') id: string) {
+    await this.customers.remove(actor, id);
+  }
+
+  @RequirePermissions('customers.manage')
+  @Post('customers/:id/merge')
+  @HttpCode(200)
+  merge(@CurrentActor() actor: EmployeeActor, @Param('id') id: string, @Body() dto: MergeCustomerDto) {
+    return this.customers.merge(actor, id, dto.fromId);
   }
 
   @Patch('tables/:id/customer')

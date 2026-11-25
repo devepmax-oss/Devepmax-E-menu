@@ -31,8 +31,14 @@ export class AddressDto {
   @IsOptional() @IsString() @MaxLength(300) instructions?: string;
 }
 
+export const CUSTOMER_FILTERS = ['all', 'optIn', 'account', 'noVisits'] as const;
+export const CUSTOMER_SORTS = ['recent', 'name', 'visits', 'spent', 'lastVisit'] as const;
+
 export class CustomersQueryDto {
   @IsOptional() @IsString() @MaxLength(80) q?: string;
+  /** optIn = aceptan promociones; account = con cuenta web; noVisits = sin visitas. */
+  @IsOptional() @IsIn(CUSTOMER_FILTERS) filter?: (typeof CUSTOMER_FILTERS)[number];
+  @IsOptional() @IsIn(CUSTOMER_SORTS) sort?: (typeof CUSTOMER_SORTS)[number];
   @IsOptional() @Type(() => Number) @IsInt() @Min(0) offset?: number;
   @IsOptional() @Type(() => Number) @IsInt() @Min(1) @Max(100) limit?: number;
 }
@@ -50,8 +56,21 @@ export class CreateCustomerDto {
 
 export class UpdateCustomerDto {
   @IsOptional() @IsString() @MinLength(2) @MaxLength(80) name?: string;
+  /** null = quitar. */
+  @IsOptional() @ValidateIf((_, v) => v !== null) @IsString() @MaxLength(20) phone?: string | null;
+  @IsOptional() @ValidateIf((_, v) => v !== null) @IsString() @MaxLength(120) email?: string | null;
   @IsOptional() @ValidateIf((_, v) => v !== null) @IsString() @MaxLength(1000) notes?: string | null;
   @IsOptional() @IsBoolean() marketingOptIn?: boolean;
+}
+
+export class MergeCustomerDto {
+  /** El cliente duplicado: su historial, direcciones y datos pasan a este y él se borra. */
+  @IsString() @MaxLength(40) fromId: string;
+}
+
+export class ExportCustomersDto {
+  @IsOptional() @IsString() @MaxLength(80) q?: string;
+  @IsOptional() @IsIn(CUSTOMER_FILTERS) filter?: (typeof CUSTOMER_FILTERS)[number];
 }
 
 export class AttachCustomerDto {

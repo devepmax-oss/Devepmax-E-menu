@@ -1,13 +1,15 @@
-import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, Injectable, NotFoundException, UnauthorizedException } from '@nestjs/common';
 import { Customer, Prisma } from '@prisma/client';
 import { EmployeeActor } from '../../common/auth/actor';
-import { signReceipt } from '../../common/pay-token';
+import { signPayload, signReceipt, verifyPayload } from '../../common/pay-token';
+import { buildXlsx, Cell } from '../../common/xlsx';
 import { toE164 } from '../../common/phone';
 import { loadEnv } from '../../config/env';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { BillingService } from '../billing/billing.service';
-import { AddressDto, CreateCustomerDto, CustomersQueryDto, UpdateCustomerDto, UpdateMeDto } from './dto/customers.dto';
+import { AddressDto, CreateCustomerDto, CustomersQueryDto, ExportCustomersDto, UpdateCustomerDto, UpdateMeDto } from './dto/customers.dto';
+import { SettingsService } from '../settings/settings.service';
 
 const MAX_ADDRESSES = 10;
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -42,6 +44,7 @@ export class CustomersService {
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
     private readonly billing: BillingService,
+    private readonly settings: SettingsService,
   ) {}
 
   // ───────── El cliente ─────────
@@ -119,30 +122,87 @@ export class CustomersService {
   // ───────── El personal ─────────
 
   async list(query: CustomersQueryDto) {
-    const q = query.q?.trim();
-    const digits = q?.replace(/\D/g, '') ?? '';
-    const where: Prisma.CustomerWhereInput = {
-      name: { not: '' },
-      ...(q
-        ? {
-            OR: [
-              { name: { contains: q, mode: 'insensitive' } },
-              { email: { contains: q, mode: 'insensitive' } },
-              ...(digits.length >= 3 ? [{ phone: { contains: digits } }] : []),
-            ],
-          }
-        : {}),
-    };
+    const where = this.whereFor(query.q, query.filter);
+    const sort = query.sort ?? 'recent';
+    const skip = query.offset ?? 0;
     const take = query.limit ?? 50;
-    const [total, customers] = await Promise.all([
-      this.prisma.customer.count({ where }),
-      this.prisma.customer.findMany({ where, orderBy: { createdAt: 'desc' }, skip: query.offset ?? 0, take }),
-    ]);
+    const total = await this.prisma.customer.count({ where });
+
+    let customers: Customer[];
+    if (sort === 'visits' || sort === 'spent' || sort === 'lastVisit') {
+      // Los que más vienen / más gastan / vinieron hace menos (solo quienes tienen visitas).
+      const groups = await this.prisma.bill.groupBy({
+        by: ['customerId'],
+        where: { ...COUNTED_BILL, customerId: { not: null }, customer: { is: where } },
+        _count: { customerId: true },
+        _sum: { amountPaid: true },
+        _max: { createdAt: true },
+        orderBy:
+          sort === 'spent' ? { _sum: { amountPaid: 'desc' } } : sort === 'visits' ? { _count: { customerId: 'desc' } } : { _max: { createdAt: 'desc' } },
+        skip,
+        take,
+      });
+      const ids = groups.map((g) => g.customerId!).filter(Boolean);
+      const rows = await this.prisma.customer.findMany({ where: { id: { in: ids } } });
+      const byId = new Map(rows.map((c) => [c.id, c]));
+      customers = ids.map((id) => byId.get(id)).filter((c): c is Customer => !!c);
+    } else {
+      customers = await this.prisma.customer.findMany({
+        where,
+        orderBy: sort === 'name' ? { name: 'asc' } : { createdAt: 'desc' },
+        skip,
+        take,
+      });
+    }
     const stats = await this.statsFor(customers.map((c) => c.id));
     return {
       total,
       customers: customers.map((c) => ({ ...this.summary(c), ...(stats.get(c.id) ?? this.emptyStats()) })),
     };
+  }
+
+  /** Enlace de descarga (10 min) de la lista en Excel, con la misma búsqueda y filtro. */
+  exportLink(dto: ExportCustomersDto) {
+    const expires = Date.now() + 10 * 60_000;
+    const payload = JSON.stringify({ q: dto.q?.trim() || undefined, f: dto.filter ?? 'all', e: expires });
+    const token = signPayload('customers-export:v1', payload, this.env.jwtAccessSecret);
+    return { url: `${this.env.publicApiUrl}/customers/export/${token}`, expiresAt: new Date(expires).toISOString() };
+  }
+
+  async exportFromToken(token: string) {
+    const raw = verifyPayload('customers-export:v1', token, this.env.jwtAccessSecret);
+    let payload: { q?: string; f?: ExportCustomersDto['filter']; e?: number } | null = null;
+    try {
+      payload = raw ? JSON.parse(raw) : null;
+    } catch {
+      payload = null;
+    }
+    if (!payload || !(Number(payload.e) > Date.now())) throw new UnauthorizedException('El enlace venció: vuelve a exportar desde la app');
+    const tz = (await this.settings.get()).timezone;
+    const customers = await this.prisma.customer.findMany({ where: this.whereFor(payload.q, payload.f), orderBy: { name: 'asc' }, take: 20_000 });
+    const stats = await this.statsFor(customers.map((c) => c.id));
+    const day = (d: Date | null) => (d ? new Intl.DateTimeFormat('en-CA', { timeZone: tz }).format(d) : '');
+    const rows: Cell[][] = [
+      ['Nombre', 'Teléfono', 'Email', 'Acepta promociones', 'Cuenta web', 'Visitas', 'Gastado', 'Promedio', 'Última visita', 'Cliente desde', 'Notas'],
+      ...customers.map((c): Cell[] => {
+        const s = stats.get(c.id) ?? this.emptyStats();
+        return [
+          c.name,
+          c.phone ?? '',
+          c.email ?? '',
+          c.marketingOptIn ? 'Sí' : 'No',
+          c.lastLoginAt ? 'Sí' : 'No',
+          s.visits,
+          { money: s.spent.toNumber() },
+          s.visits ? { money: s.spent.div(s.visits).toNumber() } : '',
+          day(s.lastVisitAt),
+          day(c.createdAt),
+          c.notes ?? '',
+        ];
+      }),
+    ];
+    const buffer = buildXlsx([{ name: 'Clientes', rows, widths: [26, 16, 28, 12, 10, 9, 12, 12, 13, 13, 40] }]);
+    return { name: `clientes-${day(new Date())}.xlsx`, buffer };
   }
 
   async detail(id: string) {
@@ -163,15 +223,95 @@ export class CustomersService {
   async update(actor: EmployeeActor, id: string, dto: UpdateCustomerDto) {
     const customer = await this.prisma.customer.findUnique({ where: { id } });
     if (!customer) throw new NotFoundException('Cliente no encontrado');
+    let phone: string | null | undefined;
+    if (dto.phone !== undefined) {
+      phone = dto.phone === null || !dto.phone.trim() ? null : toE164(dto.phone);
+      if (phone === null && dto.phone?.trim()) throw new BadRequestException('Escribe un teléfono de 10 dígitos');
+      if (phone && phone !== customer.phone && (await this.prisma.customer.findUnique({ where: { phone } }))) {
+        throw new ConflictException('Ese teléfono ya es de otro cliente. Si es la misma persona, júntalos.');
+      }
+    }
+    let email: string | null | undefined;
+    if (dto.email !== undefined) {
+      email = dto.email?.trim().toLowerCase() || null;
+      if (email && !EMAIL.test(email)) throw new BadRequestException('Revisa el email');
+      if (email && email !== customer.email && (await this.prisma.customer.findUnique({ where: { email } }))) {
+        throw new ConflictException('Ese email ya es de otro cliente. Si es la misma persona, júntalos.');
+      }
+    }
+    // Sin teléfono ni email el cliente ya no podría entrar a su cuenta.
+    const nextPhone = phone !== undefined ? phone : customer.phone;
+    const nextEmail = email !== undefined ? email : customer.email;
+    if (!nextPhone && !nextEmail && !customer.googleId) throw new BadRequestException('El cliente necesita un teléfono o un email');
     await this.prisma.customer.update({
       where: { id },
       data: {
         ...(dto.name !== undefined ? { name: dto.name.trim() } : {}),
+        ...(phone !== undefined ? { phone } : {}),
+        ...(email !== undefined ? { email } : {}),
         ...(dto.notes !== undefined ? { notes: dto.notes?.trim() || null } : {}),
         ...(dto.marketingOptIn !== undefined ? { marketingOptIn: dto.marketingOptIn } : {}),
       },
     });
     await this.audit.log(actor, 'customer.update', 'customer', id, { fields: Object.keys(dto) });
+    return this.detail(id);
+  }
+
+  /**
+   * Borra al cliente (por ejemplo, si pide que se borren sus datos). Sus pedidos y cuentas se
+   * quedan para los reportes, sin el vínculo; sus direcciones y sesiones se borran.
+   */
+  async remove(actor: EmployeeActor, id: string) {
+    const customer = await this.prisma.customer.findUnique({ where: { id } });
+    if (!customer) throw new NotFoundException('Cliente no encontrado');
+    await this.prisma.$transaction([
+      this.prisma.order.updateMany({ where: { customerId: id }, data: { customerId: null } }),
+      this.prisma.bill.updateMany({ where: { customerId: id }, data: { customerId: null } }),
+      this.prisma.customer.delete({ where: { id } }),
+    ]);
+    await this.audit.log(actor, 'customer.delete', 'customer', id);
+  }
+
+  /** Junta dos fichas de la misma persona: todo pasa a [id] y la otra se borra. */
+  async merge(actor: EmployeeActor, id: string, fromId: string) {
+    if (id === fromId) throw new BadRequestException('Elige otro cliente');
+    const [target, source] = await Promise.all([
+      this.prisma.customer.findUnique({ where: { id } }),
+      this.prisma.customer.findUnique({ where: { id: fromId }, include: { addresses: true } }),
+    ]);
+    if (!target || !source) throw new NotFoundException('Cliente no encontrado');
+    const targetAddresses = await this.prisma.customerAddress.findMany({ where: { customerId: id } });
+    const duplicated = source.addresses.filter((a) =>
+      targetAddresses.some((t) => t.street.toLowerCase() === a.street.toLowerCase() && t.zipCode === a.zipCode),
+    );
+    const notes = [target.notes, source.notes].filter((n) => n?.trim()).join('\n') || null;
+    await this.prisma.$transaction([
+      this.prisma.order.updateMany({ where: { customerId: fromId }, data: { customerId: id } }),
+      this.prisma.bill.updateMany({ where: { customerId: fromId }, data: { customerId: id } }),
+      this.prisma.customerAddress.deleteMany({ where: { id: { in: duplicated.map((a) => a.id) } } }),
+      this.prisma.customerAddress.updateMany({ where: { customerId: fromId }, data: { customerId: id } }),
+      this.prisma.customerSession.updateMany({ where: { customerId: fromId }, data: { customerId: id } }),
+      // Primero se borra la ficha vieja para liberar su teléfono, email y Google.
+      this.prisma.customer.delete({ where: { id: fromId } }),
+      this.prisma.customer.update({
+        where: { id },
+        data: {
+          name: target.name.trim() ? target.name : source.name,
+          phone: target.phone ?? source.phone,
+          email: target.email ?? source.email,
+          googleId: target.googleId ?? source.googleId,
+          marketingOptIn: target.marketingOptIn || source.marketingOptIn,
+          lang: target.lang ?? source.lang,
+          notes,
+          lastLoginAt:
+            target.lastLoginAt && source.lastLoginAt
+              ? new Date(Math.max(target.lastLoginAt.getTime(), source.lastLoginAt.getTime()))
+              : (target.lastLoginAt ?? source.lastLoginAt),
+          createdAt: target.createdAt < source.createdAt ? target.createdAt : source.createdAt,
+        },
+      }),
+    ]);
+    await this.audit.log(actor, 'customer.merge', 'customer', id, { fromId });
     return this.detail(id);
   }
 
@@ -234,6 +374,26 @@ export class CustomersService {
   }
 
   // ───────── Ayudantes ─────────
+
+  private whereFor(q?: string, filter?: CustomersQueryDto['filter']): Prisma.CustomerWhereInput {
+    const text = q?.trim();
+    const digits = text?.replace(/\D/g, '') ?? '';
+    return {
+      name: { not: '' },
+      ...(filter === 'optIn' ? { marketingOptIn: true } : {}),
+      ...(filter === 'account' ? { lastLoginAt: { not: null } } : {}),
+      ...(filter === 'noVisits' ? { bills: { none: COUNTED_BILL } } : {}),
+      ...(text
+        ? {
+            OR: [
+              { name: { contains: text, mode: 'insensitive' } },
+              { email: { contains: text, mode: 'insensitive' } },
+              ...(digits.length >= 3 ? [{ phone: { contains: digits } }] : []),
+            ],
+          }
+        : {}),
+    };
+  }
 
   private summary(c: Customer) {
     return {

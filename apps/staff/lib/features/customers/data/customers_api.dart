@@ -131,9 +131,11 @@ class CustomerDetail {
 
 final customersApiProvider = Provider<CustomersApi>((ref) => CustomersApi(ref.watch(dioProvider)));
 
-/// Búsqueda de la pantalla Clientes (texto → lista).
-final customerSearchProvider = FutureProvider.autoDispose.family<(int, List<CustomerSummary>), String>(
-  (ref, q) => ref.watch(customersApiProvider).list(q: q),
+/// Búsqueda, filtro y orden de la pantalla Clientes.
+typedef CustomerQuery = ({String q, String filter, String sort});
+
+final customerSearchProvider = FutureProvider.autoDispose.family<(int, List<CustomerSummary>), CustomerQuery>(
+  (ref, query) => ref.watch(customersApiProvider).list(q: query.q, filter: query.filter, sort: query.sort),
 );
 
 final customerDetailProvider = FutureProvider.autoDispose.family<CustomerDetail, String>(
@@ -152,8 +154,14 @@ class CustomersApi {
     }
   }
 
-  Future<(int, List<CustomerSummary>)> list({String q = '', int offset = 0}) => _call(() async {
-        final r = await _dio.get<CJson>('/customers', queryParameters: {if (q.trim().isNotEmpty) 'q': q.trim(), 'offset': offset, 'limit': 100});
+  Future<(int, List<CustomerSummary>)> list({String q = '', String filter = 'all', String sort = 'recent', int offset = 0}) => _call(() async {
+        final r = await _dio.get<CJson>('/customers', queryParameters: {
+          if (q.trim().isNotEmpty) 'q': q.trim(),
+          'filter': filter,
+          'sort': sort,
+          'offset': offset,
+          'limit': 100,
+        });
         final data = r.data!;
         return (
           (data['total'] as num).toInt(),
@@ -163,13 +171,36 @@ class CustomersApi {
 
   Future<CustomerDetail> detail(String id) => _call(() async => CustomerDetail.fromJson((await _dio.get<CJson>('/customers/$id')).data!));
 
-  Future<CustomerDetail> update(String id, {String? name, String? notes, bool clearNotes = false, bool? marketingOptIn}) => _call(() async {
+  Future<CustomerDetail> update(
+    String id, {
+    String? name,
+    String? notes,
+    bool clearNotes = false,
+    bool? marketingOptIn,
+    String? phone,
+    String? email,
+  }) =>
+      _call(() async {
         final r = await _dio.patch<CJson>('/customers/$id', data: {
           if (name != null) 'name': name,
+          if (phone != null) 'phone': phone.trim().isEmpty ? null : phone.trim(),
+          if (email != null) 'email': email.trim().isEmpty ? null : email.trim(),
           if (notes != null || clearNotes) 'notes': clearNotes ? null : notes,
           if (marketingOptIn != null) 'marketingOptIn': marketingOptIn,
         });
         return CustomerDetail.fromJson(r.data!);
+      });
+
+  Future<void> remove(String id) => _call(() => _dio.delete<void>('/customers/$id'));
+
+  /// Junta [fromId] dentro de [id]: todo pasa a [id] y [fromId] se borra.
+  Future<CustomerDetail> merge(String id, String fromId) =>
+      _call(() async => CustomerDetail.fromJson((await _dio.post<CJson>('/customers/$id/merge', data: {'fromId': fromId})).data!));
+
+  /// Enlace de descarga del Excel (vale 10 minutos).
+  Future<String> exportLink({String q = '', String filter = 'all'}) => _call(() async {
+        final r = await _dio.post<CJson>('/customers/export-link', data: {if (q.trim().isNotEmpty) 'q': q.trim(), 'filter': filter});
+        return r.data!['url'] as String;
       });
 
   /// null = no hay cliente con ese teléfono.
