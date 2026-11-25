@@ -75,11 +75,16 @@ async function main() {
 
   console.log('Entrar con código');
   const bad = await api('POST', '/customer-auth/request', { target: 'hola' });
+  if (bad.status === 404) {
+    console.log('  ✗ El backend no tiene todavía las cuentas de cliente. Detenlo (Ctrl+C), corre "npx prisma migrate dev" y luego "npm run start:dev".');
+    process.exit(1);
+  }
   check('un dato inválido avisa', bad.status === 400, bad.data);
   const req = await api('POST', '/customer-auth/request', { target: P });
   check('pide el código por SMS', req.status === 200 && req.data?.channel === 'sms', req.data);
   check('no muestra el teléfono completo', !JSON.stringify(req.data?.sentTo ?? '').includes(P.slice(0, 6)), req.data?.sentTo);
   const code = req.data?.devCode as string | undefined;
+  if (req.status !== 200) return summary();
   if (!code) {
     console.log('  ⚠ Twilio está configurado: el código llegó por SMS y esta prueba no puede leerlo. Corre la prueba sin claves de Twilio.');
     return summary();
