@@ -16,7 +16,7 @@ export class ApiError extends Error {
   }
 }
 
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
+export async function request<T>(path: string, init?: RequestInit): Promise<T> {
   let response: Response;
   try {
     response = await fetch(`${API_URL}${path}`, {
@@ -43,7 +43,12 @@ export const api = {
   promotions: () => request<PublicPromotion[]>('/promotions/public?channel=online'),
   quote: (body: { fulfillmentType: 'PICKUP' | 'DELIVERY'; items: OrderLineInput[]; tipAmount?: number }) =>
     request<Quote>('/online/quote', { method: 'POST', body: JSON.stringify(body) }),
-  createOrder: (body: unknown) => request<CreatedOrder>('/online/orders', { method: 'POST', body: JSON.stringify(body) }),
+  createOrder: (body: unknown, customerToken?: string) =>
+    request<CreatedOrder>('/online/orders', {
+      method: 'POST',
+      body: JSON.stringify(body),
+      ...(customerToken ? { headers: { 'x-customer-token': customerToken } } : {}),
+    }),
   order: (code: string) => request<PublicOrder>(`/online/orders/${encodeURIComponent(code)}`),
   receipt: (token: string) => request<Receipt>(`/receipts/${encodeURIComponent(token)}`),
   tablePay: (token: string) => request<TablePayView>(`/pay/${encodeURIComponent(token)}`),

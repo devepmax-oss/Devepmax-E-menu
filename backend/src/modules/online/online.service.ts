@@ -15,6 +15,8 @@ import { DeliveryService } from '../delivery/delivery.service';
 import { PaymentsService } from '../payments/payments.service';
 import { StripeService } from '../payments/stripe.service';
 import { PromotionsService } from '../promotions/promotions.service';
+import { CustomerAuthService } from '../customers/customer-auth.service';
+import { CustomersService } from '../customers/customers.service';
 import { SettingsService } from '../settings/settings.service';
 import { CreateOnlineOrderDto, OnlineQuoteDto } from './dto/online.dto';
 import { isOpenAt } from './opening-hours';
@@ -36,6 +38,8 @@ export class OnlineService {
     private readonly payments: PaymentsService,
     private readonly stripe: StripeService,
     private readonly delivery: DeliveryService,
+    private readonly customerAuth: CustomerAuthService,
+    private readonly customers: CustomersService,
   ) {}
 
   /** Todo lo que la web necesita para arrancar: marca, horario, canales, envío y pagos. */
@@ -97,7 +101,7 @@ export class OnlineService {
    * Crea el pedido. Con tarjeta queda "esperando pago" (no va a cocina hasta que Stripe
    * confirme); pagando al recoger va a cocina de inmediato.
    */
-  async createOrder(dto: CreateOnlineOrderDto, ip: string) {
+  async createOrder(dto: CreateOnlineOrderDto, ip: string, customerToken?: string) {
     this.limiter.assertAllowed(ip);
     this.limiter.fail(ip); // cuenta pedidos, no solo errores
 
@@ -129,6 +133,8 @@ export class OnlineService {
     }
 
     const address = dto.deliveryAddress;
+    // Con sesión de cliente, el pedido queda en su historial.
+    const customer = await this.customerAuth.resolve(customerToken);
     const order = await this.orders.createOrder(
       {
         clientRequestId: dto.clientRequestId,
@@ -138,6 +144,7 @@ export class OnlineService {
         customerName: dto.customer.name,
         customerPhone: dto.customer.phone,
         customerEmail: dto.customer.email,
+        customerId: customer?.id ?? null,
         deliveryAddress: delivery && address
           ? { street: address.street, city: address.city, state: address.state, zipCode: address.zipCode }
           : undefined,
@@ -150,6 +157,13 @@ export class OnlineService {
       },
       'system',
     );
+
+    if (customer) {
+      if (customer.name.trim().length < 2) {
+        await this.prisma.customer.update({ where: { id: customer.id }, data: { name: dto.customer.name.trim() } }).catch(() => undefined);
+      }
+      if (delivery && address && dto.saveAddress) await this.customers.addAddress(customer, address).catch(() => undefined);
+    }
 
     // Ubicar la dirección en el mapa en segundo plano (no retrasa el pedido).
     if (delivery && address) {

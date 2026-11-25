@@ -51,6 +51,7 @@ const BILL_INCLUDE = {
       createdAt: true,
     },
   },
+  customer: { select: { id: true, name: true, phone: true } },
   tableSession: {
     include: {
       table: true,
@@ -90,6 +91,7 @@ export function toBillView(bill: BillWithAll, names: Map<string, string>) {
       ? { id: session.id, status: session.status, guestCount: session.guestCount, openedAt: session.openedAt }
       : null,
     billRequested: (session?.serviceRequests.length ?? 0) > 0,
+    customer: bill.customer,
     openedAt: bill.createdAt,
     orders: bill.orders,
     items: bill.items.map((i) => ({

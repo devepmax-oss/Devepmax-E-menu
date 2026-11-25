@@ -10,6 +10,8 @@ import 'package:intl/intl.dart';
 import '../../../core/auth/auth_controller.dart';
 import '../../../core/realtime/realtime.dart';
 import '../../../core/ui/feedback.dart';
+import '../../customers/data/customers_api.dart';
+import '../../customers/screens/customer_picker.dart';
 import '../../menu/widgets/common.dart';
 import '../../orders/screens/orders_screen.dart' show LiveIndicator;
 import '../data/billing_api.dart';
@@ -347,6 +349,21 @@ class _BillPanelState extends ConsumerState<BillPanel> {
             for (final o in bill.orders.where((o) => o.status != 'CANCELLED')) DmPill('Orden #${o.number}'),
             if (bill.guestCount != null) DmPill('${bill.guestCount} clientes', icon: Icons.people_alt_rounded),
             if (bill.billRequested) const DmPill('Pidió la cuenta', tone: DmTone.accent),
+            ActionChip(
+              avatar: Icon(bill.customerName == null ? Icons.person_add_alt_rounded : Icons.person_rounded, size: 18),
+              label: Text(bill.customerName ?? 'Cliente'),
+              tooltip: bill.customerName == null ? 'Identificar al cliente' : 'Cambiar o quitar el cliente',
+              onPressed: () async {
+                final changed = await showCustomerPicker(
+                  context,
+                  currentName: bill.customerName,
+                  attach: (ref, id) => ref.read(customersApiProvider).attachToBill(bill.id, id),
+                );
+                if (!changed || !mounted) return;
+                ref.invalidate(billProvider(widget.billId));
+                ref.invalidate(openBillsProvider);
+              },
+            ),
           ]),
           if (siblings.length > 1) ...[
             const SizedBox(height: 12),

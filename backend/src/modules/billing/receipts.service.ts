@@ -3,6 +3,7 @@ import { Prisma } from '@prisma/client';
 import { EmployeeActor } from '../../common/auth/actor';
 import { signReceipt, signTablePay, verifyReceipt } from '../../common/pay-token';
 import { loadEnv } from '../../config/env';
+import { toE164 } from '../../common/phone';
 import { AuditService } from '../audit/audit.service';
 import { SettingsService } from '../settings/settings.service';
 import { BillingService, BillView } from './billing.service';
@@ -21,15 +22,7 @@ const money = (v: Prisma.Decimal.Value, currency: string) =>
 
 const escapeHtml = (s: string) => s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
 
-/** Teléfono de EE. UU. a +1XXXXXXXXXX (o el número tal cual si ya trae +código). */
-export function toE164(phone: string): string | null {
-  const trimmed = phone.trim();
-  const digits = trimmed.replace(/\D/g, '');
-  if (trimmed.startsWith('+')) return digits.length >= 8 && digits.length <= 15 ? `+${digits}` : null;
-  if (digits.length === 10) return `+1${digits}`;
-  if (digits.length === 11 && digits.startsWith('1')) return `+${digits}`;
-  return null;
-}
+export { toE164 };
 
 /**
  * Recibos: una página con el recibo (enlace firmado), y el envío por email o SMS. El ticket

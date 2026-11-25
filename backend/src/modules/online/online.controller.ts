@@ -1,6 +1,7 @@
-import { Body, Controller, Get, HttpCode, Ip, Param, Post } from '@nestjs/common';
+import { Body, Controller, Get, Headers, HttpCode, Ip, Param, Post } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { Public } from '../../common/auth/decorators';
+import { CUSTOMER_TOKEN_HEADER } from '../customers/customer-auth.service';
 import { CreateOnlineOrderDto, OnlineQuoteDto } from './dto/online.dto';
 import { OnlineService } from './online.service';
 
@@ -23,8 +24,8 @@ export class OnlineController {
   }
 
   @Post('orders')
-  create(@Body() dto: CreateOnlineOrderDto, @Ip() ip: string) {
-    return this.online.createOrder(dto, ip);
+  create(@Body() dto: CreateOnlineOrderDto, @Ip() ip: string, @Headers(CUSTOMER_TOKEN_HEADER) customerToken?: string) {
+    return this.online.createOrder(dto, ip, customerToken);
   }
 
   @Get('orders/:code')

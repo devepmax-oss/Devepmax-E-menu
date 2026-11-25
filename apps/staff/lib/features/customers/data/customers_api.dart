@@ -1,0 +1,196 @@
+import 'package:dio/dio.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import '../../../core/api/api_client.dart';
+import '../../../core/api/api_exception.dart';
+import '../../../core/ui/feedback.dart';
+
+typedef CJson = Map<String, dynamic>;
+
+DateTime? _date(Object? v) => v == null ? null : DateTime.parse(v as String).toLocal();
+
+class CustomerSummary {
+  const CustomerSummary({
+    required this.id,
+    required this.name,
+    this.phone,
+    this.email,
+    required this.hasAccount,
+    required this.visits,
+    required this.spent,
+    this.lastVisitAt,
+    required this.marketingOptIn,
+  });
+
+  final String id;
+  final String name;
+  final String? phone;
+  final String? email;
+
+  /// Entró alguna vez a su cuenta en la web.
+  final bool hasAccount;
+  final int visits;
+  final double spent;
+  final DateTime? lastVisitAt;
+  final bool marketingOptIn;
+
+  factory CustomerSummary.fromJson(CJson j) => CustomerSummary(
+        id: j['id'] as String,
+        name: j['name'] as String? ?? '',
+        phone: j['phone'] as String?,
+        email: j['email'] as String?,
+        hasAccount: j['hasAccount'] as bool? ?? false,
+        visits: (j['visits'] as num?)?.toInt() ?? 0,
+        spent: parseMoney(j['spent']),
+        lastVisitAt: _date(j['lastVisitAt']),
+        marketingOptIn: j['marketingOptIn'] as bool? ?? false,
+      );
+}
+
+/// (305) 555-0123 a partir de +13055550123.
+String prettyPhone(String? phone) {
+  if (phone == null) return '';
+  final d = phone.replaceAll(RegExp(r'\D'), '');
+  if (d.length == 11 && d.startsWith('1')) return '(${d.substring(1, 4)}) ${d.substring(4, 7)}-${d.substring(7)}';
+  return phone;
+}
+
+class CustomerAddress {
+  const CustomerAddress({this.label, required this.line});
+  final String? label;
+  final String line;
+
+  factory CustomerAddress.fromJson(CJson j) => CustomerAddress(
+        label: j['label'] as String?,
+        line: [j['street'], j['city'], '${j['state']} ${j['zipCode']}'].whereType<String>().join(', '),
+      );
+}
+
+String _itemLine(CJson i) {
+  final quantity = (i['quantity'] as num?)?.toInt() ?? 1;
+  final name = i['name'] as String? ?? '';
+  return quantity > 1 ? '$quantity× $name' : name;
+}
+
+class CustomerVisit {
+  const CustomerVisit({
+    required this.id,
+    required this.date,
+    required this.kind,
+    this.table,
+    required this.orderNumbers,
+    required this.status,
+    required this.total,
+    required this.items,
+  });
+
+  final String id;
+  final DateTime date;
+  final String kind;
+  final String? table;
+  final List<int> orderNumbers;
+  final String status;
+  final double total;
+  final List<String> items;
+
+  String get kindLabel => switch (kind) {
+        'TABLE' => table == null ? 'Mesa' : 'Mesa $table',
+        'DELIVERY' => 'Delivery',
+        'PICKUP' => 'Para recoger',
+        _ => 'Mostrador / para llevar',
+      };
+
+  factory CustomerVisit.fromJson(CJson j) => CustomerVisit(
+        id: j['id'] as String,
+        date: _date(j['date'])!,
+        kind: j['kind'] as String,
+        table: j['table'] as String?,
+        orderNumbers: [for (final n in j['orderNumbers'] as List? ?? const []) (n as num).toInt()],
+        status: j['status'] as String,
+        total: parseMoney(j['total']),
+        items: [for (final i in j['items'] as List? ?? const []) _itemLine(i as CJson)],
+      );
+}
+
+class CustomerDetail {
+  const CustomerDetail({required this.summary, this.notes, this.createdAt, required this.addresses, required this.history});
+  final CustomerSummary summary;
+  final String? notes;
+  final DateTime? createdAt;
+  final List<CustomerAddress> addresses;
+  final List<CustomerVisit> history;
+
+  factory CustomerDetail.fromJson(CJson j) => CustomerDetail(
+        summary: CustomerSummary.fromJson(j),
+        notes: j['notes'] as String?,
+        createdAt: _date(j['createdAt']),
+        addresses: [for (final a in j['addresses'] as List? ?? const []) CustomerAddress.fromJson(a as CJson)],
+        history: [for (final h in j['history'] as List? ?? const []) CustomerVisit.fromJson(h as CJson)],
+      );
+}
+
+final customersApiProvider = Provider<CustomersApi>((ref) => CustomersApi(ref.watch(dioProvider)));
+
+/// Búsqueda de la pantalla Clientes (texto → lista).
+final customerSearchProvider = FutureProvider.autoDispose.family<(int, List<CustomerSummary>), String>(
+  (ref, q) => ref.watch(customersApiProvider).list(q: q),
+);
+
+final customerDetailProvider = FutureProvider.autoDispose.family<CustomerDetail, String>(
+  (ref, id) => ref.watch(customersApiProvider).detail(id),
+);
+
+class CustomersApi {
+  CustomersApi(this._dio);
+  final Dio _dio;
+
+  Future<T> _call<T>(Future<T> Function() request) async {
+    try {
+      return await request();
+    } catch (error) {
+      throw ApiException.from(error);
+    }
+  }
+
+  Future<(int, List<CustomerSummary>)> list({String q = '', int offset = 0}) => _call(() async {
+        final r = await _dio.get<CJson>('/customers', queryParameters: {if (q.trim().isNotEmpty) 'q': q.trim(), 'offset': offset, 'limit': 100});
+        final data = r.data!;
+        return (
+          (data['total'] as num).toInt(),
+          [for (final c in data['customers'] as List) CustomerSummary.fromJson(c as CJson)],
+        );
+      });
+
+  Future<CustomerDetail> detail(String id) => _call(() async => CustomerDetail.fromJson((await _dio.get<CJson>('/customers/$id')).data!));
+
+  Future<CustomerDetail> update(String id, {String? name, String? notes, bool clearNotes = false, bool? marketingOptIn}) => _call(() async {
+        final r = await _dio.patch<CJson>('/customers/$id', data: {
+          if (name != null) 'name': name,
+          if (notes != null || clearNotes) 'notes': clearNotes ? null : notes,
+          if (marketingOptIn != null) 'marketingOptIn': marketingOptIn,
+        });
+        return CustomerDetail.fromJson(r.data!);
+      });
+
+  /// null = no hay cliente con ese teléfono.
+  Future<CustomerSummary?> lookup(String phone) => _call(() async {
+        final r = await _dio.get<CJson>('/customers/lookup', queryParameters: {'phone': phone});
+        final c = r.data!['customer'] as CJson?;
+        return c == null ? null : CustomerSummary.fromJson(c);
+      });
+
+  Future<CustomerSummary> create({required String name, required String phone, String? email}) => _call(() async {
+        final r = await _dio.post<CJson>('/customers', data: {
+          'name': name,
+          'phone': phone,
+          if (email != null && email.trim().isNotEmpty) 'email': email.trim(),
+        });
+        return CustomerSummary.fromJson(r.data!['customer'] as CJson);
+      });
+
+  Future<void> attachToBill(String billId, String? customerId) =>
+      _call(() => _dio.patch<CJson>('/billing/bills/$billId/customer', data: {'customerId': customerId}));
+
+  Future<void> attachToTable(String tableId, String? customerId) =>
+      _call(() => _dio.patch<CJson>('/tables/$tableId/customer', data: {'customerId': customerId}));
+}

@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import { useMemo, useRef, useState } from 'react';
 import { useLang, useT } from '@/components/i18n';
 import { Button, Notice } from '@/components/ui';
+import { useAccount } from '@/lib/account';
 import { api, ApiError } from '@/lib/api';
 import { cart, cartCount, saveCustomer, saveLastOrder, toOrderLines, useCart, useCustomer, type CustomerInfo } from '@/lib/cart';
 import { money, round2, toNumber } from '@/lib/format';
@@ -74,8 +75,17 @@ export function CheckoutView({ config }: { config: OnlineConfig }) {
   const mode: FulfillmentType = modes.includes(state.mode) ? state.mode : (modes[0] ?? 'PICKUP');
   const delivery = mode === 'DELIVERY';
 
+  const { token, profile } = useAccount();
   const [draft, setDraft] = useState<Partial<CustomerInfo>>({});
-  const info: CustomerInfo = { ...saved, ...draft };
+  const [saveAddress, setSaveAddress] = useState(true);
+  const fromAccount: Partial<CustomerInfo> = profile
+    ? { name: profile.name || saved.name, phone: profile.phone ?? saved.phone, email: profile.email ?? saved.email }
+    : {};
+  const info: CustomerInfo = { ...saved, ...fromAccount, ...draft };
+  const signedIn = !!token && !!profile;
+  const knownAddress = profile?.addresses.some(
+    (a) => a.street.toLowerCase() === info.street.trim().toLowerCase() && a.zipCode === info.zipCode.trim(),
+  );
   const set = (field: keyof CustomerInfo) => (e: React.ChangeEvent<HTMLInputElement>) => setDraft((d) => ({ ...d, [field]: e.target.value }));
   const [notes, setNotes] = useState('');
   const [tipChoice, setTipChoice] = useState<Tip | null>(null);
@@ -152,13 +162,14 @@ export function CheckoutView({ config }: { config: OnlineConfig }) {
       ...(delivery
         ? { deliveryAddress: { street: clean.street, city: clean.city, state: clean.state.toUpperCase(), zipCode: clean.zipCode, ...(clean.instructions ? { instructions: clean.instructions } : {}) } }
         : {}),
+      ...(delivery && signedIn && saveAddress && !knownAddress ? { saveAddress: true } : {}),
     };
     // Mismo pedido → misma clave (tocar dos veces no duplica); pedido distinto → clave nueva.
     const key = JSON.stringify(body);
     if (requestRef.current?.key !== key) requestRef.current = { key, id: newRequestId() };
     setSubmitting(true);
     try {
-      const result = await api.createOrder({ ...body, clientRequestId: requestRef.current.id });
+      const result = await api.createOrder({ ...body, clientRequestId: requestRef.current.id }, signedIn ? token : undefined);
       saveCustomer(clean);
       saveLastOrder({ code: result.order.publicCode, number: result.order.number, lines: state.lines, placedAt: new Date().toISOString() });
       if (result.payment) {
@@ -234,6 +245,14 @@ export function CheckoutView({ config }: { config: OnlineConfig }) {
           </Section>
 
           <Section title={t('Tus datos', 'Your details')} id="datos">
+            {!signedIn && !locked ? (
+              <p className="m-0 text-sm text-soft">
+                {t('¿Ya tienes cuenta?', 'Have an account?')}{' '}
+                <Link href="/mi-cuenta?volver=/pedido" className="font-bold">
+                  {t('Entra para pedir más rápido', 'Sign in to order faster')}
+                </Link>
+              </p>
+            ) : null}
             <div className="grid gap-4 sm:grid-cols-2">
               <Field label={t('Nombre', 'Name')} name="name" autoComplete="name" value={info.name} onChange={set('name')} error={errors.name} disabled={locked} />
               <Field label={t('Teléfono', 'Phone')} name="phone" type="tel" autoComplete="tel" inputMode="tel" value={info.phone} onChange={set('phone')} error={errors.phone} disabled={locked} hint={t('Te avisamos si hay algún cambio', 'We will let you know if anything changes')} />
@@ -243,6 +262,27 @@ export function CheckoutView({ config }: { config: OnlineConfig }) {
 
           {delivery ? (
             <Section title={t('Dirección de entrega', 'Delivery address')}>
+              {profile?.addresses.length && !locked ? (
+                <div role="radiogroup" aria-label={t('Direcciones guardadas', 'Saved addresses')} className="flex flex-wrap gap-2">
+                  {profile.addresses.map((a) => {
+                    const on = a.street.toLowerCase() === info.street.trim().toLowerCase() && a.zipCode === info.zipCode.trim();
+                    return (
+                      <button
+                        key={a.id}
+                        type="button"
+                        role="radio"
+                        aria-checked={on}
+                        onClick={() =>
+                          setDraft((d) => ({ ...d, street: a.street, city: a.city, state: a.state, zipCode: a.zipCode, instructions: a.instructions ?? '' }))
+                        }
+                        className={`press flex cursor-pointer items-center gap-2 rounded-full border px-4 py-2 text-sm font-bold ${on ? 'border-brand bg-brand-soft text-ink' : 'border-line bg-surface-2 text-soft'}`}
+                      >
+                        <MapPin aria-hidden className="size-4" /> {a.label ?? a.street}
+                      </button>
+                    );
+                  })}
+                </div>
+              ) : null}
               <div className="grid gap-4 sm:grid-cols-6">
                 <Field label={t('Dirección', 'Street address')} name="street" autoComplete="address-line1" value={info.street} onChange={set('street')} error={errors.street} disabled={locked} placeholder="123 Main St, Apt 4" className="sm:col-span-6" />
                 <Field label={t('Ciudad', 'City')} name="city" autoComplete="address-level2" value={info.city} onChange={set('city')} error={errors.city} disabled={locked} className="sm:col-span-3" />
@@ -250,6 +290,12 @@ export function CheckoutView({ config }: { config: OnlineConfig }) {
                 <Field label={t('Código postal', 'ZIP code')} name="zipCode" autoComplete="postal-code" inputMode="numeric" value={info.zipCode} onChange={set('zipCode')} error={errors.zipCode} disabled={locked} className="sm:col-span-2" />
                 <Field label={t('Instrucciones para el repartidor (opcional)', 'Instructions for the driver (optional)')} name="instructions" value={info.instructions} onChange={set('instructions')} disabled={locked} placeholder={t('Portón azul, timbre 2', 'Blue gate, buzzer 2')} maxLength={300} className="sm:col-span-6" />
               </div>
+              {signedIn && !knownAddress && !locked ? (
+                <label className="flex cursor-pointer items-center gap-3 text-sm text-soft">
+                  <input type="checkbox" checked={saveAddress} onChange={(e) => setSaveAddress(e.target.checked)} className="size-5 accent-[var(--brand)]" />
+                  {t('Guardar esta dirección en mi cuenta', 'Save this address to my account')}
+                </label>
+              ) : null}
             </Section>
           ) : null}
 

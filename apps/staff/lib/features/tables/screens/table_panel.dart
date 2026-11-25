@@ -9,6 +9,8 @@ import '../../../core/api/api_exception.dart';
 import '../../../core/auth/auth_controller.dart';
 import '../../../core/ui/feedback.dart';
 import '../../billing/screens/receipt_dialog.dart' show ChecksDialog;
+import '../../customers/data/customers_api.dart';
+import '../../customers/screens/customer_picker.dart';
 import '../../orders/data/orders_api.dart';
 import '../../orders/data/orders_models.dart';
 import '../../orders/screens/orders_screen.dart' show showOrderDetail;
@@ -223,6 +225,18 @@ class _TablePanelState extends ConsumerState<_TablePanel> {
           icon: const Icon(Icons.people_alt_rounded),
           label: const Text('Clientes'),
         ),
+        if (s.total > 0 || s.customerName != null)
+          OutlinedButton.icon(
+            onPressed: _busy
+                ? null
+                : () => showCustomerPicker(
+                      context,
+                      currentName: s.customerName,
+                      attach: (ref, id) => ref.read(customersApiProvider).attachToTable(table.id, id),
+                    ),
+            icon: Icon(s.customerName == null ? Icons.person_add_alt_rounded : Icons.person_rounded),
+            label: Text(s.customerName ?? 'Cliente'),
+          ),
         FilledButton.icon(
           onPressed: _busy ? null : () => _close(table),
           icon: const Icon(Icons.logout_rounded),

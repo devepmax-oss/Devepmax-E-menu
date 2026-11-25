@@ -181,6 +181,8 @@ class BillView {
     required this.amountPaid,
     required this.due,
     this.refundedTotal = 0,
+    this.customerId,
+    this.customerName,
   });
 
   final String id;
@@ -206,6 +208,10 @@ class BillView {
   final double amountPaid;
   final double due;
   final double refundedTotal;
+
+  /// Cliente identificado en la cuenta.
+  final String? customerId;
+  final String? customerName;
 
   bool get isOpen => status == 'UNPAID' || status == 'PARTIALLY_PAID';
   bool get hasPayments => payments.any((p) => p.status == 'SUCCEEDED');
@@ -238,6 +244,8 @@ class BillView {
       amountPaid: parseMoney(j['amountPaid']),
       due: parseMoney(j['due']),
       refundedTotal: parseMoney(j['refundedTotal']),
+      customerId: (j['customer'] as BJson?)?['id'] as String?,
+      customerName: (j['customer'] as BJson?)?['name'] as String?,
     );
   }
 }

@@ -27,7 +27,10 @@ const TABLE_INCLUDE = {
     take: 1,
     include: {
       orders: { select: { id: true, status: true } },
-      bills: { where: { status: { in: ['UNPAID', 'PARTIALLY_PAID', 'PAID'] } }, select: { total: true, amountPaid: true } },
+      bills: {
+        where: { status: { in: ['UNPAID', 'PARTIALLY_PAID', 'PAID'] } },
+        select: { total: true, amountPaid: true, customer: { select: { id: true, name: true } } },
+      },
       serviceRequests: { where: { status: { in: ['OPEN', 'ACKNOWLEDGED'] } }, orderBy: { createdAt: 'asc' } },
     },
   },
@@ -61,6 +64,8 @@ export function toTableView(t: TableWithSession, names: ReadonlyMap<string, stri
           /** Pedidos listos en cocina esperando que el mesero los lleve. */
           readyOrders: s.orders.filter((o) => o.status === 'READY').length,
           waiter: s.waiterId ? { id: s.waiterId, name: names.get(s.waiterId) ?? null } : null,
+          /** Cliente identificado en la mesa (para su historial y, luego, sus puntos). */
+          customer: s.bills.find((b) => b.customer)?.customer ?? null,
           total,
           paid,
           due: Prisma.Decimal.max(total.minus(paid), 0),

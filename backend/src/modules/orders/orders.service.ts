@@ -40,6 +40,8 @@ export interface NewOrder {
   customerName?: string | null;
   customerPhone?: string | null;
   customerEmail?: string | null;
+  /** Cliente con cuenta (web con sesión). Si no viene, se usa el cliente identificado en la cuenta. */
+  customerId?: string | null;
   deliveryAddress?: Prisma.InputJsonValue;
   deliveryInstructions?: string | null;
   notes?: string | null;
@@ -251,6 +253,11 @@ export class OrdersService {
             update: { lastOrderNumber: { increment: 1 } },
           });
           const billId = await this.resolveBill(tx, input.tableId, input.createdById);
+          const billRow = await tx.bill.findUniqueOrThrow({ where: { id: billId }, select: { tableSessionId: true, customerId: true } });
+          const customerId = input.customerId ?? billRow.customerId ?? null;
+          if (customerId && !billRow.customerId) {
+            await tx.bill.update({ where: { id: billId }, data: { customerId } });
+          }
           if (input.deliveryFee || input.tipTotal) {
             await tx.bill.update({
               where: { id: billId },
@@ -267,10 +274,9 @@ export class OrdersService {
               channel: input.channel,
               fulfillmentType: input.fulfillmentType,
               status: input.status,
-              tableSessionId: input.tableId
-                ? (await tx.bill.findUniqueOrThrow({ where: { id: billId } })).tableSessionId
-                : null,
+              tableSessionId: input.tableId ? billRow.tableSessionId : null,
               billId,
+              customerId,
               deviceId: input.deviceId ?? null,
               createdById: input.createdById ?? null,
               customerName: input.customerName?.trim() || null,

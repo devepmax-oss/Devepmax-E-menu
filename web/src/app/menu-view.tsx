@@ -3,6 +3,7 @@
 import { Bike, Clock, Plus, Receipt, RotateCcw, Store } from 'lucide-react';
 import Link from 'next/link';
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { AccountButton } from '@/components/account-button';
 import { LanguageSwitch, useLang, useT } from '@/components/i18n';
 import { SiteFooter } from '@/components/site-footer';
 import { BrandMark, Notice, Pill } from '@/components/ui';
@@ -138,6 +139,7 @@ export function MenuView({ config, menu, promotions }: { config: OnlineConfig; m
                 </Link>
               ) : null}
               <LanguageSwitch offered={config.locales} />
+              <AccountButton />
             </div>
           </header>
 

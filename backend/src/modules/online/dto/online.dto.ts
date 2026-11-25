@@ -3,6 +3,7 @@ import {
   ArrayMaxSize,
   ArrayMinSize,
   IsArray,
+  IsBoolean,
   IsEmail,
   IsIn,
   IsNumber,
@@ -53,6 +54,9 @@ export class CreateOnlineOrderDto extends OnlineQuoteDto {
   @ValidateNested() @Type(() => OnlineCustomerDto) customer: OnlineCustomerDto;
 
   @IsOptional() @ValidateNested() @Type(() => DeliveryAddressDto) deliveryAddress?: DeliveryAddressDto;
+
+  /** Con cuenta de cliente: guardar la dirección para la próxima vez. */
+  @IsOptional() @IsBoolean() saveAddress?: boolean;
 
   @IsOptional() @IsString() @MaxLength(500) notes?: string;
 

@@ -47,6 +47,8 @@ class TableSessionView {
     this.readyOrders = 0,
     this.waiterId,
     this.waiterName,
+    this.customerId,
+    this.customerName,
   });
 
   final String id;
@@ -67,6 +69,10 @@ class TableSessionView {
   final String? waiterId;
   final String? waiterName;
 
+  /// Cliente identificado en la mesa.
+  final String? customerId;
+  final String? customerName;
+
   bool get billRequested => status == 'BILL_REQUESTED' || requests.any((r) => r.type == 'REQUEST_BILL');
   bool get calling => requests.any((r) => r.type == 'CALL_WAITER' && r.status == 'OPEN');
 
@@ -84,6 +90,8 @@ class TableSessionView {
         readyOrders: (j['readyOrders'] as num?)?.toInt() ?? 0,
         waiterId: (j['waiter'] as TJson?)?['id'] as String?,
         waiterName: (j['waiter'] as TJson?)?['name'] as String?,
+        customerId: (j['customer'] as TJson?)?['id'] as String?,
+        customerName: (j['customer'] as TJson?)?['name'] as String?,
       );
 }
 
