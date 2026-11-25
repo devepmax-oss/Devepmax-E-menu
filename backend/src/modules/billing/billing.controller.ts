@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, HttpCode, Param, Post, Query } from '@nestjs/common';
+import { Body, Controller, Delete, ForbiddenException, Get, HttpCode, Param, Post, Query } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import type { EmployeeActor } from '../../common/auth/actor';
 import { AllowActors, CurrentActor, Public, RequirePermissions } from '../../common/auth/decorators';
@@ -43,6 +43,18 @@ export class BillingController {
   @Get('receipts/config')
   receiptConfig() {
     return this.receipts.config();
+  }
+
+  /**
+   * Las cuentas por pagar de una mesa, para que el mesero las presente (impresas o con el QR
+   * para pagar con el celular). Basta con atender mesas; no hace falta poder cobrar.
+   */
+  @Get('tables/:tableId/check')
+  tableCheck(@CurrentActor() actor: EmployeeActor, @Param('tableId') tableId: string) {
+    if (!actor.permissions.has('tables.operate') && !actor.permissions.has('payments.take')) {
+      throw new ForbiddenException('Permiso requerido: tables.operate');
+    }
+    return this.receipts.tableChecks(tableId);
   }
 
   /** La cuenta antes de pagar (pre-cuenta) para imprimir o mostrar, con el QR de pago de la mesa. */

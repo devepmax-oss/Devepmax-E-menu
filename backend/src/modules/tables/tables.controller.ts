@@ -3,6 +3,7 @@ import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import type { EmployeeActor } from '../../common/auth/actor';
 import { AllowActors, CurrentActor, RequirePermissions } from '../../common/auth/decorators';
 import {
+  AssignWaiterDto,
   AreaDto,
   BulkTablesDto,
   CloseTableDto,
@@ -60,6 +61,13 @@ export class TablesController {
   @HttpCode(200)
   close(@CurrentActor() actor: EmployeeActor, @Param('id') id: string, @Body() dto: CloseTableDto) {
     return this.tables.close(actor, id, dto.force);
+  }
+
+  /** "Tomar esta mesa" (sin waiterId) o asignarla a otro mesero (gerente). */
+  @RequirePermissions('tables.operate')
+  @Patch(':id/waiter')
+  assignWaiter(@CurrentActor() actor: EmployeeActor, @Param('id') id: string, @Body() dto: AssignWaiterDto) {
+    return this.tables.assignWaiter(actor, id, dto.waiterId);
   }
 
   @RequirePermissions('tables.operate')

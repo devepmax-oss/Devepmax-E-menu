@@ -16,6 +16,7 @@ import '../features/pos/screens/pos_screen.dart';
 import '../features/promotions/screens/promotions_screen.dart';
 import '../features/shell/admin_shell.dart';
 import '../features/tables/screens/tables_screen.dart';
+import '../features/tables/screens/waiter_screen.dart';
 
 final routerProvider = Provider<GoRouter>((ref) {
   final authChanges = ValueNotifier<int>(0);
@@ -32,9 +33,11 @@ final routerProvider = Provider<GoRouter>((ref) {
 
       final loggedIn = auth.value != null;
       if (!loggedIn) return location == '/login' ? null : '/login';
-      // Quien atiende órdenes entra directo al tablero; el resto, al menú.
+      // Meseros (atienden mesas pero no cobran) entran a sus mesas; quien atiende órdenes, al
+      // tablero; el resto, al menú.
       if (location == '/login' || location == '/splash') {
         final employee = auth.value!.employee;
+        if (employee.can('tables.operate') && !employee.can('payments.take')) return '/waiter';
         if (employee.can('orders.create')) return '/orders';
         return employee.can('tables.operate') ? '/tables' : '/menu';
       }
@@ -48,6 +51,7 @@ final routerProvider = Provider<GoRouter>((ref) {
         routes: [
           GoRoute(path: '/orders', builder: (_, __) => const OrdersScreen()),
           GoRoute(path: '/tables', builder: (_, __) => const TablesScreen()),
+          GoRoute(path: '/waiter', builder: (_, __) => const WaiterScreen()),
           GoRoute(
             path: '/pos',
             builder: (_, state) => NewOrderScreen(key: ValueKey(state.uri.toString()), tableId: state.uri.queryParameters['table']),

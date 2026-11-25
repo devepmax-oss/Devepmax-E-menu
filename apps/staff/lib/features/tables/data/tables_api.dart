@@ -35,6 +35,16 @@ class TablesApi {
       _table(_dio.post<Map<String, dynamic>>('/tables/$id/open', data: {'guestCount': guests}));
   Future<TableView> close(String id, {bool force = false}) =>
       _table(_dio.post<Map<String, dynamic>>('/tables/$id/close', data: {'force': force}));
+  /// Tomar la mesa (sin [waiterId]) o asignarla a otro mesero (gerente).
+  Future<TableView> assignWaiter(String id, {String? waiterId}) =>
+      _table(_dio.patch<Map<String, dynamic>>('/tables/$id/waiter', data: {if (waiterId != null) 'waiterId': waiterId}));
+
+  /// Las cuentas por pagar de la mesa, para presentarlas (impresas o con el QR de pago).
+  Future<List<Map<String, dynamic>>> checks(String id) => _call(() async {
+        final data = (await _dio.get<List<dynamic>>('/billing/tables/$id/check')).data ?? const [];
+        return [for (final c in data) Map<String, dynamic>.from(c as Map)];
+      });
+
   Future<TableView> setStatus(String id, String status) =>
       _table(_dio.patch<Map<String, dynamic>>('/tables/$id/status', data: {'status': status}));
 

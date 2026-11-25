@@ -250,7 +250,7 @@ export class OrdersService {
             create: { businessDate, lastOrderNumber: 1 },
             update: { lastOrderNumber: { increment: 1 } },
           });
-          const billId = await this.resolveBill(tx, input.tableId);
+          const billId = await this.resolveBill(tx, input.tableId, input.createdById);
           if (input.deliveryFee || input.tipTotal) {
             await tx.bill.update({
               where: { id: billId },
@@ -564,8 +564,11 @@ export class OrdersService {
     });
   }
 
-  /** Mesa → sesión abierta y su cuenta pendiente. Mostrador → cuenta nueva. */
-  private async resolveBill(tx: Tx, tableId: string | undefined): Promise<string> {
+  /**
+   * Mesa → sesión abierta y su cuenta pendiente. Mostrador → cuenta nueva.
+   * Si la mesa no tiene mesero, la atiende el empleado que tomó el primer pedido.
+   */
+  private async resolveBill(tx: Tx, tableId: string | undefined, employeeId?: string | null): Promise<string> {
     if (!tableId) return (await tx.bill.create({ data: {} })).id;
 
     let session = await tx.tableSession.findFirst({
@@ -573,8 +576,10 @@ export class OrdersService {
       orderBy: { openedAt: 'desc' },
     });
     if (!session) {
-      session = await tx.tableSession.create({ data: { tableId } });
+      session = await tx.tableSession.create({ data: { tableId, waiterId: employeeId ?? null } });
       await tx.diningTable.update({ where: { id: tableId }, data: { status: 'OCCUPIED' } });
+    } else if (!session.waiterId && employeeId) {
+      session = await tx.tableSession.update({ where: { id: session.id }, data: { waiterId: employeeId } });
     }
     const bill = await tx.bill.findFirst({
       where: { tableSessionId: session.id, status: { in: ['UNPAID', 'PARTIALLY_PAID'] } },

@@ -8,6 +8,7 @@ import 'package:intl/intl.dart';
 import '../../../core/api/api_exception.dart';
 import '../../../core/auth/auth_controller.dart';
 import '../../../core/ui/feedback.dart';
+import '../../billing/screens/receipt_dialog.dart' show ChecksDialog;
 import '../../orders/data/orders_api.dart';
 import '../../orders/data/orders_models.dart';
 import '../../orders/screens/orders_screen.dart' show showOrderDetail;
@@ -78,6 +79,19 @@ class _TablePanelState extends ConsumerState<_TablePanel> {
     }
   }
 
+  Future<void> _deliver(OrderView order) async {
+    setState(() => _busy = true);
+    try {
+      await ref.read(ordersApiProvider).complete(order.id);
+      await ref.read(ordersBoardProvider.notifier).refresh();
+      if (mounted) showSuccess(context, 'Pedido #${order.number} entregado');
+    } catch (error) {
+      if (mounted) showError(context, error);
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
   Future<void> _seat(TableView table) async {
     final guests = await showDialog<int>(
       context: context,
@@ -125,7 +139,7 @@ class _TablePanelState extends ConsumerState<_TablePanel> {
       return Material(
         color: t.surface,
         child: SizedBox(
-          width: 440,
+          width: MediaQuery.sizeOf(context).width.clamp(0, 440).toDouble(),
           height: double.infinity,
           child: Center(
             child: Column(mainAxisSize: MainAxisSize.min, children: [
@@ -172,7 +186,17 @@ class _TablePanelState extends ConsumerState<_TablePanel> {
 
     final canCharge = ref.watch(authControllerProvider).value?.employee.can('payments.take') ?? false;
     final canOrder = ref.watch(authControllerProvider).value?.employee.can('orders.create') ?? false;
+    final me = ref.watch(authControllerProvider).value?.employee;
     final actions = <Widget>[
+      if (s != null && s.total > 0 && !canCharge)
+        OutlinedButton.icon(
+          onPressed: () => showDialog<void>(
+            context: context,
+            builder: (_) => ChecksDialog(title: 'Cuenta · Mesa ${table.label}', load: (ref) => ref.read(tablesApiProvider).checks(table.id)),
+          ),
+          icon: const Icon(Icons.receipt_long_rounded),
+          label: const Text('Cuenta'),
+        ),
       if (canOrder && status != 'CLEANING')
         FilledButton.icon(
           onPressed: () {
@@ -235,7 +259,7 @@ class _TablePanelState extends ConsumerState<_TablePanel> {
     return Material(
       color: t.surface,
       child: SizedBox(
-        width: 440,
+        width: MediaQuery.sizeOf(context).width.clamp(0, 440).toDouble(),
         height: double.infinity,
         child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
           Padding(
@@ -269,6 +293,26 @@ class _TablePanelState extends ConsumerState<_TablePanel> {
                 Text('Sentados a las ${time.format(s.openedAt)}'
                     '${s.activeOrders > 0 ? ' · ${s.activeOrders} en preparación' : ''}',
                     style: text.bodySmall),
+                const SizedBox(height: 10),
+                Row(children: [
+                  Icon(Icons.person_rounded, size: 18, color: t.muted),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      s.waiterId == null
+                          ? 'Sin mesero asignado'
+                          : s.waiterId == me?.id
+                              ? 'La atiendes tú'
+                              : 'La atiende ${s.waiterName ?? 'otro mesero'}',
+                      style: text.bodyMedium,
+                    ),
+                  ),
+                  if (s.waiterId != me?.id)
+                    TextButton(
+                      onPressed: _busy ? null : () => _act(() => _api.assignWaiter(table.id), done: 'Ahora atiendes la mesa ${table.label}'),
+                      child: const Text('Tomar mesa'),
+                    ),
+                ]),
                 if (s.requests.isNotEmpty) ...[
                   const SizedBox(height: 20),
                   for (final r in s.requests)
@@ -328,11 +372,15 @@ class _TablePanelState extends ConsumerState<_TablePanel> {
                 for (final o in orders)
                   Card(
                     margin: const EdgeInsets.only(bottom: 8),
+                    color: o.status == 'READY' ? t.successSoft : null,
                     child: ListTile(
                       onTap: () => showOrderDetail(context, o),
                       title: Text('#${o.number} · ${o.itemCount} ${o.itemCount == 1 ? 'artículo' : 'artículos'}'),
-                      subtitle: Text(orderStatusLabels[o.status] ?? o.status),
-                      trailing: Text(formatMoney(o.total), style: text.titleMedium),
+                      subtitle: Text(o.status == 'READY' ? '¡Listo! Llévalo a la mesa' : (orderStatusLabels[o.status] ?? o.status),
+                          style: o.status == 'READY' ? TextStyle(color: t.success, fontWeight: FontWeight.w700) : null),
+                      trailing: o.status == 'READY' && canOrder
+                          ? FilledButton(onPressed: _busy ? null : () => _deliver(o), child: const Text('Entregado'))
+                          : Text(formatMoney(o.total), style: text.titleMedium),
                     ),
                   ),
               ],

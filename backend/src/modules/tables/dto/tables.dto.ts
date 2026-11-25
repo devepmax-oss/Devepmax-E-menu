@@ -80,3 +80,8 @@ export class ServiceRequestDto {
 export class ResolveRequestDto {
   @IsIn(['ACKNOWLEDGED', 'DONE']) status: 'ACKNOWLEDGED' | 'DONE';
 }
+
+export class AssignWaiterDto {
+  /** Quién atiende la mesa. Si falta, la toma quien hace la petición; null la deja sin mesero. */
+  @IsOptional() @IsString() waiterId?: string | null;
+}

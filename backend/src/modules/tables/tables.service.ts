@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   ConflictException,
+  ForbiddenException,
   Injectable,
   Logger,
   NotFoundException,
@@ -35,7 +36,7 @@ const TABLE_INCLUDE = {
 type TableWithSession = Prisma.DiningTableGetPayload<{ include: typeof TABLE_INCLUDE }>;
 
 /** Lo que ven caja y meseros de cada mesa: estado, sesión abierta, cuenta y llamados. */
-export function toTableView(t: TableWithSession) {
+export function toTableView(t: TableWithSession, names: ReadonlyMap<string, string> = new Map()) {
   const s = t.sessions[0];
   const total = s ? s.bills.reduce((sum, b) => sum.plus(b.total), new Prisma.Decimal(0)) : new Prisma.Decimal(0);
   const paid = s ? s.bills.reduce((sum, b) => sum.plus(b.amountPaid), new Prisma.Decimal(0)) : new Prisma.Decimal(0);
@@ -57,6 +58,9 @@ export function toTableView(t: TableWithSession) {
           openedAt: s.openedAt,
           orderCount: s.orders.filter((o) => o.status !== 'CANCELLED').length,
           activeOrders: s.orders.filter((o) => !FINISHED_ORDER.includes(o.status)).length,
+          /** Pedidos listos en cocina esperando que el mesero los lleve. */
+          readyOrders: s.orders.filter((o) => o.status === 'READY').length,
+          waiter: s.waiterId ? { id: s.waiterId, name: names.get(s.waiterId) ?? null } : null,
           total,
           paid,
           due: Prisma.Decimal.max(total.minus(paid), 0),
@@ -139,14 +143,23 @@ export class TablesService implements OnModuleInit, OnModuleDestroy {
       this.prisma.diningArea.findMany({ orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }] }),
       this.prisma.diningTable.findMany({ where: { isActive: true }, include: TABLE_INCLUDE }),
     ]);
-    const views = tables.map(toTableView).sort(byLabel);
+    const names = await this.waiterNames(tables);
+    const views = tables.map((t) => toTableView(t, names)).sort(byLabel);
     return areas.map((a) => ({ id: a.id, name: a.name, sortOrder: a.sortOrder, tables: views.filter((t) => t.areaId === a.id) }));
   }
 
   async view(id: string): Promise<TableView> {
     const table = await this.prisma.diningTable.findUnique({ where: { id }, include: TABLE_INCLUDE });
     if (!table) throw new NotFoundException('Mesa no encontrada');
-    return toTableView(table);
+    return toTableView(table, await this.waiterNames([table]));
+  }
+
+  /** Nombres de los meseros de las mesas abiertas. */
+  private async waiterNames(tables: TableWithSession[]): Promise<Map<string, string>> {
+    const ids = [...new Set(tables.flatMap((t) => (t.sessions[0]?.waiterId ? [t.sessions[0].waiterId] : [])))];
+    if (ids.length === 0) return new Map();
+    const people = await this.prisma.employee.findMany({ where: { id: { in: ids } }, select: { id: true, name: true } });
+    return new Map(people.map((p) => [p.id, p.name]));
   }
 
   // ───────── Áreas ─────────
@@ -289,6 +302,28 @@ export class TablesService implements OnModuleInit, OnModuleDestroy {
       ]);
       await this.audit.log(actor, 'table.open', 'table', id, { label: table.label, guestCount });
     }
+    return this.publish(id);
+  }
+
+  /**
+   * Quién atiende la mesa. Sin [waiterId], la toma quien lo pide. Asignarla a otra persona
+   * requiere administrar mesas (gerente).
+   */
+  async assignWaiter(actor: EmployeeActor, id: string, waiterId?: string | null) {
+    const target = waiterId === undefined ? actor.id : waiterId;
+    if (target !== actor.id && !actor.permissions.has('tables.manage')) {
+      throw new ForbiddenException('Solo un gerente puede asignar la mesa a otra persona');
+    }
+    const session = await this.prisma.tableSession.findFirst({ where: { tableId: id, ...OPEN_SESSION } });
+    if (!session) throw new ConflictException('La mesa no tiene clientes');
+    if (target) {
+      const employee = await this.prisma.employee.findUnique({ where: { id: target }, include: { role: true } });
+      if (!employee?.isActive || !employee.role.permissions.includes('tables.operate')) {
+        throw new BadRequestException('Esa persona no atiende mesas');
+      }
+    }
+    await this.prisma.tableSession.update({ where: { id: session.id }, data: { waiterId: target } });
+    await this.audit.log(actor, 'table.waiter', 'table', id, { waiterId: target, previous: session.waiterId });
     return this.publish(id);
   }
 

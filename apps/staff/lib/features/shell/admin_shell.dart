@@ -21,6 +21,7 @@ const _allDestinations = [
   _Destination('/orders', 'Órdenes', Icons.receipt_long_rounded, 'orders.create'),
   _Destination('/tables', 'Mesas', Icons.table_restaurant_rounded, 'tables.operate'),
   _Destination('/billing', 'Caja', Icons.point_of_sale_rounded, 'payments.take'),
+  _Destination('/waiter', 'Mis mesas', Icons.room_service_rounded, 'tables.operate'),
   _Destination('/menu', 'Menú', Icons.restaurant_menu_rounded, 'menu.manage'),
   _Destination('/modifiers', 'Modificadores', Icons.tune_rounded, 'menu.manage'),
   _Destination('/menu-setup', 'Cocina e impuestos', Icons.soup_kitchen_rounded, 'menu.manage'),
@@ -41,6 +42,11 @@ class AdminShell extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final employee = ref.watch(authControllerProvider).value?.employee;
     final destinations = _allDestinations.where((d) => employee?.can(d.permission) ?? false).toList();
+    // Un mesero (no cobra) tiene sus mesas como primera opción.
+    if (employee != null && employee.can('tables.operate') && !employee.can('payments.take')) {
+      final waiter = destinations.indexWhere((d) => d.path == '/waiter');
+      if (waiter > 0) destinations.insert(0, destinations.removeAt(waiter));
+    }
     final selected = destinations.indexWhere((d) => location == d.path || location.startsWith('${d.path}/'));
 
     if (destinations.isEmpty) {

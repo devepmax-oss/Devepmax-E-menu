@@ -86,6 +86,12 @@ export class ReceiptsService {
     };
   }
 
+  /** Las cuentas por pagar de la visita en curso de una mesa. */
+  async tableChecks(tableId: string) {
+    const bills = (await this.billing.list(tableId)).filter((b) => b.status === 'UNPAID' || b.status === 'PARTIALLY_PAID');
+    return Promise.all(bills.map((b) => this.check(b.id)));
+  }
+
   async send(actor: EmployeeActor, billId: string, dto: SendReceiptDto) {
     if (!dto.email && !dto.phone) throw new BadRequestException('Escribe un email o un teléfono');
     const receipt = await this.toReceipt(await this.paidBill(billId));

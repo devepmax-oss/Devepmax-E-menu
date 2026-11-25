@@ -44,6 +44,9 @@ class TableSessionView {
     required this.paid,
     required this.due,
     required this.requests,
+    this.readyOrders = 0,
+    this.waiterId,
+    this.waiterName,
   });
 
   final String id;
@@ -57,6 +60,16 @@ class TableSessionView {
   final double due;
   final List<ServiceRequestView> requests;
 
+  /// Pedidos que la cocina ya terminó y el mesero tiene que llevar.
+  final int readyOrders;
+
+  /// Quién atiende la mesa.
+  final String? waiterId;
+  final String? waiterName;
+
+  bool get billRequested => status == 'BILL_REQUESTED' || requests.any((r) => r.type == 'REQUEST_BILL');
+  bool get calling => requests.any((r) => r.type == 'CALL_WAITER' && r.status == 'OPEN');
+
   factory TableSessionView.fromJson(TJson j) => TableSessionView(
         id: j['id'] as String,
         status: j['status'] as String,
@@ -68,6 +81,9 @@ class TableSessionView {
         paid: parseMoney(j['paid']),
         due: parseMoney(j['due']),
         requests: [for (final r in (j['requests'] as List? ?? const [])) ServiceRequestView.fromJson(r as TJson)],
+        readyOrders: (j['readyOrders'] as num?)?.toInt() ?? 0,
+        waiterId: (j['waiter'] as TJson?)?['id'] as String?,
+        waiterName: (j['waiter'] as TJson?)?['name'] as String?,
       );
 }
 
