@@ -70,6 +70,14 @@ export class SettingsService {
       prepTimeMinutes: settings.prepTimeMinutes,
       tipPresets: settings.tipPresets,
       maintenanceMode: settings.maintenanceMode,
+      loyalty: {
+        enabled: settings.loyaltyEnabled,
+        pointsPerDollar: settings.loyaltyPointsPerDollar,
+        rewardPoints: settings.loyaltyRewardPoints,
+        rewardAmount: settings.loyaltyRewardAmount,
+        birthday: settings.birthdayRewardEnabled,
+        birthdayAmount: settings.birthdayRewardAmount,
+      },
       openingHours: hours.map(({ dayOfWeek, opensAt, closesAt }) => ({ dayOfWeek, opensAt, closesAt })),
     };
   }

@@ -5,8 +5,10 @@ import type { EmployeeActor } from '../../common/auth/actor';
 import { AllowActors, CurrentActor, Public, RequirePermissions } from '../../common/auth/decorators';
 import { CUSTOMER_TOKEN_HEADER, CustomerAuthService } from './customer-auth.service';
 import { CustomersService } from './customers.service';
+import { LoyaltyService } from '../loyalty/loyalty.service';
 import {
   AddressDto,
+  AdjustPointsDto,
   AttachCustomerDto,
   CreateCustomerDto,
   CustomersQueryDto,
@@ -75,6 +77,7 @@ export class MeController {
   constructor(
     private readonly auth: CustomerAuthService,
     private readonly customers: CustomersService,
+    private readonly loyalty: LoyaltyService,
   ) {}
 
   private async me(token?: string) {
@@ -118,6 +121,13 @@ export class MeController {
   async orders(@Headers(CUSTOMER_TOKEN_HEADER) token?: string) {
     return this.customers.history((await this.me(token)).id);
   }
+
+  /** Puntos, premios vigentes y movimientos. */
+  @Public()
+  @Get('loyalty')
+  async loyaltySummary(@Headers(CUSTOMER_TOKEN_HEADER) token?: string) {
+    return this.loyalty.summary((await this.me(token)).id);
+  }
 }
 
 /** Clientes para el personal. */
@@ -126,7 +136,10 @@ export class MeController {
 @AllowActors('employee')
 @Controller()
 export class CustomersController {
-  constructor(private readonly customers: CustomersService) {}
+  constructor(
+    private readonly customers: CustomersService,
+    private readonly loyalty: LoyaltyService,
+  ) {}
 
   /** Buscar o dar de alta un cliente basta con atender mesas, tomar pedidos o cobrar. */
   private assertFrontOfHouse(actor: EmployeeActor) {
@@ -160,6 +173,14 @@ export class CustomersController {
     res.send(buffer);
   }
 
+  /** Entrega ahora los regalos de cumpleaños del mes (también corre solo cada 6 horas). */
+  @RequirePermissions('customers.manage')
+  @Post('customers/loyalty/birthdays')
+  @HttpCode(200)
+  async birthdays() {
+    return { delivered: await this.loyalty.birthdays() };
+  }
+
   @Get('customers/lookup')
   lookup(@CurrentActor() actor: EmployeeActor, @Query() query: LookupDto) {
     this.assertFrontOfHouse(actor);
@@ -182,6 +203,19 @@ export class CustomersController {
   @Patch('customers/:id')
   update(@CurrentActor() actor: EmployeeActor, @Param('id') id: string, @Body() dto: UpdateCustomerDto) {
     return this.customers.update(actor, id, dto);
+  }
+
+  @RequirePermissions('customers.manage')
+  @Get('customers/:id/loyalty')
+  loyaltyOf(@Param('id') id: string) {
+    return this.loyalty.summary(id);
+  }
+
+  @RequirePermissions('customers.manage')
+  @Post('customers/:id/loyalty/adjust')
+  @HttpCode(200)
+  adjust(@CurrentActor() actor: EmployeeActor, @Param('id') id: string, @Body() dto: AdjustPointsDto) {
+    return this.loyalty.adjust(actor, id, dto.points, dto.reason);
   }
 
   @RequirePermissions('customers.manage')

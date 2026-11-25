@@ -18,6 +18,9 @@ export class GoogleSignInDto {
 
 export class UpdateMeDto {
   @IsOptional() @IsString() @MinLength(2) @MaxLength(80) name?: string;
+  /** Cumpleaños (mes y día). El cliente lo pone una vez; después solo el personal lo cambia. */
+  @IsOptional() @IsInt() @Min(1) @Max(12) birthMonth?: number;
+  @IsOptional() @IsInt() @Min(1) @Max(31) birthDay?: number;
   @IsOptional() @IsBoolean() marketingOptIn?: boolean;
   @IsOptional() @IsIn(['es', 'en']) lang?: 'es' | 'en';
 }
@@ -60,7 +63,14 @@ export class UpdateCustomerDto {
   @IsOptional() @ValidateIf((_, v) => v !== null) @IsString() @MaxLength(20) phone?: string | null;
   @IsOptional() @ValidateIf((_, v) => v !== null) @IsString() @MaxLength(120) email?: string | null;
   @IsOptional() @ValidateIf((_, v) => v !== null) @IsString() @MaxLength(1000) notes?: string | null;
+  @IsOptional() @ValidateIf((_, v) => v !== null) @IsInt() @Min(1) @Max(12) birthMonth?: number | null;
+  @IsOptional() @ValidateIf((_, v) => v !== null) @IsInt() @Min(1) @Max(31) birthDay?: number | null;
   @IsOptional() @IsBoolean() marketingOptIn?: boolean;
+}
+
+export class AdjustPointsDto {
+  @IsInt() @Min(-100000) @Max(100000) points: number;
+  @IsString() @MinLength(3) @MaxLength(200) reason: string;
 }
 
 export class MergeCustomerDto {

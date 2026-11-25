@@ -36,6 +36,8 @@ export interface OnlineConfig {
   prepTimeMinutes: number;
   tipPresets: number[];
   maintenanceMode: boolean;
+  /** Programa de lealtad (puntos por dólar y premio en cupón). */
+  loyalty?: { enabled: boolean; pointsPerDollar: number; rewardPoints: number; rewardAmount: Money; birthday: boolean; birthdayAmount: Money };
   openingHours: OpeningWindow[];
   isOpenNow: boolean;
   delivery: { fee: Money; minOrder: Money; etaMinutes: number };

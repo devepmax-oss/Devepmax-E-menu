@@ -1,13 +1,13 @@
 'use client';
 
-import { ChevronLeft, LogOut, MapPin, Plus, Receipt, RotateCcw, Trash2, UserRound } from 'lucide-react';
+import { Cake, ChevronLeft, Gift, LogOut, MapPin, Plus, Receipt, RotateCcw, Star, Trash2, UserRound } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useState } from 'react';
 import { GoogleButton } from '@/components/google-button';
 import { LanguageSwitch, useLang, useT } from '@/components/i18n';
 import { BrandMark, Button, Notice, Pill } from '@/components/ui';
-import { account, reorderLines, useAccount, type CodeSent, type HistoryEntry, type LoginOptions, type Profile } from '@/lib/account';
+import { account, pendingCoupon, reorderLines, useAccount, type CodeSent, type HistoryEntry, type LoginOptions, type LoyaltySummary, type Profile } from '@/lib/account';
 import { ApiError } from '@/lib/api';
 import { cart } from '@/lib/cart';
 import { money } from '@/lib/format';
@@ -287,7 +287,8 @@ function Signed({ profile, config, menu, back }: { profile: Profile; config: Onl
           {t('Seguir con mi pedido', 'Continue with my order')}
         </Button>
       ) : null}
-      <ProfileCard profile={profile} />
+      <ProfileCard profile={profile} birthdayGift={!!config.loyalty?.birthday} />
+      {config.loyalty?.enabled || config.loyalty?.birthday ? <LoyaltyCard config={config} /> : null}
       <OrdersCard config={config} menu={menu} />
       <AddressesCard profile={profile} />
       <Button
@@ -305,7 +306,7 @@ function Signed({ profile, config, menu, back }: { profile: Profile; config: Onl
   );
 }
 
-function ProfileCard({ profile }: { profile: Profile }) {
+function ProfileCard({ profile, birthdayGift }: { profile: Profile; birthdayGift: boolean }) {
   const t = useT();
   const [editing, setEditing] = useState(false);
   const [name, setName] = useState(profile.name);
@@ -359,7 +360,161 @@ function ProfileCard({ profile }: { profile: Profile }) {
         <input type="checkbox" checked={profile.marketingOptIn} disabled={busy} onChange={(e) => void save({ marketingOptIn: e.target.checked })} className="size-5 accent-[var(--brand)]" />
         {t('Quiero recibir promociones del restaurante', 'I want to receive promotions from the restaurant')}
       </label>
+      <BirthdayRow profile={profile} gift={birthdayGift} />
       {error ? <Notice tone="danger">{error}</Notice> : null}
+    </Card>
+  );
+}
+
+const MONTHS_ES = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
+const MONTHS_EN = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+
+/** Cumpleaños: se pone una vez (para el regalo del mes). */
+function BirthdayRow({ profile, gift }: { profile: Profile; gift: boolean }) {
+  const t = useT();
+  const lang = useLang();
+  const months = lang === 'en' ? MONTHS_EN : MONTHS_ES;
+  const [month, setMonth] = useState(0);
+  const [day, setDay] = useState(0);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  if (profile.birthday) {
+    const m = months[profile.birthday.month - 1];
+    return (
+      <p className="m-0 flex items-center gap-2 text-sm text-soft">
+        <Cake aria-hidden className="size-4 text-accent-text" />
+        {t(`Cumpleaños: ${profile.birthday.day} de ${m}`, `Birthday: ${m} ${profile.birthday.day}`)}
+      </p>
+    );
+  }
+  const days = month ? [31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31][month - 1] : 31;
+  const save = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      await account.update({ birthMonth: month, birthDay: day });
+    } catch (e) {
+      setError(errorText(e, t('No pudimos guardar tu cumpleaños.', 'We could not save your birthday.')));
+    } finally {
+      setBusy(false);
+    }
+  };
+  const select = 'h-11 rounded-2xl border border-line bg-surface-2 px-3 text-ink';
+  return (
+    <div className="flex flex-col gap-2 border-t border-line pt-4">
+      <span className="flex items-center gap-2 text-sm font-semibold text-soft">
+        <Cake aria-hidden className="size-4 text-accent-text" />
+        {gift ? t('Tu cumpleaños (te enviamos un regalo ese mes)', 'Your birthday (we send you a gift that month)') : t('Tu cumpleaños', 'Your birthday')}
+      </span>
+      <div className="flex flex-wrap items-center gap-2">
+        <select aria-label={t('Mes', 'Month')} value={month} onChange={(e) => setMonth(Number(e.target.value))} className={select}>
+          <option value={0}>{t('Mes', 'Month')}</option>
+          {months.map((m, i) => (
+            <option key={m} value={i + 1}>
+              {m}
+            </option>
+          ))}
+        </select>
+        <select aria-label={t('Día', 'Day')} value={day} onChange={(e) => setDay(Number(e.target.value))} className={select}>
+          <option value={0}>{t('Día', 'Day')}</option>
+          {Array.from({ length: days }, (_, i) => (
+            <option key={i + 1} value={i + 1}>
+              {i + 1}
+            </option>
+          ))}
+        </select>
+        <Button tone="ghost" className="h-11" loading={busy} disabled={!month || !day || day > days} onClick={save}>
+          {t('Guardar', 'Save')}
+        </Button>
+      </div>
+      {error ? <span className="text-sm text-danger">{error}</span> : null}
+    </div>
+  );
+}
+
+/** Puntos, premios y regalo de cumpleaños. */
+function LoyaltyCard({ config }: { config: OnlineConfig }) {
+  const t = useT();
+  const lang = useLang();
+  const router = useRouter();
+  const [data, setData] = useState<LoyaltySummary | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    account
+      .loyalty()
+      .then((d) => !cancelled && setData(d))
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+  if (!data) return <div className="h-32 animate-pulse rounded-[26px] bg-surface-2" aria-hidden />;
+  const progress = data.rewardPoints > 0 ? Math.min(100, Math.round((data.points / data.rewardPoints) * 100)) : 0;
+  const until = (iso: string | null) =>
+    iso ? new Intl.DateTimeFormat(intlLocale(lang), { dateStyle: 'medium', timeZone: config.timezone }).format(new Date(new Date(iso).getTime() - 1000)) : null;
+  const use = (code: string) => {
+    pendingCoupon.set(code);
+    router.push('/pedido');
+  };
+  return (
+    <Card title={t('Mis puntos', 'My points')} aside={<Star aria-hidden className="size-5 text-accent-text" />}>
+      {data.enabled ? (
+        <>
+          <div className="flex items-end justify-between gap-3">
+            <span className="font-heading text-5xl leading-none font-extrabold">{data.points}</span>
+            <span className="text-right text-sm text-soft">
+              {t(`${data.pointsPerDollar} punto por cada $1`, `${data.pointsPerDollar} point per $1`)}
+              <br />
+              {t(`${data.rewardPoints} puntos = ${money(data.rewardAmount, config.currency)}`, `${data.rewardPoints} points = ${money(data.rewardAmount, config.currency)}`)}
+            </span>
+          </div>
+          <div className="h-2.5 overflow-hidden rounded-full bg-surface-3" aria-hidden>
+            <div className="h-full rounded-full bg-brand" style={{ width: `${progress}%` }} />
+          </div>
+          <p className="m-0 text-sm text-soft">
+            {t(
+              `Te faltan ${data.toNextReward} puntos para tu próximo premio de ${money(data.rewardAmount, config.currency)}.`,
+              `${data.toNextReward} more points to your next ${money(data.rewardAmount, config.currency)} reward.`,
+            )}
+          </p>
+        </>
+      ) : null}
+      {data.rewards.length ? (
+        <ul className="m-0 flex list-none flex-col gap-2 p-0">
+          {data.rewards.map((r) => (
+            <li key={r.code} className="flex items-center gap-3 rounded-2xl border border-brand/40 bg-brand-soft px-4 py-3">
+              {r.code.startsWith('CUMPLE-') ? <Cake aria-hidden className="size-5 shrink-0 text-brand-text" /> : <Gift aria-hidden className="size-5 shrink-0 text-brand-text" />}
+              <div className="flex min-w-0 flex-1 flex-col">
+                <span className="font-bold">{r.type === 'AMOUNT' && r.value ? `${money(r.value, config.currency)} · ${r.code}` : r.code}</span>
+                <span className="truncate text-xs text-soft">
+                  {r.name}
+                  {r.endsAt ? ` · ${t('vence', 'expires')} ${until(r.endsAt)}` : ''}
+                </span>
+              </div>
+              <Button className="h-10 px-4 text-sm" onClick={() => use(r.code)}>
+                {t('Usar', 'Use')}
+              </Button>
+            </li>
+          ))}
+        </ul>
+      ) : null}
+      {data.history.length ? (
+        <details className="text-sm">
+          <summary className="cursor-pointer font-semibold text-soft">{t('Movimientos', 'Activity')}</summary>
+          <ul className="m-0 mt-2 flex list-none flex-col gap-1 p-0">
+            {data.history.slice(0, 10).map((h) => (
+              <li key={h.id} className="flex justify-between gap-3 text-soft">
+                <span>
+                  {h.type === 'REWARD' ? t('Premio canjeado', 'Reward redeemed') : h.type === 'ADJUST' ? (h.reason ?? t('Ajuste', 'Adjustment')) : h.points > 0 ? t('Compra', 'Purchase') : t('Ajuste', 'Adjustment')}
+                  {' · '}
+                  {new Intl.DateTimeFormat(intlLocale(lang), { dateStyle: 'short', timeZone: config.timezone }).format(new Date(h.date))}
+                </span>
+                <span className={`tabular-nums font-semibold ${h.points > 0 ? 'text-success' : 'text-ink'}`}>{h.points > 0 ? `+${h.points}` : h.points}</span>
+              </li>
+            ))}
+          </ul>
+        </details>
+      ) : null}
     </Card>
   );
 }

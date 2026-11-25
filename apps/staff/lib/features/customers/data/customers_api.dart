@@ -113,14 +113,29 @@ class CustomerVisit {
 }
 
 class CustomerDetail {
-  const CustomerDetail({required this.summary, this.notes, this.createdAt, required this.addresses, required this.history});
+  const CustomerDetail({
+    required this.summary,
+    this.notes,
+    this.createdAt,
+    required this.addresses,
+    required this.history,
+    this.points = 0,
+    this.birthMonth,
+    this.birthDay,
+  });
   final CustomerSummary summary;
   final String? notes;
   final DateTime? createdAt;
   final List<CustomerAddress> addresses;
   final List<CustomerVisit> history;
+  final int points;
+  final int? birthMonth;
+  final int? birthDay;
 
   factory CustomerDetail.fromJson(CJson j) => CustomerDetail(
+        points: (j['points'] as num?)?.toInt() ?? 0,
+        birthMonth: ((j['birthday'] as CJson?)?['month'] as num?)?.toInt(),
+        birthDay: ((j['birthday'] as CJson?)?['day'] as num?)?.toInt(),
         summary: CustomerSummary.fromJson(j),
         notes: j['notes'] as String?,
         createdAt: _date(j['createdAt']),
@@ -128,6 +143,42 @@ class CustomerDetail {
         history: [for (final h in j['history'] as List? ?? const []) CustomerVisit.fromJson(h as CJson)],
       );
 }
+
+/// Premio vigente (cupón personal) de un cliente.
+class LoyaltyReward {
+  const LoyaltyReward({required this.code, required this.name, this.value, this.endsAt});
+  final String code;
+  final String name;
+  final double? value;
+  final DateTime? endsAt;
+}
+
+class LoyaltyInfo {
+  const LoyaltyInfo({required this.enabled, required this.points, required this.rewardPoints, required this.rewards});
+  final bool enabled;
+  final int points;
+  final int rewardPoints;
+  final List<LoyaltyReward> rewards;
+
+  factory LoyaltyInfo.fromJson(CJson j) => LoyaltyInfo(
+        enabled: j['enabled'] as bool? ?? false,
+        points: (j['points'] as num?)?.toInt() ?? 0,
+        rewardPoints: (j['rewardPoints'] as num?)?.toInt() ?? 0,
+        rewards: [
+          for (final r in j['rewards'] as List? ?? const [])
+            LoyaltyReward(
+              code: (r as CJson)['code'] as String,
+              name: r['name'] as String? ?? '',
+              value: r['value'] == null ? null : parseMoney(r['value']),
+              endsAt: _date(r['endsAt']),
+            ),
+        ],
+      );
+}
+
+final customerLoyaltyProvider = FutureProvider.autoDispose.family<LoyaltyInfo, String>(
+  (ref, id) => ref.watch(customersApiProvider).loyalty(id),
+);
 
 final customersApiProvider = Provider<CustomersApi>((ref) => CustomersApi(ref.watch(dioProvider)));
 
@@ -192,6 +243,14 @@ class CustomersApi {
       });
 
   Future<void> remove(String id) => _call(() => _dio.delete<void>('/customers/$id'));
+
+  Future<LoyaltyInfo> loyalty(String id) => _call(() async => LoyaltyInfo.fromJson((await _dio.get<CJson>('/customers/$id/loyalty')).data!));
+
+  Future<void> adjustPoints(String id, int points, String reason) =>
+      _call(() => _dio.post<CJson>('/customers/$id/loyalty/adjust', data: {'points': points, 'reason': reason}));
+
+  Future<void> setBirthday(String id, int? month, int? day) =>
+      _call(() => _dio.patch<CJson>('/customers/$id', data: {'birthMonth': month, 'birthDay': day}));
 
   /// Junta [fromId] dentro de [id]: todo pasa a [id] y [fromId] se borra.
   Future<CustomerDetail> merge(String id, String fromId) =>

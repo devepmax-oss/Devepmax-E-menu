@@ -30,6 +30,7 @@
     "smoke:report": "tsx scripts/smoke-report.ts",
     "smoke:customers": "tsx scripts/smoke-customers.ts",
     "smoke:coupons": "tsx scripts/smoke-coupons.ts",
+    "smoke:loyalty": "tsx scripts/smoke-loyalty.ts",
     "demo:orders": "tsx scripts/demo-orders.ts"
   },
   "dependencies": {

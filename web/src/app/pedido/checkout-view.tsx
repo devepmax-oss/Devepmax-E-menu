@@ -3,10 +3,10 @@
 import { ChevronLeft, CreditCard, MapPin, Store, TicketPercent, Wallet, X } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useLang, useT } from '@/components/i18n';
 import { Button, Notice } from '@/components/ui';
-import { useAccount } from '@/lib/account';
+import { account, pendingCoupon, useAccount, type LoyaltyReward } from '@/lib/account';
 import { api, ApiError } from '@/lib/api';
 import { cart, cartCount, saveCustomer, saveLastOrder, toOrderLines, useCart, useCustomer, type CustomerInfo } from '@/lib/cart';
 import { money, round2, toNumber } from '@/lib/format';
@@ -100,9 +100,24 @@ export function CheckoutView({ config }: { config: OnlineConfig }) {
   const items = useMemo(() => toOrderLines(state), [state]);
   const [couponOpen, setCouponOpen] = useState(false);
   const [couponInput, setCouponInput] = useState('');
-  const [couponCode, setCouponCode] = useState('');
+  const [typedCode, setCouponCode] = useState('');
+  // Un premio elegido en Mi cuenta ("Usar") llega ya puesto.
+  const pending = pendingCoupon.use();
+  const couponCode = typedCode || pending.code;
   const { quote, error: quoteError } = useQuote(mode, items, canOrder, { couponCode, phone: info.phone, customerToken: signedIn ? token : undefined });
   const couponOk = !!couponCode && !!quote?.coupon;
+  const [rewards, setRewards] = useState<LoyaltyReward[]>([]);
+  useEffect(() => {
+    if (!signedIn) return;
+    let cancelled = false;
+    account
+      .loyalty()
+      .then((d) => !cancelled && setRewards(d.rewards))
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [signedIn]);
 
   // Propina: sugerida en delivery, opcional en pickup.
   const presets = config.tipPresets.length ? config.tipPresets : [15, 18, 20];
@@ -193,6 +208,7 @@ export function CheckoutView({ config }: { config: OnlineConfig }) {
   const finish = (code: string) => {
     setLeaving(true);
     cart.clear();
+    pendingCoupon.clear();
     router.push(`/pedido/${code}`);
   };
 
@@ -390,13 +406,14 @@ export function CheckoutView({ config }: { config: OnlineConfig }) {
                     onClick={() => {
                       setCouponCode('');
                       setCouponInput('');
+                      pendingCoupon.clear();
                     }}
                     className="press flex size-8 cursor-pointer items-center justify-center rounded-full border-0 bg-transparent text-success"
                   >
                     <X aria-hidden className="size-4" />
                   </button>
                 </div>
-              ) : couponOpen ? (
+              ) : couponOpen || couponCode ? (
                 <form
                   className="flex flex-col gap-2"
                   onSubmit={(e) => {
@@ -422,9 +439,27 @@ export function CheckoutView({ config }: { config: OnlineConfig }) {
                   {couponCode && quote?.couponError ? <span className="text-sm text-danger">{quote.couponError}</span> : null}
                 </form>
               ) : (
-                <button type="button" onClick={() => setCouponOpen(true)} className="flex cursor-pointer items-center gap-2 self-start border-0 bg-transparent p-0 text-sm font-bold text-accent-text">
-                  <TicketPercent aria-hidden className="size-4" /> {t('¿Tienes un cupón?', 'Have a coupon?')}
-                </button>
+                <div className="flex flex-col gap-2">
+                  {rewards.map((r) => (
+                    <button
+                      key={r.code}
+                      type="button"
+                      onClick={() => {
+                        setCouponInput(r.code);
+                        setCouponCode(r.code);
+                      }}
+                      className="press flex cursor-pointer items-center gap-2 rounded-2xl border border-brand/40 bg-brand-soft px-4 py-3 text-left text-sm font-bold text-ink"
+                    >
+                      <TicketPercent aria-hidden className="size-4 text-brand-text" />
+                      <span className="flex-1">
+                        {t('Usar mi premio', 'Use my reward')} {r.type === 'AMOUNT' && r.value ? money(r.value, currency) : ''} · {r.code}
+                      </span>
+                    </button>
+                  ))}
+                  <button type="button" onClick={() => setCouponOpen(true)} className="flex cursor-pointer items-center gap-2 self-start border-0 bg-transparent p-0 text-sm font-bold text-accent-text">
+                    <TicketPercent aria-hidden className="size-4" /> {t('¿Tienes un cupón?', 'Have a coupon?')}
+                  </button>
+                </div>
               )
             ) : null}
 

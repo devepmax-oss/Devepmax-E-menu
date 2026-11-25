@@ -303,6 +303,7 @@ class _SettingsFormState extends ConsumerState<_SettingsForm> {
                     _switch('Web en mantenimiento', _maintenance, (v) => _maintenance = v),
                   ]),
                   if (_delivery) const _DeliveryZoneCard(),
+                  const _LoyaltyCard(),
                   _section('Operación', null, [
                     _row([
                       _field(_prep, 'Tiempo de preparación (min)', digits: true),
@@ -687,6 +688,166 @@ class _DeliveryZoneCardState extends ConsumerState<_DeliveryZoneCard> {
               ]),
             );
           },
+        ),
+      ),
+    );
+  }
+}
+
+/// Lealtad: puntos por dólar, premio en cupón y regalo de cumpleaños.
+class _LoyaltyCard extends ConsumerStatefulWidget {
+  const _LoyaltyCard();
+
+  @override
+  ConsumerState<_LoyaltyCard> createState() => _LoyaltyCardState();
+}
+
+class _LoyaltyCardState extends ConsumerState<_LoyaltyCard> {
+  final _key = GlobalKey<FormState>();
+  final _perDollar = TextEditingController();
+  final _goal = TextEditingController();
+  final _amount = TextEditingController();
+  final _days = TextEditingController();
+  final _birthdayAmount = TextEditingController();
+  bool _enabled = false;
+  bool _birthday = false;
+  bool _loaded = false;
+  bool _saving = false;
+
+  @override
+  void dispose() {
+    for (final c in [_perDollar, _goal, _amount, _days, _birthdayAmount]) {
+      c.dispose();
+    }
+    super.dispose();
+  }
+
+  String _money(Object? v) {
+    final n = double.tryParse('${v ?? 0}') ?? 0;
+    return n == n.roundToDouble() ? n.toStringAsFixed(0) : n.toStringAsFixed(2);
+  }
+
+  String? _int(String? v, int min, int max) {
+    final n = int.tryParse((v ?? '').trim());
+    return n == null || n < min || n > max ? 'Entre $min y $max' : null;
+  }
+
+  String? _dollars(String? v) {
+    final n = double.tryParse((v ?? '').trim());
+    return n == null || n < 1 || n > 500 ? 'Entre 1 y 500' : null;
+  }
+
+  Future<void> _save() async {
+    if (!_key.currentState!.validate()) return;
+    setState(() => _saving = true);
+    try {
+      await ref.read(adminApiProvider).updateSettings({
+        'loyaltyEnabled': _enabled,
+        'loyaltyPointsPerDollar': int.parse(_perDollar.text.trim()),
+        'loyaltyRewardPoints': int.parse(_goal.text.trim()),
+        'loyaltyRewardAmount': double.parse(_amount.text.trim()),
+        'loyaltyRewardDays': int.parse(_days.text.trim()),
+        'birthdayRewardEnabled': _birthday,
+        'birthdayRewardAmount': double.parse(_birthdayAmount.text.trim()),
+      });
+      ref.invalidate(settingsProvider);
+      if (mounted) showSuccess(context, 'Lealtad guardada');
+    } catch (error) {
+      if (mounted) showError(context, error);
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final text = Theme.of(context).textTheme;
+    final settings = ref.watch(settingsProvider).value?.$1;
+    if (settings == null) return const SizedBox.shrink();
+    if (!_loaded) {
+      _loaded = true;
+      _enabled = settings['loyaltyEnabled'] as bool? ?? false;
+      _perDollar.text = '${settings['loyaltyPointsPerDollar'] ?? 1}';
+      _goal.text = '${settings['loyaltyRewardPoints'] ?? 100}';
+      _amount.text = _money(settings['loyaltyRewardAmount'] ?? 5);
+      _days.text = '${settings['loyaltyRewardDays'] ?? 60}';
+      _birthday = settings['birthdayRewardEnabled'] as bool? ?? false;
+      _birthdayAmount.text = _money(settings['birthdayRewardAmount'] ?? 10);
+    }
+    final perDollar = int.tryParse(_perDollar.text) ?? 1;
+    final goal = int.tryParse(_goal.text) ?? 100;
+    final amount = double.tryParse(_amount.text) ?? 5;
+    final spend = perDollar > 0 ? goal / perDollar : 0;
+    InputDecoration deco(String label, {String? prefix}) => InputDecoration(labelText: label, prefixText: prefix, border: const OutlineInputBorder());
+    final digits = [FilteringTextInputFormatter.digitsOnly];
+    final decimals = [FilteringTextInputFormatter.allow(RegExp(r'[0-9.]'))];
+
+    return Card(
+      margin: const EdgeInsets.only(bottom: 16),
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Form(
+          key: _key,
+          child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+            Text('Lealtad', style: text.titleMedium),
+            Text('Los clientes identificados (web, caja o mesa) ganan puntos al pagar. Al llegar a la meta reciben un cupón.', style: text.bodySmall),
+            SwitchListTile(
+              contentPadding: EdgeInsets.zero,
+              title: const Text('Programa de puntos'),
+              value: _enabled,
+              onChanged: (v) => setState(() => _enabled = v),
+            ),
+            if (_enabled) ...[
+              Wrap(spacing: 12, runSpacing: 12, children: [
+                SizedBox(
+                  width: 170,
+                  child: TextFormField(controller: _perDollar, keyboardType: TextInputType.number, inputFormatters: digits, decoration: deco('Puntos por cada \$1'), validator: (v) => _int(v, 1, 100), onChanged: (_) => setState(() {})),
+                ),
+                SizedBox(
+                  width: 170,
+                  child: TextFormField(controller: _goal, keyboardType: TextInputType.number, inputFormatters: digits, decoration: deco('Puntos para el premio'), validator: (v) => _int(v, 10, 100000), onChanged: (_) => setState(() {})),
+                ),
+                SizedBox(
+                  width: 170,
+                  child: TextFormField(controller: _amount, keyboardType: const TextInputType.numberWithOptions(decimal: true), inputFormatters: decimals, decoration: deco('Premio', prefix: '\$ '), validator: _dollars, onChanged: (_) => setState(() {})),
+                ),
+                SizedBox(
+                  width: 170,
+                  child: TextFormField(controller: _days, keyboardType: TextInputType.number, inputFormatters: digits, decoration: deco('Días que vale el premio'), validator: (v) => _int(v, 7, 365)),
+                ),
+              ]),
+              const SizedBox(height: 8),
+              Text(
+                'Así queda: por cada \$${spend.toStringAsFixed(spend % 1 == 0 ? 0 : 2)} gastados, el cliente recibe \$${amount.toStringAsFixed(amount % 1 == 0 ? 0 : 2)} '
+                '(${spend > 0 ? (amount / spend * 100).toStringAsFixed(1) : '0'} % de regreso).',
+                style: text.bodySmall,
+              ),
+            ],
+            const Divider(height: 28),
+            SwitchListTile(
+              contentPadding: EdgeInsets.zero,
+              title: const Text('Regalo de cumpleaños'),
+              subtitle: const Text('En el mes de su cumpleaños, el cliente recibe un cupón (una vez al año).'),
+              value: _birthday,
+              onChanged: (v) => setState(() => _birthday = v),
+            ),
+            if (_birthday)
+              Align(
+                alignment: Alignment.centerLeft,
+                child: SizedBox(
+                  width: 170,
+                  child: TextFormField(controller: _birthdayAmount, keyboardType: const TextInputType.numberWithOptions(decimal: true), inputFormatters: decimals, decoration: deco('Regalo', prefix: '\$ '), validator: _dollars),
+                ),
+              ),
+            const SizedBox(height: 12),
+            Align(
+              alignment: Alignment.centerRight,
+              child: FilledButton.tonal(
+                onPressed: _saving ? null : _save,
+                child: _saving ? const SizedBox.square(dimension: 18, child: CircularProgressIndicator(strokeWidth: 2)) : const Text('Guardar lealtad'),
+              ),
+            ),
+          ]),
         ),
       ),
     );

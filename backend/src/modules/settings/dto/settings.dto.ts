@@ -72,6 +72,14 @@ export class UpdateSettingsDto {
   @IsOptional() @IsBoolean() maintenanceMode?: boolean;
   @IsOptional() @IsBoolean() autoAssignDrivers?: boolean;
   @IsOptional() @IsInt() @Min(30) @Max(300) driverOfferSeconds?: number;
+
+  @IsOptional() @IsBoolean() loyaltyEnabled?: boolean;
+  @IsOptional() @IsInt() @Min(1) @Max(100) loyaltyPointsPerDollar?: number;
+  @IsOptional() @IsInt() @Min(10) @Max(100000) loyaltyRewardPoints?: number;
+  @IsOptional() @IsNumber({ maxDecimalPlaces: 2 }) @Min(1) @Max(500) loyaltyRewardAmount?: number;
+  @IsOptional() @IsInt() @Min(7) @Max(365) loyaltyRewardDays?: number;
+  @IsOptional() @IsBoolean() birthdayRewardEnabled?: boolean;
+  @IsOptional() @IsNumber({ maxDecimalPlaces: 2 }) @Min(1) @Max(500) birthdayRewardAmount?: number;
 }
 
 export class OpeningHourDto {

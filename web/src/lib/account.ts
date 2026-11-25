@@ -25,7 +25,31 @@ export interface Profile {
   email: string | null;
   marketingOptIn: boolean;
   lang: 'es' | 'en' | null;
+  points?: number;
+  birthday?: { month: number; day: number } | null;
   addresses: Address[];
+}
+
+export interface LoyaltyReward {
+  code: string;
+  name: string;
+  type: 'PERCENT' | 'AMOUNT' | 'FREE_DELIVERY';
+  value: Money | null;
+  endsAt: string | null;
+}
+
+export interface LoyaltySummary {
+  enabled: boolean;
+  points: number;
+  pointsPerDollar: number;
+  rewardPoints: number;
+  rewardAmount: Money;
+  toNextReward: number;
+  birthday: { month: number; day: number } | null;
+  birthdayRewardEnabled: boolean;
+  birthdayRewardAmount: Money;
+  rewards: LoyaltyReward[];
+  history: { id: string; type: 'EARN' | 'REWARD' | 'ADJUST'; points: number; reason: string | null; date: string }[];
 }
 
 export interface HistoryItem {
@@ -74,6 +98,14 @@ interface Session {
 
 const store = createStore<Session>('dm-account-v1', { token: '', profile: null });
 
+const couponStore = createStore<{ code: string }>('dm-coupon-v1', { code: '' });
+/** Cupón elegido en Mi cuenta ("Usar en mi pedido") para aplicarlo al pagar. */
+export const pendingCoupon = {
+  use: couponStore.use,
+  set: (code: string) => couponStore.set({ code }),
+  clear: () => couponStore.set({ code: '' }),
+};
+
 /** La sesión del cliente en este navegador. */
 export const useAccount = store.use;
 export const accountToken = () => store.get().token;
@@ -121,7 +153,7 @@ export const account = {
     if (!store.get().token) return null;
     return keep(await authed<Profile>('/me'));
   },
-  async update(body: { name?: string; marketingOptIn?: boolean; lang?: 'es' | 'en' }) {
+  async update(body: { name?: string; marketingOptIn?: boolean; lang?: 'es' | 'en'; birthMonth?: number; birthDay?: number }) {
     return keep(await authed<Profile>('/me', { method: 'PATCH', body: JSON.stringify(body) }));
   },
   async addAddress(body: AddressInput) {
@@ -131,6 +163,7 @@ export const account = {
     return keep(await authed<Profile>(`/me/addresses/${encodeURIComponent(id)}`, { method: 'DELETE' }));
   },
   history: () => authed<HistoryEntry[]>('/me/orders'),
+  loyalty: () => authed<LoyaltySummary>('/me/loyalty'),
   async logout() {
     const token = store.get().token;
     store.set({ token: '', profile: null });

@@ -44,6 +44,14 @@ model RestaurantSettings {
   maintenanceMode       Boolean  @default(false)
   autoAssignDrivers     Boolean  @default(true) // delivery: asignar repartidor automáticamente
   driverOfferSeconds    Int      @default(60) // tiempo para aceptar antes de pasar al siguiente
+  // Lealtad: puntos por dólar; al llegar a la meta, un cupón personal.
+  loyaltyEnabled         Boolean @default(false)
+  loyaltyPointsPerDollar Int     @default(1)
+  loyaltyRewardPoints    Int     @default(100)
+  loyaltyRewardAmount    Decimal @default(5) @db.Decimal(10, 2)
+  loyaltyRewardDays      Int     @default(60) // días que vale el cupón del premio
+  birthdayRewardEnabled  Boolean @default(false)
+  birthdayRewardAmount   Decimal @default(10) @db.Decimal(10, 2)
   updatedAt             DateTime @updatedAt
 }
 
@@ -107,6 +115,10 @@ model Customer {
   notes          String? // notas del personal (no las ve el cliente)
   lang           String? // es | en
   lastLoginAt    DateTime?
+  points         Int               @default(0) // saldo de lealtad
+  birthMonth     Int? // 1-12
+  birthDay       Int? // 1-31
+  birthdayRewardYear Int? // último año en que recibió el regalo
   createdAt      DateTime          @default(now())
   updatedAt      DateTime          @default(now()) @updatedAt
   addresses      CustomerAddress[]
@@ -114,6 +126,30 @@ model Customer {
   bills          Bill[]
   sessions       CustomerSession[]
   coupons        Coupon[]
+  loyalty        LoyaltyTransaction[]
+}
+
+enum LoyaltyTxType {
+  EARN // ganados con una cuenta pagada (se ajustan si hay reembolso o cambia el cliente)
+  REWARD // canjeados por un cupón de premio
+  ADJUST // ajuste manual del personal
+}
+
+/// Movimientos de puntos de un cliente. El saldo vive en Customer.points.
+model LoyaltyTransaction {
+  id         String        @id @default(cuid())
+  customerId String
+  type       LoyaltyTxType
+  points     Int // + gana, − canjea o se quita
+  billId     String?
+  couponId   String?
+  reason     String?
+  employeeId String?
+  createdAt  DateTime      @default(now())
+  customer   Customer      @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  @@index([customerId, createdAt])
+  @@index([billId])
 }
 
 /// Código de un solo uso para que el cliente entre a su cuenta (SMS o email).

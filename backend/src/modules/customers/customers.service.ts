@@ -59,6 +59,8 @@ export class CustomersService {
       email: customer.email,
       marketingOptIn: customer.marketingOptIn,
       lang: customer.lang,
+      points: customer.points,
+      birthday: customer.birthMonth && customer.birthDay ? { month: customer.birthMonth, day: customer.birthDay } : null,
       addresses: addresses.map((a) => ({
         id: a.id,
         label: a.label,
@@ -72,12 +74,17 @@ export class CustomersService {
   }
 
   async updateMe(customer: Customer, dto: UpdateMeDto) {
+    const birthday = this.birthday(dto.birthMonth, dto.birthDay);
+    if (birthday && customer.birthMonth && customer.birthDay && (customer.birthMonth !== birthday.birthMonth || customer.birthDay !== birthday.birthDay)) {
+      throw new BadRequestException('Tu cumpleaños ya está guardado. Si hay un error, pídelo en el restaurante.');
+    }
     const updated = await this.prisma.customer.update({
       where: { id: customer.id },
       data: {
         ...(dto.name !== undefined ? { name: dto.name.trim() } : {}),
         ...(dto.marketingOptIn !== undefined ? { marketingOptIn: dto.marketingOptIn } : {}),
         ...(dto.lang !== undefined ? { lang: dto.lang } : {}),
+        ...(birthday ?? {}),
       },
     });
     return this.profile(updated);
@@ -251,6 +258,9 @@ export class CustomersService {
         ...(email !== undefined ? { email } : {}),
         ...(dto.notes !== undefined ? { notes: dto.notes?.trim() || null } : {}),
         ...(dto.marketingOptIn !== undefined ? { marketingOptIn: dto.marketingOptIn } : {}),
+        ...(dto.birthMonth === null || dto.birthDay === null
+          ? { birthMonth: null, birthDay: null }
+          : (this.birthday(dto.birthMonth ?? undefined, dto.birthDay ?? undefined) ?? {})),
       },
     });
     await this.audit.log(actor, 'customer.update', 'customer', id, { fields: Object.keys(dto) });
@@ -294,12 +304,17 @@ export class CustomersService {
       this.prisma.customerSession.updateMany({ where: { customerId: fromId }, data: { customerId: id } }),
       this.prisma.coupon.updateMany({ where: { customerId: fromId }, data: { customerId: id } }),
       this.prisma.couponRedemption.updateMany({ where: { customerId: fromId }, data: { customerId: id } }),
+      this.prisma.loyaltyTransaction.updateMany({ where: { customerId: fromId }, data: { customerId: id } }),
       // Primero se borra la ficha vieja para liberar su teléfono, email y Google.
       this.prisma.customer.delete({ where: { id: fromId } }),
       this.prisma.customer.update({
         where: { id },
         data: {
           name: target.name.trim() ? target.name : source.name,
+          points: target.points + source.points,
+          birthMonth: target.birthMonth ?? source.birthMonth,
+          birthDay: target.birthMonth ? target.birthDay : source.birthDay,
+          birthdayRewardYear: Math.max(target.birthdayRewardYear ?? 0, source.birthdayRewardYear ?? 0) || null,
           phone: target.phone ?? source.phone,
           email: target.email ?? source.email,
           googleId: target.googleId ?? source.googleId,
@@ -378,6 +393,15 @@ export class CustomersService {
 
   // ───────── Ayudantes ─────────
 
+  /** Mes y día válidos (29 de febrero se permite). */
+  private birthday(month?: number, day?: number) {
+    if (month === undefined && day === undefined) return null;
+    if (!month || !day) throw new BadRequestException('Escribe el mes y el día del cumpleaños');
+    const days = [31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31][month - 1];
+    if (!days || day > days) throw new BadRequestException('Esa fecha no existe');
+    return { birthMonth: month, birthDay: day };
+  }
+
   private whereFor(q?: string, filter?: CustomersQueryDto['filter']): Prisma.CustomerWhereInput {
     const text = q?.trim();
     const digits = text?.replace(/\D/g, '') ?? '';
@@ -406,6 +430,7 @@ export class CustomersService {
       email: c.email,
       marketingOptIn: c.marketingOptIn,
       hasAccount: !!c.lastLoginAt,
+      points: c.points,
       createdAt: c.createdAt,
     };
   }
