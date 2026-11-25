@@ -5,6 +5,7 @@ import { AllowActors, CurrentActor, Public, RequirePermissions } from '../../com
 import { BillingService } from './billing.service';
 import { CashService } from './cash.service';
 import { ReceiptsService } from './receipts.service';
+import { ReportsService } from './reports.service';
 import { TablePayService } from './table-pay.service';
 import { TerminalService } from './terminal.service';
 import {
@@ -282,5 +283,21 @@ export class ReceiptsController {
   @Get(':token')
   view(@Param('token') token: string) {
     return this.receipts.publicView(token);
+  }
+}
+
+/** Reportes: cierre del día (ventas, pagos, productos, personas, descuentos, reembolsos y caja). */
+@ApiTags('reports')
+@ApiBearerAuth()
+@AllowActors('employee')
+@Controller('reports')
+export class ReportsController {
+  constructor(private readonly reports: ReportsService) {}
+
+  /** ?date=AAAA-MM-DD (si falta, el día de operación de hoy). */
+  @RequirePermissions('reports.view')
+  @Get('day')
+  day(@Query('date') date?: string) {
+    return this.reports.day(date);
   }
 }

@@ -73,6 +73,13 @@ class PrinterController extends AsyncNotifier<PrinterConfig?> {
     await _send(config, receiptBytes(receipt, config.columns));
   }
 
+  /// Cierre del día (reporte Z) en papel.
+  Future<void> printReport(Map<String, dynamic> report) async {
+    final config = state.value;
+    if (config == null) throw ApiException('Configura la impresora de este aparato');
+    await _send(config, reportBytes(report, config.columns));
+  }
+
   /// La cuenta antes de pagar (no es comprobante de pago).
   Future<void> printCheck(Map<String, dynamic> check) async {
     final config = state.value;
@@ -217,5 +224,126 @@ List<int> receiptBytes(Map<String, dynamic> r, int columns, {bool check = false}
       ..qr(url, size: columns <= 32 ? 5 : 6);
   }
   p.cut();
+  return p.bytes;
+}
+
+const _methodLabels = {
+  'CASH': 'Efectivo',
+  'CARD_TERMINAL': 'Tarjeta',
+  'CARD_ONLINE': 'Tarjeta en línea',
+  'CARD_QR': 'QR en la mesa',
+  'OTHER': 'Otro',
+};
+
+/// Cierre del día para la impresora de tickets: totales, formas de pago, personas y caja.
+List<int> reportBytes(Map<String, dynamic> r, int columns) {
+  final s = r['summary'] as Map<String, dynamic>? ?? const {};
+  String m(Object? v) => formatMoney(parseMoney(v));
+  List<Map<String, dynamic>> list(String key) => (r[key] as List? ?? const []).cast<Map<String, dynamic>>();
+  final p = EscPos(columns)
+    ..center()
+    ..bold(true)
+    ..big(true)
+    ..line('CIERRE DEL DIA')
+    ..big(false)
+    ..wrap('${r['restaurant'] ?? ''}')
+    ..bold(false)
+    ..line('Día ${r['date']}')
+    ..line('Impreso ${DateFormat('M/d/yyyy h:mm a').format(DateTime.now())}')
+    ..left()
+    ..divider()
+    ..row('Órdenes', '${s['orders']}')
+    ..row('Canceladas', '${s['cancelledOrders']}')
+    ..row('Clientes en mesa', '${s['guests']}')
+    ..row('Ticket promedio', m(s['averageCheck']))
+    ..divider()
+    ..row('Ventas brutas', m(s['grossSales']))
+    ..row('Descuentos', '-${m(s['discounts'])}')
+    ..bold(true)
+    ..row('VENTAS NETAS', m(s['netSales']))
+    ..bold(false)
+    ..row('Impuestos', m(s['tax']))
+    ..row('Propinas', m(s['tips']));
+  if (parseMoney(s['deliveryFees']) > 0) p.row('Envíos', m(s['deliveryFees']));
+  p
+    ..row('Total cuentas', m(s['total']))
+    ..divider()
+    ..bold(true)
+    ..line('FORMAS DE PAGO')
+    ..bold(false);
+  for (final x in list('payments')) {
+    p.row('${_methodLabels[x['method']] ?? x['method']} (${x['count']})', m(x['amount']));
+    if (parseMoney(x['tips']) > 0) p.row('  propinas', m(x['tips']));
+    if (parseMoney(x['refunded']) > 0) p.row('  reembolsado', '-${m(x['refunded'])}');
+  }
+  p
+    ..row('Total cobrado', m(s['collected']))
+    ..row('Reembolsos', '-${m(s['refunded'])}')
+    ..bold(true)
+    ..row('NETO COBRADO', m(s['netCollected']))
+    ..bold(false);
+  if (parseMoney(s['pending']) > 0) p.row('Por cobrar (${s['openBills']})', m(s['pending']));
+
+  final servers = list('servers');
+  if (servers.isNotEmpty) {
+    p
+      ..divider()
+      ..bold(true)
+      ..line('QUIÉN ATENDIÓ')
+      ..bold(false);
+    for (final x in servers) {
+      p.row('${x['name']} (${x['bills']})', m(x['net']));
+      if (parseMoney(x['tips']) > 0) p.row('  propinas', m(x['tips']));
+    }
+  }
+  final products = list('products');
+  if (products.isNotEmpty) {
+    p
+      ..divider()
+      ..bold(true)
+      ..line('MÁS VENDIDOS')
+      ..bold(false);
+    for (final x in products.take(10)) {
+      p.row('${x['quantity']}x ${x['name']}', m(x['net']));
+    }
+  }
+  final discounts = list('discounts');
+  final refunds = list('refunds');
+  final cancellations = list('cancellations');
+  if (discounts.isNotEmpty || refunds.isNotEmpty || cancellations.isNotEmpty) {
+    p
+      ..divider()
+      ..bold(true)
+      ..line('AJUSTES')
+      ..bold(false);
+    for (final x in discounts) {
+      p.row('Desc. ${x['bill']}', '-${m(x['amount'])}');
+      p.wrap('${x['reason']} · ${x['appliedBy']}${x['authorizedBy'] != null ? ' / ${x['authorizedBy']}' : ''}', indent: 2);
+    }
+    for (final x in refunds) {
+      p.row('Reemb. ${x['bill']}', '-${m(x['amount'])}');
+      p.wrap('${x['reason']} · ${x['employee']}', indent: 2);
+    }
+    for (final x in cancellations) {
+      p.row('Cancel. #${x['number']}', m(x['amount']));
+      if (x['reason'] != null) p.wrap('${x['reason']}', indent: 2);
+    }
+  }
+  for (final sh in list('shifts')) {
+    p
+      ..divider()
+      ..bold(true)
+      ..line('CAJA · ${sh['openedBy'] ?? ''}')
+      ..bold(false)
+      ..row('Fondo inicial', m(sh['openingCash']))
+      ..row('Efectivo esperado', m(sh['expectedCash']));
+    if (sh['countedCash'] != null) p.row('Contado', m(sh['countedCash']));
+    if (sh['difference'] != null) p.row('Diferencia', m(sh['difference']));
+  }
+  p
+    ..feed()
+    ..center()
+    ..line('Firma: ____________________')
+    ..cut();
   return p.bytes;
 }

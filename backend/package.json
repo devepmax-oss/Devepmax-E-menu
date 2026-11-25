@@ -27,6 +27,7 @@
     "smoke:refunds": "tsx scripts/smoke-refunds.ts",
     "smoke:kds": "tsx scripts/smoke-kds.ts",
     "smoke:waiter": "tsx scripts/smoke-waiter.ts",
+    "smoke:report": "tsx scripts/smoke-report.ts",
     "demo:orders": "tsx scripts/demo-orders.ts"
   },
   "dependencies": {

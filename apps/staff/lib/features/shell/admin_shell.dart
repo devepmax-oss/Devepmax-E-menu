@@ -22,6 +22,7 @@ const _allDestinations = [
   _Destination('/tables', 'Mesas', Icons.table_restaurant_rounded, 'tables.operate'),
   _Destination('/billing', 'Caja', Icons.point_of_sale_rounded, 'payments.take'),
   _Destination('/waiter', 'Mis mesas', Icons.room_service_rounded, 'tables.operate'),
+  _Destination('/reports', 'Cierre del día', Icons.insights_rounded, 'reports.view'),
   _Destination('/menu', 'Menú', Icons.restaurant_menu_rounded, 'menu.manage'),
   _Destination('/modifiers', 'Modificadores', Icons.tune_rounded, 'menu.manage'),
   _Destination('/menu-setup', 'Cocina e impuestos', Icons.soup_kitchen_rounded, 'menu.manage'),
