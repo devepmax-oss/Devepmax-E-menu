@@ -35,6 +35,8 @@ export interface Env {
   receipts: ReceiptsConfig;
   /** Notificaciones push (Firebase). Sin archivo, no se envían y todo lo demás sigue igual. */
   firebaseServiceAccountPath?: string;
+  /** ID de cliente OAuth de Google (web) para "Continuar con Google". Sin él, el botón no aparece. */
+  googleClientId?: string;
 }
 
 export interface ReceiptsConfig {
@@ -45,6 +47,8 @@ export interface ReceiptsConfig {
   twilioAuthToken?: string;
   /** Número de Twilio en formato +15551234567. */
   smsFrom?: string;
+  /** Servicio de Twilio Verify (VA…) para los códigos de entrada: no requiere registro A2P 10DLC. */
+  twilioVerifyServiceSid?: string;
 }
 
 export interface StripeConfig {
@@ -132,7 +136,9 @@ export function loadEnv(): Env {
       twilioAccountSid: process.env.TWILIO_ACCOUNT_SID?.trim() || undefined,
       twilioAuthToken: process.env.TWILIO_AUTH_TOKEN?.trim() || undefined,
       smsFrom: process.env.TWILIO_FROM_NUMBER?.trim() || undefined,
+      twilioVerifyServiceSid: process.env.TWILIO_VERIFY_SERVICE_SID?.trim() || undefined,
     },
+    googleClientId: process.env.GOOGLE_CLIENT_ID?.trim() || undefined,
     stripe: {
       secretKey: process.env.STRIPE_SECRET_KEY?.trim() || undefined,
       publishableKey: process.env.STRIPE_PUBLISHABLE_KEY?.trim() || undefined,

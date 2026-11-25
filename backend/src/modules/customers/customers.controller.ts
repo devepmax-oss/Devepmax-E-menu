@@ -9,6 +9,7 @@ import {
   AttachCustomerDto,
   CreateCustomerDto,
   CustomersQueryDto,
+  GoogleSignInDto,
   LookupDto,
   RequestCodeDto,
   UpdateCustomerDto,
@@ -37,6 +38,21 @@ export class CustomerAuthController {
   @HttpCode(200)
   async verify(@Body() dto: VerifyCodeDto, @Ip() ip: string) {
     const { token } = await this.auth.verify(dto.target, dto.code, ip);
+    const customer = await this.auth.resolve(token);
+    return { token, customer: await this.customers.profile(customer!) };
+  }
+
+  @Public()
+  @Get('options')
+  options() {
+    return this.auth.options();
+  }
+
+  @Public()
+  @Post('google')
+  @HttpCode(200)
+  async google(@Body() dto: GoogleSignInDto, @Ip() ip: string) {
+    const { token } = await this.auth.google(dto.credential, ip);
     const customer = await this.auth.resolve(token);
     return { token, customer: await this.customers.profile(customer!) };
   }

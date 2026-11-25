@@ -4,9 +4,10 @@ import { ChevronLeft, LogOut, MapPin, Plus, Receipt, RotateCcw, Trash2, UserRoun
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useState } from 'react';
+import { GoogleButton } from '@/components/google-button';
 import { LanguageSwitch, useLang, useT } from '@/components/i18n';
 import { BrandMark, Button, Notice, Pill } from '@/components/ui';
-import { account, reorderLines, useAccount, type CodeSent, type HistoryEntry, type Profile } from '@/lib/account';
+import { account, reorderLines, useAccount, type CodeSent, type HistoryEntry, type LoginOptions, type Profile } from '@/lib/account';
 import { ApiError } from '@/lib/api';
 import { cart } from '@/lib/cart';
 import { money } from '@/lib/format';
@@ -37,7 +38,17 @@ function Input(props: React.InputHTMLAttributes<HTMLInputElement> & { label: str
   );
 }
 
-export function AccountView({ config, menu, back }: { config: OnlineConfig; menu: PublicMenu | null; back: string | null }) {
+export function AccountView({
+  config,
+  menu,
+  back,
+  options,
+}: {
+  config: OnlineConfig;
+  menu: PublicMenu | null;
+  back: string | null;
+  options: LoginOptions;
+}) {
   const t = useT();
   const router = useRouter();
   const { token, profile } = useAccount();
@@ -74,7 +85,7 @@ export function AccountView({ config, menu, back }: { config: OnlineConfig; menu
       {!ready ? (
         <div className="h-40 animate-pulse rounded-[26px] bg-surface-2" aria-hidden />
       ) : !token || !profile ? (
-        <LoginCard onDone={done} />
+        <LoginCard onDone={done} options={options} dark={config.themeMode === 'dark'} />
       ) : profile.needsName ? (
         <NameCard onDone={done} />
       ) : (
@@ -84,7 +95,7 @@ export function AccountView({ config, menu, back }: { config: OnlineConfig; menu
   );
 }
 
-function LoginCard({ onDone }: { onDone: () => void }) {
+function LoginCard({ onDone, options, dark }: { onDone: () => void; options: LoginOptions; dark: boolean }) {
   const t = useT();
   const lang = useLang();
   const [target, setTarget] = useState('');
@@ -105,6 +116,25 @@ function LoginCard({ onDone }: { onDone: () => void }) {
       setBusy(false);
     }
   };
+
+  const withGoogle = useCallback(
+    async (credential: string) => {
+      setError(null);
+      setBusy(true);
+      try {
+        const profile = await account.google(credential);
+        if (!profile.needsName) onDone();
+      } catch (e) {
+        setError(errorText(e, t('No pudimos entrar con Google. Intenta de nuevo.', 'We could not sign you in with Google. Please try again.')));
+      } finally {
+        setBusy(false);
+      }
+    },
+    [onDone, t],
+  );
+  const googleFailed = useCallback(() => setError(t('No pudimos cargar Google. Usa tu teléfono o email.', 'Google could not load. Use your phone or email.')), [t]);
+  const codes = options.sms || options.email;
+  const targetLabel = options.sms && options.email ? t('Teléfono o email', 'Phone or email') : options.sms ? t('Teléfono', 'Phone') : 'Email';
 
   const verify = async () => {
     setError(null);
@@ -131,23 +161,37 @@ function LoginCard({ onDone }: { onDone: () => void }) {
         >
           <p className="m-0 text-soft">
             {t(
-              'Te enviamos un código de 6 dígitos. Sin contraseñas. Guarda tus datos, tus direcciones y repite tus pedidos con un toque.',
-              'We will send you a 6-digit code. No passwords. Save your details and addresses, and reorder with one tap.',
+              'Guarda tus datos y tus direcciones, y repite tus pedidos con un toque. Sin contraseñas.',
+              'Save your details and addresses, and reorder with one tap. No passwords.',
             )}
           </p>
+          {options.googleClientId ? (
+            <>
+              <GoogleButton clientId={options.googleClientId} dark={dark} onCredential={(c) => void withGoogle(c)} onError={googleFailed} />
+              {codes ? (
+                <div className="flex items-center gap-3 text-xs font-semibold tracking-wide text-muted uppercase">
+                  <span className="h-px flex-1 bg-line" /> {t('o con un código', 'or with a code')} <span className="h-px flex-1 bg-line" />
+                </div>
+              ) : null}
+            </>
+          ) : null}
+          {codes ? (
+          <>
           <Input
-            label={t('Teléfono o email', 'Phone or email')}
+            label={targetLabel}
             value={target}
             onChange={(e) => setTarget(e.target.value)}
             autoComplete="username"
-            inputMode="email"
+            inputMode={options.email ? 'email' : 'tel'}
             placeholder="(305) 555-0123"
             required
           />
-          {error ? <Notice tone="danger">{error}</Notice> : null}
           <Button type="submit" className="h-14 text-base" loading={busy} disabled={target.trim().length < 5}>
             {t('Enviar código', 'Send code')}
           </Button>
+          </>
+          ) : null}
+          {error ? <Notice tone="danger">{error}</Notice> : null}
         </form>
       ) : (
         <form
@@ -416,16 +460,16 @@ function OrdersCard({ config, menu }: { config: OnlineConfig; menu: PublicMenu |
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
 
-  const load = useCallback(async () => {
-    try {
-      setEntries(await account.history());
-    } catch (e) {
-      setError(errorText(e, t('No pudimos cargar tus pedidos.', 'We could not load your orders.')));
-    }
-  }, [t]);
   useEffect(() => {
-    void load();
-  }, [load]);
+    let cancelled = false;
+    account
+      .history()
+      .then((list) => !cancelled && setEntries(list))
+      .catch((e: unknown) => !cancelled && setError(errorText(e, t('No pudimos cargar tus pedidos.', 'We could not load your orders.'))));
+    return () => {
+      cancelled = true;
+    };
+  }, [t]);
 
   const date = (iso: string) => new Intl.DateTimeFormat(intlLocale(lang), { dateStyle: 'medium', timeStyle: 'short', timeZone: config.timezone }).format(new Date(iso));
   const kindLabel = (e: HistoryEntry) =>

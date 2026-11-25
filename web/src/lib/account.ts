@@ -58,6 +58,13 @@ export interface CodeSent {
   devCode?: string;
 }
 
+/** Formas de entrar que ofrece el restaurante. */
+export interface LoginOptions {
+  sms: boolean;
+  email: boolean;
+  googleClientId: string | null;
+}
+
 export type AddressInput = Omit<Address, 'id' | 'label' | 'instructions'> & { label?: string; instructions?: string };
 
 interface Session {
@@ -98,6 +105,14 @@ export const account = {
     const result = await request<{ token: string; customer: Profile }>('/customer-auth/verify', {
       method: 'POST',
       body: JSON.stringify({ target, code }),
+    });
+    store.set({ token: result.token, profile: result.customer });
+    return result.customer;
+  },
+  async google(credential: string) {
+    const result = await request<{ token: string; customer: Profile }>('/customer-auth/google', {
+      method: 'POST',
+      body: JSON.stringify({ credential }),
     });
     store.set({ token: result.token, profile: result.customer });
     return result.customer;

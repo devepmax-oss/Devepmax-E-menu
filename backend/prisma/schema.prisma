@@ -102,6 +102,7 @@ model Customer {
   phone          String?           @unique
   email          String?           @unique
   passwordHash   String?
+  googleId       String?           @unique // "Continuar con Google" (sub del ID token)
   marketingOptIn Boolean           @default(false)
   notes          String? // notas del personal (no las ve el cliente)
   lang           String? // es | en

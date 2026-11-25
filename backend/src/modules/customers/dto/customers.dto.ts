@@ -12,6 +12,10 @@ export class VerifyCodeDto {
   @Matches(/^\s*\d{6}\s*$/, { message: 'El código tiene 6 dígitos' }) code: string;
 }
 
+export class GoogleSignInDto {
+  @IsString() @MinLength(20) @MaxLength(4096) credential: string;
+}
+
 export class UpdateMeDto {
   @IsOptional() @IsString() @MinLength(2) @MaxLength(80) name?: string;
   @IsOptional() @IsBoolean() marketingOptIn?: boolean;

@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { Unavailable } from '@/components/unavailable';
-import { api } from '@/lib/api';
+import type { LoginOptions } from '@/lib/account';
+import { api, request } from '@/lib/api';
 import { localizeMenu, pick } from '@/lib/i18n';
 import { getLang } from '@/lib/lang-server';
 import { getConfig, safe } from '@/lib/server';
@@ -12,9 +13,22 @@ export async function generateMetadata(): Promise<Metadata> {
 
 /** Cuenta del cliente: entrar con código, datos, direcciones y pedidos anteriores. */
 export default async function AccountPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
-  const [query, config, menu, lang] = await Promise.all([searchParams, getConfig(), safe(api.menu()), getLang()]);
+  const [query, config, menu, lang, options] = await Promise.all([
+    searchParams,
+    getConfig(),
+    safe(api.menu()),
+    getLang(),
+    safe(request<LoginOptions>('/customer-auth/options')),
+  ]);
   if (!config) return <Unavailable />;
   if (config.maintenanceMode) return <Unavailable name={config.name} logoUrl={config.logoUrl} maintenance />;
   const back = typeof query.volver === 'string' && query.volver.startsWith('/') && !query.volver.startsWith('//') ? query.volver : null;
-  return <AccountView config={config} menu={menu ? localizeMenu(menu, lang) : null} back={back} />;
+  return (
+    <AccountView
+      config={config}
+      menu={menu ? localizeMenu(menu, lang) : null}
+      back={back}
+      options={options ?? { sms: true, email: true, googleClientId: null }}
+    />
+  );
 }

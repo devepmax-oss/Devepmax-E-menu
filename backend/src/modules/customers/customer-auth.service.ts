@@ -3,7 +3,8 @@ import { Customer, Prisma } from '@prisma/client';
 import { timingSafeEqual } from 'node:crypto';
 import { AttemptLimiter } from '../../common/attempt-limiter';
 import { generatePairingCode, generateToken, hashPin, sha256 } from '../../common/crypto';
-import { messagingConfig, sendEmail, sendSms } from '../../common/messaging';
+import { GoogleIdTokenVerifier } from '../../common/google-id-token';
+import { checkSmsVerification, loginChannels, sendEmail, sendSms, startSmsVerification, twilioVerifyConfigured } from '../../common/messaging';
 import { maskTarget, toE164 } from '../../common/phone';
 import { loadEnv } from '../../config/env';
 import { PrismaService } from '../../prisma/prisma.service';
@@ -31,6 +32,7 @@ export class CustomerAuthService {
   private readonly requestsByIp = new AttemptLimiter(20, 15 * 60_000);
   private readonly requestsByTarget = new AttemptLimiter(5, 60 * 60_000);
   private readonly failuresByIp = new AttemptLimiter(15, 15 * 60_000);
+  private readonly googleVerifier = this.env.googleClientId ? new GoogleIdTokenVerifier(this.env.googleClientId) : null;
 
   constructor(
     private readonly prisma: PrismaService,
@@ -56,12 +58,18 @@ export class CustomerAuthService {
     this.requestsByIp.fail(ip);
     this.requestsByTarget.fail(target);
 
-    const available = messagingConfig()[channel];
+    const available = loginChannels()[channel];
     const production = this.env.nodeEnv === 'production';
     if (!available && production) {
       throw new ServiceUnavailableException(
         channel === 'sms' ? 'Por ahora no podemos enviar SMS. Entra con tu email.' : 'Por ahora no podemos enviar emails. Entra con tu teléfono.',
       );
+    }
+
+    // SMS con Twilio Verify: Twilio genera, envía y comprueba el código.
+    if (channel === 'sms' && twilioVerifyConfigured()) {
+      await startSmsVerification(target, lang);
+      return { channel, sentTo: maskTarget(target), expiresInMinutes: CODE_MINUTES };
     }
 
     const code = generatePairingCode();
@@ -103,6 +111,10 @@ export class CustomerAuthService {
       return new BadRequestException('El código no es correcto o ya venció. Pide uno nuevo.');
     };
     const now = new Date();
+    if (channel === 'sms' && twilioVerifyConfigured()) {
+      if (!(await checkSmsVerification(target, code.trim()))) throw wrong();
+      return this.signIn(await this.findOrCreate(channel, target), channel, target);
+    }
     const row = await this.prisma.customerLoginCode.findFirst({
       where: { target, usedAt: null, expiresAt: { gt: now } },
       orderBy: { createdAt: 'desc' },
@@ -117,7 +129,48 @@ export class CustomerAuthService {
     const used = await this.prisma.customerLoginCode.updateMany({ where: { id: row.id, usedAt: null }, data: { usedAt: now } });
     if (used.count !== 1) throw wrong();
 
-    const customer = await this.findOrCreate(channel, target);
+    return this.signIn(await this.findOrCreate(channel, target), channel, target);
+  }
+
+  /** "Continuar con Google": el ID token que entrega Google en la web, verificado aquí. */
+  async google(credential: string, ip: string) {
+    if (!this.googleVerifier) throw new ServiceUnavailableException('Entrar con Google no está configurado');
+    this.failuresByIp.assertAllowed(ip);
+    const identity = await this.googleVerifier.verify(credential).catch(() => null);
+    if (!identity) {
+      this.failuresByIp.fail(ip);
+      throw new BadRequestException('No pudimos entrar con Google. Intenta de nuevo.');
+    }
+    let customer =
+      (await this.prisma.customer.findUnique({ where: { googleId: identity.sub } })) ??
+      (await this.prisma.customer.findUnique({ where: { email: identity.email } }));
+    if (customer) {
+      if (customer.googleId !== identity.sub || (!customer.name.trim() && identity.name)) {
+        customer = await this.prisma.customer.update({
+          where: { id: customer.id },
+          data: { googleId: identity.sub, ...(!customer.name.trim() && identity.name ? { name: identity.name } : {}) },
+        });
+      }
+    } else {
+      try {
+        customer = await this.prisma.customer.create({ data: { name: identity.name ?? '', email: identity.email, googleId: identity.sub } });
+      } catch (error) {
+        customer = await this.prisma.customer.findUnique({ where: { googleId: identity.sub } });
+        if (!customer) throw error;
+      }
+    }
+    return this.signIn(customer, 'email', identity.email);
+  }
+
+  /** Qué formas de entrar ofrece la web. */
+  options() {
+    const channels = loginChannels();
+    const dev = this.env.nodeEnv !== 'production';
+    return { sms: channels.sms || dev, email: channels.email || dev, googleClientId: this.env.googleClientId ?? null };
+  }
+
+  private async signIn(customer: Customer, channel: Channel, target: string) {
+    const now = new Date();
     await this.linkGuestOrders(customer.id, channel, target);
     const token = generateToken();
     await this.prisma.$transaction([

@@ -6,6 +6,11 @@ import { LANG_COOKIE, type Lang } from '@/lib/i18n';
 
 const LangContext = createContext<Lang>('es');
 
+/** Guarda el idioma elegido por un año. */
+function rememberLang(next: Lang) {
+  document.cookie = `${LANG_COOKIE}=${next}; path=/; max-age=31536000; samesite=lax`;
+}
+
 export function I18nProvider({ lang, children }: { lang: Lang; children: React.ReactNode }) {
   return <LangContext.Provider value={lang}>{children}</LangContext.Provider>;
 }
@@ -26,7 +31,7 @@ export function LanguageSwitch({ offered = ['es', 'en'], className = '' }: { off
   if (!offered.includes('es') || !offered.includes('en')) return null;
   const choose = (next: Lang) => {
     if (next === lang) return;
-    document.cookie = `${LANG_COOKIE}=${next}; path=/; max-age=31536000; samesite=lax`;
+    rememberLang(next);
     start(() => router.refresh());
   };
   return (
