@@ -17,6 +17,9 @@ const round2 = (v: number) => Math.round(v * 100) / 100;
 const EXPORT_SCOPE = 'payroll-export:v1';
 const MAX_PERFORMANCE_DAYS = 93;
 const CASH = 'CASH';
+/** "employee:<id>" (como se guarda quién canceló o anuló) → id del empleado; un dispositivo → null. */
+const employeeRef = (ref: string | null | undefined) =>
+  !ref ? null : ref.startsWith('employee:') ? ref.slice('employee:'.length) : ref.includes(':') ? null : ref;
 
 type Brief = { id: string; name: string; photoUrl: string | null; jobTitle: string | null; roleName: string; isActive: boolean };
 type TipLine = { paymentId: string; at: Date; employeeId: string | null; method: string; tip: number };
@@ -372,7 +375,8 @@ export class PayrollService {
       }),
       this.prisma.orderItem.findMany({
         where: { voidedById: { not: null }, voidedAt: { gte: start, lt: end } },
-        select: { voidedById: true, lineTotal: true },
+        // Los platos de una orden cancelada ya cuentan como cancelación, no como anulación.
+        select: { voidedById: true, lineTotal: true, order: { select: { status: true } } },
       }),
       this.prisma.discount.findMany({
         where: { createdAt: { gte: start, lt: end }, OR: [{ appliedById: { not: null } }, { authorizedById: { not: null } }] },
@@ -431,10 +435,14 @@ export class PayrollService {
     for (const sInfo of sessions.values()) row(sInfo.waiter).guests += sInfo.guests;
     for (const o of orders) {
       if (o.createdById) row(o.createdById).ordersTaken += 1;
-      if (o.cancelledById) row(o.cancelledById).cancellations += 1;
+      const canceller = employeeRef(o.cancelledById);
+      if (canceller) row(canceller).cancellations += 1;
     }
     for (const v of voids) {
-      const r = row(v.voidedById!);
+      if (v.order.status === 'CANCELLED') continue;
+      const who = employeeRef(v.voidedById);
+      if (!who) continue;
+      const r = row(who);
       r.voids += 1;
       r.voidAmount += n(v.lineTotal);
     }
