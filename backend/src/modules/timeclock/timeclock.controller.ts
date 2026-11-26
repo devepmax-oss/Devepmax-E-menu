@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, Put, Query } from '@nestjs/common';
+import { Body, Controller, Delete, Get, HttpCode, Param, Patch, Post, Put, Query } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { DeviceActor, EmployeeActor } from '../../common/auth/actor';
 import { AllowActors, CurrentActor, RequirePermissions } from '../../common/auth/decorators';
@@ -25,7 +25,9 @@ import { TimeclockService } from './timeclock.service';
 export class TimeclockDeviceController {
   constructor(private readonly timeclock: TimeclockService) {}
 
+  /** Solo consulta: responde 200. */
   @Post('lookup')
+  @HttpCode(200)
   lookup(@CurrentActor() device: DeviceActor, @Body() dto: PinDto) {
     return this.timeclock.lookup(device, dto.pin);
   }

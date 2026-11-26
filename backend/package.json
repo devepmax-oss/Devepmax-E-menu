@@ -82,6 +82,7 @@
       "^.+\\.ts$": "ts-jest"
     },
     "testEnvironment": "node",
+    "modulePathIgnorePatterns": ["<rootDir>/_to_delete/"],
     "moduleFileExtensions": [
       "ts",
       "js",
