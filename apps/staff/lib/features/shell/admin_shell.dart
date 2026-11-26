@@ -18,6 +18,7 @@ class _Destination {
 }
 
 const _allDestinations = [
+  _Destination('/dashboard', 'Panel', Icons.space_dashboard_rounded, 'reports.view'),
   _Destination('/orders', 'Órdenes', Icons.receipt_long_rounded, 'orders.create'),
   _Destination('/tables', 'Mesas', Icons.table_restaurant_rounded, 'tables.operate'),
   _Destination('/billing', 'Caja', Icons.point_of_sale_rounded, 'payments.take'),

@@ -19,6 +19,7 @@ import '../features/customers/screens/customers_screen.dart';
 import '../features/inventory/screens/inventory_screen.dart';
 import '../features/timeclock/screens/attendance_screen.dart';
 import '../features/payroll/screens/payroll_screen.dart';
+import '../features/dashboard/screens/dashboard_screen.dart';
 import '../features/reports/screens/reports_screen.dart';
 import '../features/shell/admin_shell.dart';
 import '../features/tables/screens/tables_screen.dart';
@@ -70,6 +71,7 @@ final routerProvider = Provider<GoRouter>((ref) {
               billId: state.uri.queryParameters['bill'],
             ),
           ),
+          GoRoute(path: '/dashboard', builder: (_, __) => const DashboardScreen()),
           GoRoute(path: '/reports', builder: (_, __) => const ReportsScreen()),
           GoRoute(path: '/customers', builder: (_, __) => const CustomersScreen()),
           GoRoute(path: '/menu', builder: (_, __) => const MenuScreen()),

@@ -8,6 +8,7 @@ import { CouponsModule } from './modules/coupons/coupons.module';
 import { InventoryModule } from './modules/inventory/inventory.module';
 import { TimeclockModule } from './modules/timeclock/timeclock.module';
 import { PayrollModule } from './modules/payroll/payroll.module';
+import { DashboardModule } from './modules/dashboard/dashboard.module';
 import { PaymentsModule } from './modules/payments/payments.module';
 import { Module } from '@nestjs/common';
 import { HealthController } from './health/health.controller';
@@ -49,6 +50,7 @@ import { StorageModule } from './storage/storage.module';
     InventoryModule,
     TimeclockModule,
     PayrollModule,
+    DashboardModule,
   ],
   controllers: [HealthController],
 })

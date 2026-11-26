@@ -36,6 +36,7 @@
     "smoke:timeclock": "tsx scripts/smoke-timeclock.ts",
     "smoke:payroll": "tsx scripts/smoke-payroll.ts",
     "smoke:scheduled": "tsx scripts/smoke-scheduled.ts",
+    "smoke:dashboard": "tsx scripts/smoke-dashboard.ts",
     "demo:orders": "tsx scripts/demo-orders.ts"
   },
   "dependencies": {
