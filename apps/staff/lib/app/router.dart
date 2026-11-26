@@ -16,6 +16,7 @@ import '../features/pos/screens/pos_screen.dart';
 import '../features/promotions/screens/promotions_screen.dart';
 import '../features/coupons/screens/coupons_screen.dart';
 import '../features/customers/screens/customers_screen.dart';
+import '../features/inventory/screens/inventory_screen.dart';
 import '../features/reports/screens/reports_screen.dart';
 import '../features/shell/admin_shell.dart';
 import '../features/tables/screens/tables_screen.dart';
@@ -74,6 +75,7 @@ final routerProvider = Provider<GoRouter>((ref) {
           GoRoute(path: '/menu-setup', builder: (_, __) => const MenuSetupScreen()),
           GoRoute(path: '/promotions', builder: (_, __) => const PromotionsScreen()),
           GoRoute(path: '/coupons', builder: (_, __) => const CouponsScreen()),
+          GoRoute(path: '/inventory', builder: (_, __) => const InventoryScreen()),
           GoRoute(path: '/employees', builder: (_, __) => const EmployeesScreen()),
           GoRoute(path: '/devices', builder: (_, __) => const DevicesScreen()),
           GoRoute(path: '/settings', builder: (_, __) => const SettingsScreen()),

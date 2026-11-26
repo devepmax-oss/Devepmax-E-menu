@@ -106,7 +106,8 @@ export class ProductsService {
   /** "Agotado" del día. Lo pueden usar meseros, cajeros, cocina y pantallas KDS. */
   async setAvailability(actor: Actor, id: string, isAvailable: boolean) {
     found(await this.prisma.product.findUnique({ where: { id } }), 'Producto no encontrado');
-    const product = await this.prisma.product.update({ where: { id }, data: { isAvailable } });
+    // Un cambio a mano manda: el inventario ya no lo reactiva solo.
+    const product = await this.prisma.product.update({ where: { id }, data: { isAvailable, soldOutByStock: false } });
     await this.audit.log(actor, isAvailable ? 'product.available' : 'product.sold_out', 'product', id);
     const view = { id: product.id, isAvailable: product.isAvailable, updatedAt: product.updatedAt };
     this.events.emit('product.availability', view);

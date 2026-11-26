@@ -80,6 +80,9 @@ export class UpdateSettingsDto {
   @IsOptional() @IsInt() @Min(7) @Max(365) loyaltyRewardDays?: number;
   @IsOptional() @IsBoolean() birthdayRewardEnabled?: boolean;
   @IsOptional() @IsNumber({ maxDecimalPlaces: 2 }) @Min(1) @Max(500) birthdayRewardAmount?: number;
+
+  @IsOptional() @IsBoolean() inventoryEnabled?: boolean;
+  @IsOptional() @IsBoolean() inventoryAutoSoldOut?: boolean;
 }
 
 export class OpeningHourDto {
