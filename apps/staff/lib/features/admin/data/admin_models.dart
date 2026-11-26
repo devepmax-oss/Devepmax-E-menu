@@ -148,6 +148,7 @@ const deviceTypeLabels = <String, String>{
   'POS': 'Caja (POS)',
   'KDS': 'Pantalla de cocina',
   'WAITER': 'Mesero',
+  'CLOCK': 'Reloj checador',
 };
 
 class DeviceView {

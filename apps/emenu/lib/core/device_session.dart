@@ -17,10 +17,11 @@ class DeviceSession {
   final String deviceId;
   final String deviceName;
 
-  /// EMENU (tablet de mesa) o KDS (pantalla de cocina).
+  /// EMENU (tablet de mesa), KDS (pantalla de cocina) o CLOCK (reloj checador).
   final String type;
 
   bool get isKitchen => type == 'KDS';
+  bool get isClock => type == 'CLOCK';
 
   Map<String, dynamic> toJson() => {'token': token, 'api': apiBaseUrl, 'id': deviceId, 'name': deviceName, 'type': type};
 
@@ -94,8 +95,9 @@ class DeviceSessionController extends AsyncNotifier<DeviceSession?> {
     }
     final device = data['device'] as Map<String, dynamic>;
     final type = device['type'] as String?;
-    if (type != 'EMENU' && type != 'KDS') {
-      throw ApiException('Ese código es de una caja o de un mesero. Aquí se vinculan tablets de mesa y pantallas de cocina.');
+    if (type != 'EMENU' && type != 'KDS' && type != 'CLOCK') {
+      throw ApiException(
+          'Ese código es de una caja o de un mesero. Aquí se vinculan tablets de mesa, pantallas de cocina y relojes checadores.');
     }
     final session = DeviceSession(
       token: data['deviceToken'] as String,

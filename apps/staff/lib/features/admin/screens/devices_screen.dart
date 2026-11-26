@@ -23,6 +23,7 @@ const _typeIcons = <String, IconData>{
   'POS': Icons.point_of_sale_rounded,
   'KDS': Icons.soup_kitchen_rounded,
   'WAITER': Icons.room_service_rounded,
+  'CLOCK': Icons.punch_clock_rounded,
 };
 
 class DevicesScreen extends ConsumerStatefulWidget {
@@ -220,8 +221,8 @@ class _PairingDialogState extends ConsumerState<_PairingDialog> {
                 ])
               : Column(key: const ValueKey('code'), mainAxisSize: MainAxisSize.min, children: [
                   Text(
-                    widget.device.type == 'EMENU' || widget.device.type == 'KDS'
-                        ? 'Abre la app de la tablet (la misma para mesas y cocina) y escanéalo:'
+                    const ['EMENU', 'KDS', 'CLOCK'].contains(widget.device.type)
+                        ? 'Abre la app de la tablet (la misma para mesas, cocina y reloj) y escanéalo:'
                         : 'Escanéalo con la cámara del dispositivo:',
                     textAlign: TextAlign.center,
                   ),

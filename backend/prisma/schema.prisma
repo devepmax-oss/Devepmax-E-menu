@@ -55,6 +55,9 @@ model RestaurantSettings {
   // Inventario: descontar ingredientes al vender y agotar platos sin stock.
   inventoryEnabled       Boolean @default(false)
   inventoryAutoSoldOut   Boolean @default(true)
+  // Reloj checador: descansos de hasta N minutos se pagan (0 = ninguno, 1440 = todos).
+  paidBreakMinutes       Int     @default(0)
+  clockGraceMinutes      Int     @default(5) // tolerancia antes de contar una llegada tarde
   updatedAt             DateTime @updatedAt
 }
 
@@ -106,6 +109,61 @@ model Employee {
   updatedAt     DateTime       @updatedAt
   role          Role           @relation(fields: [roleId], references: [id])
   driverProfile DriverProfile?
+  timeEntries   TimeEntry[]
+  shifts        Shift[]
+}
+
+/// Reloj checador: una jornada (entrada → salida) con sus descansos.
+model TimeEntry {
+  id           String          @id @default(cuid())
+  employeeId   String
+  clockIn      DateTime
+  clockOut     DateTime? // null = sigue trabajando
+  source       TimeEntrySource @default(CLOCK)
+  deviceId     String? // tablet de reloj donde marcó la entrada
+  note         String?
+  editedAt     DateTime? // la última corrección del gerente
+  editedById   String?
+  editReason   String?
+  createdAt    DateTime        @default(now())
+  updatedAt    DateTime        @updatedAt
+  employee     Employee        @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  breaks       TimeBreak[]
+
+  @@index([employeeId, clockIn])
+  @@index([clockIn])
+  @@index([clockOut])
+}
+
+model TimeBreak {
+  id      String    @id @default(cuid())
+  entryId String
+  start   DateTime
+  end     DateTime? // null = en descanso
+  entry   TimeEntry @relation(fields: [entryId], references: [id], onDelete: Cascade)
+
+  @@index([entryId])
+}
+
+enum TimeEntrySource {
+  CLOCK // en la tablet de reloj
+  MANUAL // la agregó o la marcó el gerente
+}
+
+/// Horario: un turno programado de un empleado.
+model Shift {
+  id         String   @id @default(cuid())
+  employeeId String
+  start      DateTime
+  end        DateTime
+  position   String? // "Caja", "Cocina", "Barra"…
+  note       String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  employee   Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@index([start])
+  @@index([employeeId, start])
 }
 
 model AuthSession {
@@ -222,6 +280,7 @@ enum DeviceType {
   POS
   KDS
   WAITER
+  CLOCK // reloj checador
 }
 
 enum SessionStatus {

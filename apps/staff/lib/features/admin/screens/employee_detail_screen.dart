@@ -15,6 +15,9 @@ import 'employees_screen.dart';
 final _dateTime = DateFormat('M/d/yyyy h:mm a');
 final _date = DateFormat('M/d/yyyy');
 
+/// "2026-11-25" → "11/25/2026".
+String dayLabelShort(String iso) => _prettyDay(iso);
+
 String _prettyDay(String? iso) {
   if (iso == null) return '';
   final d = DateTime.tryParse(iso);
@@ -719,6 +722,13 @@ class _HistoryTabState extends ConsumerState<_HistoryTab> {
           if (added.isNotEmpty) 'Agregó: $added',
           if (removed.isNotEmpty) 'Quitó: $removed',
         ].join(' · ');
+      case 'timeclock.entry_create' || 'timeclock.entry_update' || 'timeclock.entry_delete':
+        return [
+          if (data['day'] is String) dayLabelShort(data['day'] as String),
+          if (data['reason'] is String) 'Motivo: ${data['reason']}',
+        ].join(' · ');
+      case 'timeclock.in' || 'timeclock.out' || 'timeclock.break_start' || 'timeclock.break_end':
+        return data['manual'] == true ? 'Lo marcó el gerente${data['reason'] is String ? ': ${data['reason']}' : ''}' : '';
       case 'role.create' || 'role.delete':
         return data['name'] is String ? '${data['name']}' : '';
       default:

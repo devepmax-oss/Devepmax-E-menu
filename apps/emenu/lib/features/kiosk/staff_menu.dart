@@ -157,7 +157,8 @@ class _StaffOptions extends ConsumerWidget {
     final t = BrandTokens.of(context);
     final session = ref.watch(deviceSessionProvider).value;
     final kitchen = session?.isKitchen ?? false;
-    final table = kitchen ? null : ref.watch(tableProvider).value;
+    final clock = session?.isClock ?? false;
+    final table = kitchen || clock ? null : ref.watch(tableProvider).value;
 
     Widget option(IconData icon, String title, String subtitle, VoidCallback onTap, {bool danger = false}) => ListTile(
           leading: Icon(icon, color: danger ? t.danger : t.accentText),
@@ -172,13 +173,18 @@ class _StaffOptions extends ConsumerWidget {
         width: 460,
         child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
           Text(
-            kitchen
-                ? '${session?.deviceName ?? 'Pantalla'} · cocina'
+            kitchen || clock
+                ? '${session?.deviceName ?? 'Pantalla'} · ${clock ? 'reloj checador' : 'cocina'}'
                 : '${session?.deviceName ?? 'Tablet'}${table?.label != null ? ' · Mesa ${table!.label}' : ' · sin mesa'}',
             style: TextStyle(color: t.muted),
           ),
           const SizedBox(height: 12),
-          if (kitchen)
+          if (clock)
+            option(Icons.refresh_rounded, 'Recargar', 'Vuelve a cargar la marca del restaurante', () {
+              ref.invalidate(brandProvider);
+              Navigator.pop(context);
+            })
+          else if (kitchen)
             option(Icons.refresh_rounded, 'Recargar', 'Vuelve a cargar los tickets de la estación', () {
               ref.read(kitchenProvider.notifier).reload();
               ref.invalidate(brandProvider);
@@ -196,11 +202,11 @@ class _StaffOptions extends ConsumerWidget {
               Navigator.pop(context);
             }),
           ],
-          option(Icons.link_off_rounded, kitchen ? 'Desvincular esta pantalla' : 'Desvincular esta tablet', 'Para usarla en otro lugar o cambiarla', () async {
+          option(Icons.link_off_rounded, kitchen || clock ? 'Desvincular esta pantalla' : 'Desvincular esta tablet', 'Para usarla en otro lugar o cambiarla', () async {
             final ok = await showDialog<bool>(
               context: context,
               builder: (context) => AlertDialog(
-                title: Text(kitchen ? '¿Desvincular la pantalla?' : '¿Desvincular la tablet?'),
+                title: Text(kitchen || clock ? '¿Desvincular la pantalla?' : '¿Desvincular la tablet?'),
                 content: const Text('Para volver a usarla hay que generar un código nuevo en la app Staff → Dispositivos.'),
                 actions: [
                   TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancelar')),

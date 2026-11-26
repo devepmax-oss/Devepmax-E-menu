@@ -30,7 +30,7 @@ export const PERMISSIONS = [
 export type Permission = (typeof PERMISSIONS)[number];
 
 /** Permisos exclusivos de dispositivos (no se asignan a roles). */
-export const DEVICE_ONLY_PERMISSIONS = ['table.order', 'table.service_request', 'table.view_bill'] as const;
+export const DEVICE_ONLY_PERMISSIONS = ['table.order', 'table.service_request', 'table.view_bill', 'timeclock.punch'] as const;
 
 export type DevicePermission = (typeof DEVICE_ONLY_PERMISSIONS)[number];
 export type AnyPermission = Permission | DevicePermission;
@@ -45,6 +45,7 @@ export const DEVICE_PERMISSIONS: Record<DeviceType, readonly AnyPermission[]> = 
   KDS: ['kitchen.operate', 'product.toggle_availability'],
   POS: [],
   WAITER: [],
+  CLOCK: ['timeclock.punch'],
 };
 
 /** Roles de fábrica. Los permisos se pueden ajustar luego desde el panel. */

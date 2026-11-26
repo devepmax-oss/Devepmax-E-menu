@@ -7,6 +7,7 @@ import 'package:wakelock_plus/wakelock_plus.dart';
 import 'core/device_session.dart';
 import 'core/i18n.dart';
 import 'core/realtime.dart';
+import 'features/clock/clock_screen.dart';
 import 'features/kitchen/kitchen_screen.dart';
 import 'features/kiosk/kiosk.dart';
 import 'features/kiosk/welcome_screen.dart';
@@ -51,6 +52,7 @@ class EmenuApp extends ConsumerWidget {
 }
 
 /// Sin vincular → vincular. Tablet de mesa → la mesa. Pantalla de cocina → los tickets.
+/// Reloj checador → el teclado para marcar con el PIN.
 class _Root extends ConsumerWidget {
   const _Root();
 
@@ -64,7 +66,9 @@ class _Root extends ConsumerWidget {
           ? const PairingScreen()
           : s.isKitchen
               ? const _KitchenShell()
-              : const _TabletShell(),
+              : s.isClock
+                  ? const ClockScreen()
+                  : const _TabletShell(),
     );
   }
 }
