@@ -55,6 +55,8 @@ model RestaurantSettings {
   // Inventario: descontar ingredientes al vender y agotar platos sin stock.
   inventoryEnabled       Boolean @default(false)
   inventoryAutoSoldOut   Boolean @default(true)
+  // Pedidos programados en la web (hasta 7 días, también con el restaurante cerrado).
+  scheduledOrdersEnabled Boolean @default(true)
   // Reloj checador: descansos de hasta N minutos se pagan (0 = ninguno, 1440 = todos).
   paidBreakMinutes       Int     @default(0)
   clockGraceMinutes      Int     @default(5) // tolerancia antes de contar una llegada tarde
@@ -489,6 +491,7 @@ enum FulfillmentType {
 }
 
 enum OrderStatus {
+  SCHEDULED // programada para más tarde: pasa a cocina sola a su hora (releaseAt)
   PENDING_PAYMENT // online prepago esperando Stripe
   PENDING_APPROVAL // tablet esperando OK del mesero (si está activado)
   PLACED // recibida, enviada a cocina
@@ -534,7 +537,8 @@ model Order {
   deliveryAddress      Json? // snapshot de la dirección
   deliveryInstructions String?
   deliveryZoneId       String?
-  scheduledFor         DateTime?
+  scheduledFor         DateTime? // pedido programado: hora en que el cliente lo quiere
+  releaseAt            DateTime? // cuándo pasa a cocina (scheduledFor menos la preparación o el delivery)
   notes                String?
   estimatedReadyAt     DateTime?
   placedAt             DateTime?
@@ -556,6 +560,7 @@ model Order {
 
   @@unique([businessDate, number])
   @@index([status])
+  @@index([status, releaseAt])
   @@index([customerId])
 }
 

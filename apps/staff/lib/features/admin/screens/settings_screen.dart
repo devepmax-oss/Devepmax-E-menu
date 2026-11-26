@@ -88,6 +88,7 @@ class _SettingsFormState extends ConsumerState<_SettingsForm> {
   late bool _pickup = _s['acceptsPickup'] as bool? ?? true;
   late bool _delivery = _s['acceptsDelivery'] as bool? ?? true;
   late bool _paused = _s['onlineOrderingPaused'] as bool? ?? false;
+  late bool _scheduled = _s['scheduledOrdersEnabled'] as bool? ?? true;
   late bool _approval = _s['requireWaiterApproval'] as bool? ?? false;
   late bool _maintenance = _s['maintenanceMode'] as bool? ?? false;
   late final List<_DayHours> _week = List.generate(7, (day) {
@@ -129,6 +130,7 @@ class _SettingsFormState extends ConsumerState<_SettingsForm> {
       'acceptsPickup': _pickup,
       'acceptsDelivery': _delivery,
       'onlineOrderingPaused': _paused,
+      'scheduledOrdersEnabled': _scheduled,
       'requireWaiterApproval': _approval,
       'maintenanceMode': _maintenance,
       'prepTimeMinutes': int.tryParse(_prep.text.trim()) ?? 20,
@@ -299,6 +301,9 @@ class _SettingsFormState extends ConsumerState<_SettingsForm> {
                     _switch('Delivery', _delivery, (v) => _delivery = v),
                     _switch('Pausar pedidos online', _paused, (v) => _paused = v,
                         subtitle: 'Úsalo cuando la cocina esté saturada'),
+                    _switch('Pedidos programados en la web', _scheduled, (v) => _scheduled = v,
+                        subtitle: 'El cliente elige día y hora (hasta 7 días), también con el restaurante cerrado. '
+                            'Pasan solos a cocina a su hora'),
                     _switch('Las órdenes de las tablets esperan aprobación del mesero', _approval, (v) => _approval = v),
                     _switch('Web en mantenimiento', _maintenance, (v) => _maintenance = v),
                   ]),

@@ -7,6 +7,7 @@ typedef OrderJson = Map<String, dynamic>;
 const finishedStatuses = {'COMPLETED', 'CANCELLED'};
 
 const orderStatusLabels = <String, String>{
+  'SCHEDULED': 'Programada',
   'PENDING_PAYMENT': 'Esperando pago',
   'PENDING_APPROVAL': 'Por aprobar',
   'PLACED': 'Recibida',
@@ -167,6 +168,8 @@ class OrderView {
     required this.createdAt,
     this.placedAt,
     this.readyAt,
+    this.scheduledFor,
+    this.releaseAt,
     this.tableLabel,
     this.customerName,
     this.customerPhone,
@@ -202,6 +205,10 @@ class OrderView {
   final DateTime createdAt;
   final DateTime? placedAt;
   final DateTime? readyAt;
+
+  /// Pedido programado: la hora que pidió el cliente y cuándo pasa solo a cocina.
+  final DateTime? scheduledFor;
+  final DateTime? releaseAt;
   final String? tableLabel;
   final String? customerName;
   final String? customerPhone;
@@ -272,6 +279,8 @@ class OrderView {
       createdAt: date(j['createdAt']) ?? DateTime.now(),
       placedAt: date(j['placedAt']),
       readyAt: date(j['readyAt']),
+      scheduledFor: date(j['scheduledFor']),
+      releaseAt: date(j['releaseAt']),
       tableLabel: table?['label'] as String?,
       customerName: j['customerName'] as String?,
       customerPhone: j['customerPhone'] as String?,

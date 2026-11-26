@@ -61,6 +61,14 @@ export class OrdersController {
     return this.orders.approve(actor, id);
   }
 
+  /** Pedido programado: enviarlo a cocina ya (sin esperar su hora). */
+  @RequirePermissions('orders.approve')
+  @Post(':id/release')
+  @HttpCode(200)
+  async release(@CurrentActor() actor: Actor, @Param('id') id: string) {
+    return (await this.orders.releaseScheduled(actor, id))!;
+  }
+
   @RequirePermissions('orders.create')
   @Post(':id/complete')
   @HttpCode(200)

@@ -11,7 +11,7 @@ import { canMake, plateCost, weightedCost } from './inventory.rules';
 const dec = (v: Prisma.Decimal.Value) => new Prisma.Decimal(v);
 const ZERO = dec(0);
 /** Órdenes que todavía no van a cocina o se cancelaron: no gastan ingredientes. */
-const NOT_COUNTED = ['PENDING_PAYMENT', 'PENDING_APPROVAL', 'CANCELLED'];
+const NOT_COUNTED = ['SCHEDULED', 'PENDING_PAYMENT', 'PENDING_APPROVAL', 'CANCELLED'];
 
 /**
  * Inventario por ingredientes: cada venta descuenta su receta cuando la orden entra a cocina y

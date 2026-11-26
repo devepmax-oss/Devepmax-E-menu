@@ -33,6 +33,10 @@ class OrdersApi {
   Future<OrderView> approve(String id) => _call(() async =>
       OrderView.fromJson((await _dio.post<Map<String, dynamic>>('/orders/$id/approve')).data!));
 
+  /// Pedido programado: enviarlo a cocina ya, sin esperar su hora.
+  Future<OrderView> release(String id) => _call(() async =>
+      OrderView.fromJson((await _dio.post<Map<String, dynamic>>('/orders/$id/release')).data!));
+
   Future<OrderView> complete(String id) => _call(() async =>
       OrderView.fromJson((await _dio.post<Map<String, dynamic>>('/orders/$id/complete')).data!));
 

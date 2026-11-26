@@ -1,6 +1,6 @@
 'use client';
 
-import { ChevronLeft, CreditCard, MapPin, Store, TicketPercent, Wallet, X } from 'lucide-react';
+import { CalendarClock, ChevronLeft, CreditCard, MapPin, Store, TicketPercent, Wallet, X, Zap } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useEffect, useMemo, useRef, useState } from 'react';
@@ -10,7 +10,9 @@ import { account, pendingCoupon, useAccount, type LoyaltyReward } from '@/lib/ac
 import { api, ApiError } from '@/lib/api';
 import { cart, cartCount, saveCustomer, saveLastOrder, toOrderLines, useCart, useCustomer, type CustomerInfo } from '@/lib/cart';
 import { money, round2, toNumber } from '@/lib/format';
-import type { CreatedOrder, FulfillmentType, OnlineConfig } from '@/lib/types';
+import { prettyTime } from '@/lib/hours';
+import type { Lang } from '@/lib/i18n';
+import type { CreatedOrder, FulfillmentType, OnlineConfig, ScheduleSlots } from '@/lib/types';
 import { useQuote } from '@/lib/use-quote';
 import { CartLines, TotalsSummary } from '../cart-panel';
 import { ModeToggle, modeInfo, orderingState } from '../menu-view';
@@ -55,6 +57,18 @@ function Field({
   );
 }
 
+/** "Hoy", "Mañana" o "vie, 27 nov" para un día AAAA-MM-DD del restaurante. */
+function dayLabel(day: string, timezone: string, lang: Lang) {
+  const today = new Intl.DateTimeFormat('en-CA', { timeZone: timezone }).format(new Date());
+  const next = new Date(`${today}T12:00:00Z`);
+  next.setUTCDate(next.getUTCDate() + 1);
+  if (day === today) return lang === 'en' ? 'Today' : 'Hoy';
+  if (day === next.toISOString().slice(0, 10)) return lang === 'en' ? 'Tomorrow' : 'Mañana';
+  return new Intl.DateTimeFormat(lang === 'en' ? 'en-US' : 'es-US', { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC' }).format(
+    new Date(`${day}T12:00:00Z`),
+  );
+}
+
 function Section({ title, children, id }: { title: string; children: React.ReactNode; id?: string }) {
   return (
     <section id={id} className="flex scroll-mt-6 flex-col gap-4 rounded-[26px] border border-line bg-surface p-5">
@@ -71,7 +85,7 @@ export function CheckoutView({ config }: { config: OnlineConfig }) {
   const currency = config.currency;
   const lang = useLang();
   const t = useT();
-  const { modes, canOrder, reason } = orderingState(config, lang);
+  const { modes, canOrder, reason, scheduleOnly } = orderingState(config, lang);
   const mode: FulfillmentType = modes.includes(state.mode) ? state.mode : (modes[0] ?? 'PICKUP');
   const delivery = mode === 'DELIVERY';
 
@@ -96,6 +110,30 @@ export function CheckoutView({ config }: { config: OnlineConfig }) {
   const [created, setCreated] = useState<CreatedOrder | null>(null);
   const [leaving, setLeaving] = useState(false);
   const requestRef = useRef<{ key: string; id: string } | null>(null);
+
+  // ¿Para cuándo? Lo antes posible o programado (cerrado: solo programado).
+  const canSchedule = !!config.scheduling?.enabled;
+  const [whenChoice, setWhen] = useState<'asap' | 'later' | null>(null);
+  const when: 'asap' | 'later' = scheduleOnly ? 'later' : (whenChoice ?? 'asap');
+  const [slots, setSlots] = useState<ScheduleSlots | null>(null);
+  const [slotDay, setSlotDay] = useState<string | null>(null);
+  const [slotAt, setSlotAt] = useState<string | null>(null);
+  useEffect(() => {
+    if (!canSchedule || !canOrder) return;
+    let cancelled = false;
+    api
+      .slots(mode)
+      .then((s) => !cancelled && setSlots(s))
+      .catch(() => !cancelled && setSlots({ enabled: false, asap: config.isOpenNow, days: [] }));
+    return () => {
+      cancelled = true;
+    };
+  }, [mode, canSchedule, canOrder, config.isOpenNow]);
+  const scheduled = canSchedule && when === 'later';
+  const days = slots?.days ?? [];
+  const slotDayView = days.find((d) => d.day === slotDay) ?? days[0] ?? null;
+  const slot = slotDayView?.times.find((x) => x.at === slotAt) ?? null;
+  const whenLabel = slotDayView && slot ? `${dayLabel(slotDayView.day, config.timezone, lang)} · ${prettyTime(slot.time, lang)}` : '';
 
   const items = useMemo(() => toOrderLines(state), [state]);
   const [couponOpen, setCouponOpen] = useState(false);
@@ -170,6 +208,10 @@ export function CheckoutView({ config }: { config: OnlineConfig }) {
   const submit = async () => {
     setSubmitError(null);
     if (!validate() || !quote || !pay) return;
+    if (scheduled && !slot) {
+      setSubmitError(t('Elige el día y la hora de tu pedido', 'Choose the day and time for your order'));
+      return;
+    }
     const clean: CustomerInfo = Object.fromEntries(Object.entries(info).map(([k, v]) => [k, String(v).trim()])) as unknown as CustomerInfo;
     const body = {
       fulfillmentType: mode,
@@ -183,6 +225,7 @@ export function CheckoutView({ config }: { config: OnlineConfig }) {
         : {}),
       ...(delivery && signedIn && saveAddress && !knownAddress ? { saveAddress: true } : {}),
       ...(couponOk ? { couponCode } : {}),
+      ...(scheduled && slot ? { scheduledFor: slot.at } : {}),
     };
     // Mismo pedido → misma clave (tocar dos veces no duplica); pedido distinto → clave nueva.
     const key = JSON.stringify(body);
@@ -254,6 +297,103 @@ export function CheckoutView({ config }: { config: OnlineConfig }) {
               </p>
             ) : null}
           </Section>
+
+          {canSchedule ? (
+            <Section title={t('¿Para cuándo?', 'When?')}>
+              {locked ? (
+                <p className="m-0 flex items-center gap-2 font-semibold">
+                  {scheduled && slot ? <CalendarClock aria-hidden className="size-4 text-accent-text" /> : <Zap aria-hidden className="size-4 text-accent-text" />}
+                  {scheduled && slot ? whenLabel : t('Lo antes posible', 'As soon as possible')}
+                </p>
+              ) : (
+                <>
+                  <div role="radiogroup" aria-label={t('Para cuándo', 'When')} className="grid grid-cols-2 gap-2">
+                    {(
+                      [
+                        { id: 'asap', icon: Zap, label: t('Lo antes posible', 'As soon as possible'), sub: scheduleOnly ? t('Estamos cerrados ahora', 'We are closed now') : modeInfo(config, mode, lang).split('·')[1]?.trim() ?? '' },
+                        { id: 'later', icon: CalendarClock, label: t('Programar', 'Schedule'), sub: t(`Hasta ${config.scheduling?.maxDays ?? 7} días antes`, `Up to ${config.scheduling?.maxDays ?? 7} days ahead`) },
+                      ] as const
+                    ).map((o) => {
+                      const on = when === o.id;
+                      const off = o.id === 'asap' && scheduleOnly;
+                      const OptionIcon = o.icon;
+                      return (
+                        <button
+                          key={o.id}
+                          type="button"
+                          role="radio"
+                          aria-checked={on}
+                          disabled={off}
+                          onClick={() => setWhen(o.id)}
+                          className={`press flex min-h-16 cursor-pointer items-center gap-3 rounded-2xl border px-4 text-left disabled:cursor-not-allowed disabled:opacity-50 ${on ? 'border-brand bg-brand-soft' : 'border-line bg-surface-2'}`}
+                        >
+                          <OptionIcon aria-hidden className="size-5 shrink-0 text-accent-text" />
+                          <span className="flex flex-col">
+                            <span className="font-bold text-ink">{o.label}</span>
+                            <span className="text-xs text-muted">{o.sub}</span>
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                  {scheduled ? (
+                    days.length === 0 ? (
+                      <Notice tone="accent">
+                        {slots ? t('No hay horas disponibles en los próximos días.', 'There are no times available in the next few days.') : t('Buscando horas…', 'Loading times…')}
+                      </Notice>
+                    ) : (
+                      <>
+                        <div role="radiogroup" aria-label={t('Día', 'Day')} className="no-scrollbar -mx-1 flex gap-2 overflow-x-auto px-1">
+                          {days.map((d) => {
+                            const on = d.day === slotDayView?.day;
+                            return (
+                              <button
+                                key={d.day}
+                                type="button"
+                                role="radio"
+                                aria-checked={on}
+                                onClick={() => {
+                                  setSlotDay(d.day);
+                                  setSlotAt(null);
+                                }}
+                                className={`press shrink-0 cursor-pointer rounded-full border px-4 py-2 text-sm font-bold capitalize ${on ? 'border-brand bg-brand-soft text-ink' : 'border-line bg-surface-2 text-soft'}`}
+                              >
+                                {dayLabel(d.day, config.timezone, lang)}
+                              </button>
+                            );
+                          })}
+                        </div>
+                        <label htmlFor="slot" className="flex flex-col gap-1.5">
+                          <span className="text-sm font-semibold text-soft">{t('Hora', 'Time')}</span>
+                          <select
+                            id="slot"
+                            value={slot?.at ?? ''}
+                            onChange={(e) => setSlotAt(e.target.value)}
+                            className="h-13 min-h-12 rounded-2xl border border-line bg-surface-2 px-4 text-base text-ink"
+                          >
+                            <option value="" disabled>
+                              {t('Elige la hora', 'Choose a time')}
+                            </option>
+                            {slotDayView?.times.map((x) => (
+                              <option key={x.at} value={x.at}>
+                                {prettyTime(x.time, lang)}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                        {slot ? (
+                          <p className="m-0 text-sm text-soft">
+                            {delivery ? t('Te lo llevamos:', 'We deliver it:') : t('Lo tendremos listo para recoger:', 'Ready for pickup:')}{' '}
+                            <span className="font-semibold text-ink capitalize">{whenLabel}</span>
+                          </p>
+                        ) : null}
+                      </>
+                    )
+                  ) : null}
+                </>
+              )}
+            </Section>
+          ) : null}
 
           <Section title={t('Productos', 'Items')}>
             <CartLines lines={state.lines} currency={currency} editable={!locked} />
@@ -471,7 +611,9 @@ export function CheckoutView({ config }: { config: OnlineConfig }) {
               <div className="flex flex-col gap-3 border-t border-line pt-4">
                 <p className="m-0 text-sm text-soft">
                   {t('Pedido', 'Order')} <span className="font-bold text-ink">#{created.order.number}</span>{' '}
-                  {t('listo. Completa el pago para enviarlo a la cocina.', 'is ready. Complete the payment to send it to the kitchen.')}
+                  {scheduled
+                    ? t('listo. Completa el pago para dejarlo programado.', 'is ready. Complete the payment to schedule it.')
+                    : t('listo. Completa el pago para enviarlo a la cocina.', 'is ready. Complete the payment to send it to the kitchen.')}
                 </p>
                 <StripePay
                   publishableKey={publishableKey}
@@ -490,9 +632,11 @@ export function CheckoutView({ config }: { config: OnlineConfig }) {
                 className="h-14 w-full text-base"
                 onClick={submit}
                 loading={submitting}
-                disabled={!canOrder || !quote || !pay || !!quoteError || (delivery && !quote.meetsMinimum)}
+                disabled={!canOrder || !quote || !pay || !!quoteError || (delivery && !quote.meetsMinimum) || (scheduled && !slot)}
               >
-                {pay === 'pay_at_pickup' ? `${t('Hacer pedido', 'Place order')} · ${money(total, currency)}` : `${t('Continuar al pago', 'Continue to payment')} · ${money(total, currency)}`}
+                {pay === 'pay_at_pickup'
+                  ? `${scheduled ? t('Programar pedido', 'Schedule order') : t('Hacer pedido', 'Place order')} · ${money(total, currency)}`
+                  : `${t('Continuar al pago', 'Continue to payment')} · ${money(total, currency)}`}
               </Button>
             )}
           </Section>

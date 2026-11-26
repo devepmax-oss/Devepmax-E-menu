@@ -1,10 +1,12 @@
 import type { OrderView } from './orders.service';
 
 /** Etapa del pedido tal como la ve el cliente en la web o la tablet. */
-export type PublicStage = 'awaiting_payment' | 'received' | 'preparing' | 'ready' | 'on_the_way' | 'completed' | 'cancelled';
+export type PublicStage = 'scheduled' | 'awaiting_payment' | 'received' | 'preparing' | 'ready' | 'on_the_way' | 'completed' | 'cancelled';
 
 export function publicStage(status: string): PublicStage {
   switch (status) {
+    case 'SCHEDULED':
+      return 'scheduled';
     case 'PENDING_PAYMENT':
       return 'awaiting_payment';
     case 'PENDING_APPROVAL':
@@ -49,6 +51,8 @@ export function toPublicOrderView(order: OrderView) {
     customerFirstName: firstName,
     createdAt: order.createdAt,
     placedAt: order.placedAt,
+    /** Pedido programado: la hora que pidió el cliente. */
+    scheduledFor: order.scheduledFor,
     estimatedReadyAt: order.estimatedReadyAt,
     readyAt: order.readyAt,
     completedAt: order.completedAt,

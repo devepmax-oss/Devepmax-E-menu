@@ -40,6 +40,8 @@ export interface OnlineConfig {
   loyalty?: { enabled: boolean; pointsPerDollar: number; rewardPoints: number; rewardAmount: Money; birthday: boolean; birthdayAmount: Money };
   openingHours: OpeningWindow[];
   isOpenNow: boolean;
+  /** Pedidos programados (hasta maxDays días, también con el restaurante cerrado). */
+  scheduling?: { enabled: boolean; maxDays: number };
   delivery: { fee: Money; minOrder: Money; etaMinutes: number };
   payments: { card: boolean; payAtPickup: boolean; publishableKey: string | null };
 }
@@ -138,6 +140,7 @@ export interface Quote {
 }
 
 export type PublicStage =
+  | 'scheduled'
   | 'awaiting_payment'
   | 'received'
   | 'preparing'
@@ -155,6 +158,8 @@ export interface PublicOrder {
   customerFirstName: string | null;
   createdAt: string;
   placedAt: string | null;
+  /** Pedido programado: la hora que pidió el cliente. */
+  scheduledFor?: string | null;
   estimatedReadyAt: string | null;
   readyAt: string | null;
   completedAt: string | null;
@@ -172,6 +177,14 @@ export interface PublicOrder {
   driver: { firstName: string; vehicle: string | null; phone: string | null } | null;
   driverLocation: { lat: number; lng: number; at: string | null } | null;
   destination: { lat: number; lng: number } | null;
+}
+
+/** Horas para programar un pedido (cada una con su instante exacto). */
+export interface ScheduleSlots {
+  enabled: boolean;
+  /** ¿Se puede pedir para lo antes posible? (el restaurante está abierto) */
+  asap: boolean;
+  days: { day: string; times: { time: string; at: string }[] }[];
 }
 
 export interface CreatedOrder {

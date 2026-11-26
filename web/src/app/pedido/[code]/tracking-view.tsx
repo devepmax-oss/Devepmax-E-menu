@@ -1,6 +1,6 @@
 'use client';
 
-import { Bike, Check, ChefHat, ChevronLeft, CircleAlert, Clock, MapPin, PackageCheck, Phone, Receipt, Share2, ShoppingBag, Store, Wallet, type LucideIcon } from 'lucide-react';
+import { Bike, CalendarClock, Check, ChefHat, ChevronLeft, CircleAlert, Clock, MapPin, PackageCheck, Phone, Receipt, Share2, ShoppingBag, Store, Wallet, type LucideIcon } from 'lucide-react';
 import dynamic from 'next/dynamic';
 import Link from 'next/link';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -20,9 +20,32 @@ const newer = (a: PublicOrder, b: PublicOrder) => new Date(a.updatedAt).getTime(
 
 type Copy = { title: (o: PublicOrder) => string; text: (o: PublicOrder, place: string) => string; icon: LucideIcon };
 
-function copyFor(lang: Lang): Record<PublicStage, Copy> {
+/** "viernes 27 de noviembre, 7:30 p. m." en la zona del restaurante. */
+function scheduledLabel(iso: string | null | undefined, timezone: string, lang: Lang) {
+  if (!iso) return '';
+  return new Intl.DateTimeFormat(lang === 'en' ? 'en-US' : 'es-US', {
+    weekday: 'long',
+    day: 'numeric',
+    month: 'long',
+    hour: 'numeric',
+    minute: '2-digit',
+    timeZone: timezone,
+  }).format(new Date(iso));
+}
+
+function copyFor(lang: Lang, timezone: string): Record<PublicStage, Copy> {
   const p = (es: string, en: string) => pick(lang, es, en);
   return {
+    scheduled: {
+      title: () => p('Pedido programado', 'Order scheduled'),
+      text: (o) => {
+        const when = scheduledLabel(o.scheduledFor, timezone, lang);
+        return o.fulfillmentType === 'DELIVERY'
+          ? p(`Te lo llevamos el ${when}. Lo empezamos a preparar a tiempo.`, `We will deliver it on ${when}. We start cooking right on time.`)
+          : p(`Lo tendremos listo para recoger el ${when}.`, `It will be ready for pickup on ${when}.`);
+      },
+      icon: CalendarClock,
+    },
     awaiting_payment: {
       title: () => p('Esperando el pago', 'Waiting for payment'),
       text: () => p('Tu pedido pasa a la cocina en cuanto se confirme el pago.', 'Your order goes to the kitchen as soon as the payment is confirmed.'),
@@ -58,6 +81,7 @@ function steps(order: PublicOrder, lang: Lang) {
     ? [pick(lang, 'Recibido', 'Received'), pick(lang, 'Preparando', 'Preparing'), pick(lang, 'En camino', 'On the way'), pick(lang, 'Entregado', 'Delivered')]
     : [pick(lang, 'Recibido', 'Received'), pick(lang, 'Preparando', 'Preparing'), pick(lang, 'Listo', 'Ready'), pick(lang, 'Entregado', 'Picked up')];
   const index: Record<PublicStage, number> = {
+    scheduled: -1,
     awaiting_payment: -1,
     received: 0,
     preparing: 1,
@@ -144,7 +168,7 @@ export function TrackingView({ config, initial, fromPayment }: { config: OnlineC
     }
   };
 
-  const copy = copyFor(lang)[order.stage];
+  const copy = copyFor(lang, config.timezone)[order.stage];
   const Icon = copy.icon;
   const { labels, current } = steps(order, lang);
   const delivery = order.fulfillmentType === 'DELIVERY';

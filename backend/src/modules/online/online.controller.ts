@@ -1,8 +1,8 @@
-import { Body, Controller, Get, Headers, HttpCode, Ip, Param, Post } from '@nestjs/common';
+import { Body, Controller, Get, Headers, HttpCode, Ip, Param, Post, Query } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { Public } from '../../common/auth/decorators';
 import { CUSTOMER_TOKEN_HEADER } from '../customers/customer-auth.service';
-import { CreateOnlineOrderDto, OnlineQuoteDto } from './dto/online.dto';
+import { CreateOnlineOrderDto, OnlineQuoteDto, SlotsQueryDto } from './dto/online.dto';
 import { OnlineService } from './online.service';
 
 /** API pública de la web de pedidos (gopicadera.online). No requiere sesión. */
@@ -15,6 +15,12 @@ export class OnlineController {
   @Get('config')
   config() {
     return this.online.config();
+  }
+
+  /** Horas en que se puede programar un pedido (próximos 7 días). */
+  @Get('slots')
+  slots(@Query() query: SlotsQueryDto) {
+    return this.online.slots(query.fulfillmentType);
   }
 
   @Post('quote')

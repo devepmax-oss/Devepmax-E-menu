@@ -43,7 +43,7 @@ export function canMoveTicket(from: TicketStatus, to: TicketStatus): boolean {
   return b > a || b === a - 1;
 }
 
-const NOT_DERIVED: OrderStatus[] = ['PENDING_PAYMENT', 'PENDING_APPROVAL', 'OUT_FOR_DELIVERY', 'COMPLETED', 'CANCELLED'];
+const NOT_DERIVED: OrderStatus[] = ['SCHEDULED', 'PENDING_PAYMENT', 'PENDING_APPROVAL', 'OUT_FOR_DELIVERY', 'COMPLETED', 'CANCELLED'];
 
 /** Estado de la orden a partir de sus tickets de cocina. */
 export function deriveOrderStatus(current: OrderStatus, tickets: TicketStatus[]): OrderStatus {

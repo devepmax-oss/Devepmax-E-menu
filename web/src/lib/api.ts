@@ -1,5 +1,5 @@
 import type { Receipt, TablePayIntent, TablePayView } from './table-pay';
-import type { CreatedOrder, OnlineConfig, OrderLineInput, PublicMenu, PublicOrder, PublicPromotion, Quote } from './types';
+import type { CreatedOrder, OnlineConfig, OrderLineInput, PublicMenu, PublicOrder, PublicPromotion, Quote, ScheduleSlots } from './types';
 
 /** URL del backend. En el navegador y en el servidor de Next se usa la misma. */
 export const API_URL = (process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3000/api/v1').replace(/\/+$/, '');
@@ -41,6 +41,7 @@ export const api = {
   config: () => request<OnlineConfig>('/online/config'),
   menu: () => request<PublicMenu>('/menu?channel=online'),
   promotions: () => request<PublicPromotion[]>('/promotions/public?channel=online'),
+  slots: (fulfillmentType: 'PICKUP' | 'DELIVERY') => request<ScheduleSlots>(`/online/slots?fulfillmentType=${fulfillmentType}`),
   quote: (
     body: { fulfillmentType: 'PICKUP' | 'DELIVERY'; items: OrderLineInput[]; tipAmount?: number; couponCode?: string; phone?: string },
     customerToken?: string,

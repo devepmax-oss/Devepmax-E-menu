@@ -22,6 +22,7 @@ import { CustomersService } from '../customers/customers.service';
 import { SettingsService } from '../settings/settings.service';
 import { CreateOnlineOrderDto, OnlineQuoteDto } from './dto/online.dto';
 import { isOpenAt } from './opening-hours';
+import { SCHEDULE_DAYS, isOfferedSlot, scheduleSlots } from './schedule.rules';
 
 const PUBLIC_CODE = /^[A-Z0-9]{6,12}$/;
 
@@ -47,10 +48,11 @@ export class OnlineService {
 
   /** Todo lo que la web necesita para arrancar: marca, horario, canales, envío y pagos. */
   async config() {
-    const [pub, zone] = await Promise.all([this.settings.getPublic(), this.deliveryZone()]);
+    const [pub, zone, settings] = await Promise.all([this.settings.getPublic(), this.deliveryZone(), this.settings.get()]);
     return {
       ...pub,
       isOpenNow: isOpenAt(pub.openingHours, pub.timezone),
+      scheduling: { enabled: settings.scheduledOrdersEnabled, maxDays: SCHEDULE_DAYS },
       delivery: {
         fee: zone?.fee ?? new Prisma.Decimal(0),
         minOrder: zone?.minOrder ?? new Prisma.Decimal(0),
@@ -62,6 +64,19 @@ export class OnlineService {
         publishableKey: this.stripe.publishableKey,
       },
     };
+  }
+
+  /**
+   * Horas para programar (próximos 7 días, cada 15 min, dentro del horario). Para recoger se
+   * deja el tiempo de preparación desde que abre; para delivery, el tiempo de entrega.
+   */
+  async slots(fulfillmentType: 'PICKUP' | 'DELIVERY') {
+    const settings = await this.settings.get();
+    const hours = await this.prisma.openingHour.findMany();
+    const asap = isOpenAt(hours, settings.timezone);
+    if (!settings.scheduledOrdersEnabled) return { enabled: false, asap, days: [] };
+    const lead = await this.leadMinutes(settings, fulfillmentType);
+    return { enabled: true, asap, leadMinutes: lead, days: scheduleSlots(hours, settings.timezone, new Date(), lead) };
   }
 
   /** Cotiza el carrito: precios, promociones, impuesto, envío, propina y total. */
@@ -137,8 +152,24 @@ export class OnlineService {
     }
     this.assertFulfillment(settings, dto.fulfillmentType);
     const hours = await this.prisma.openingHour.findMany();
-    if (!isOpenAt(hours, settings.timezone)) {
-      throw new BadRequestException('El restaurante está cerrado en este momento');
+    // Programado: tiene que ser una de las horas ofrecidas (también con el restaurante cerrado).
+    let scheduledFor: Date | undefined;
+    let releaseAt: Date | undefined;
+    if (dto.scheduledFor) {
+      if (!settings.scheduledOrdersEnabled) throw new BadRequestException('Ahora no estamos aceptando pedidos programados');
+      const lead = await this.leadMinutes(settings, dto.fulfillmentType);
+      const at = new Date(dto.scheduledFor);
+      if (!isOfferedSlot(scheduleSlots(hours, settings.timezone, new Date(), lead), at)) {
+        throw new BadRequestException('Esa hora ya no está disponible; elige otra');
+      }
+      scheduledFor = at;
+      releaseAt = new Date(at.getTime() - lead * 60_000);
+    } else if (!isOpenAt(hours, settings.timezone)) {
+      throw new BadRequestException(
+        settings.scheduledOrdersEnabled
+          ? 'El restaurante está cerrado en este momento; puedes programar tu pedido para cuando abramos'
+          : 'El restaurante está cerrado en este momento',
+      );
     }
     const delivery = dto.fulfillmentType === 'DELIVERY';
     if (delivery && !dto.deliveryAddress) throw new BadRequestException('Falta la dirección de entrega');
@@ -193,7 +224,9 @@ export class OnlineService {
         clientRequestId: dto.clientRequestId,
         channel: 'ONLINE',
         fulfillmentType: dto.fulfillmentType,
-        status: dto.paymentMethod === 'card' ? 'PENDING_PAYMENT' : 'PLACED',
+        status: dto.paymentMethod === 'card' ? 'PENDING_PAYMENT' : scheduledFor ? 'SCHEDULED' : 'PLACED',
+        scheduledFor,
+        releaseAt,
         customerName: dto.customer.name,
         customerPhone: dto.customer.phone,
         customerEmail: dto.customer.email,
@@ -268,6 +301,13 @@ export class OnlineService {
   private assertFulfillment(settings: RestaurantSettings, type: 'PICKUP' | 'DELIVERY') {
     if (type === 'PICKUP' && !settings.acceptsPickup) throw new BadRequestException('Pickup no está disponible');
     if (type === 'DELIVERY' && !settings.acceptsDelivery) throw new BadRequestException('Delivery no está disponible');
+  }
+
+  /** Minutos antes de la hora pedida en que el pedido pasa a cocina. */
+  private async leadMinutes(settings: RestaurantSettings, type: 'PICKUP' | 'DELIVERY') {
+    if (type === 'PICKUP') return settings.prepTimeMinutes;
+    const zone = await this.deliveryZone();
+    return zone?.etaMinutes ?? settings.prepTimeMinutes + 20;
   }
 
   private deliveryZone() {

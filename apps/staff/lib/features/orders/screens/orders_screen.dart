@@ -14,9 +14,10 @@ import '../data/orders_api.dart';
 import '../data/orders_models.dart';
 
 /// Columnas del tablero.
-enum _Lane { approval, kitchen, ready, onTheWay }
+enum _Lane { scheduled, approval, kitchen, ready, onTheWay }
 
 _Lane? _laneOf(OrderView o) => switch (o.status) {
+      'SCHEDULED' => _Lane.scheduled,
       'PENDING_APPROVAL' => _Lane.approval,
       'PLACED' || 'ACCEPTED' || 'PREPARING' => _Lane.kitchen,
       'READY' => _Lane.ready,
@@ -25,6 +26,7 @@ _Lane? _laneOf(OrderView o) => switch (o.status) {
     };
 
 const _laneTitles = {
+  _Lane.scheduled: 'Programadas',
   _Lane.approval: 'Por aprobar',
   _Lane.kitchen: 'En cocina',
   _Lane.ready: 'Listas para entregar',
@@ -178,7 +180,10 @@ class _Board extends StatelessWidget {
       final lane = _laneOf(o);
       if (lane != null) byLane.putIfAbsent(lane, () => []).add(o);
     }
+    // Las programadas, en orden de hora.
+    byLane[_Lane.scheduled]?.sort((a, b) => (a.scheduledFor ?? a.createdAt).compareTo(b.scheduledFor ?? b.createdAt));
     final lanes = [
+      if (byLane.containsKey(_Lane.scheduled)) _Lane.scheduled,
       if (byLane.containsKey(_Lane.approval)) _Lane.approval,
       _Lane.kitchen,
       _Lane.ready,
@@ -267,8 +272,20 @@ class _LaneColumn extends StatelessWidget {
   }
 }
 
+/// "Hoy 7:30 PM", "Mañana 1:00 PM" o "Vie 27 7:30 PM".
+String scheduledLabel(DateTime when) {
+  final now = DateTime.now();
+  final day = DateTime(when.year, when.month, when.day).difference(DateTime(now.year, now.month, now.day)).inDays;
+  final time = DateFormat('h:mm a').format(when);
+  if (day == 0) return 'Hoy $time';
+  if (day == 1) return 'Mañana $time';
+  const days = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'];
+  return '${days[when.weekday - 1]} ${when.day} $time';
+}
+
 /// Minutos desde que entró a cocina, con su tono (a tiempo / atención / atrasada).
 (String, DmTone) _elapsed(OrderView o) {
+  if (o.status == 'SCHEDULED' && o.scheduledFor != null) return ('Para ${scheduledLabel(o.scheduledFor!)}', DmTone.info);
   final minutes = DateTime.now().difference(o.startedAt).inMinutes;
   final label = minutes < 1 ? 'Recién' : '$minutes min';
   if (o.status == 'READY' || o.status == 'PENDING_APPROVAL') return (label, DmTone.neutral);
@@ -387,6 +404,8 @@ class _OrderCard extends ConsumerWidget {
                       ),
                     if (order.status == 'PENDING_APPROVAL' && (employee?.can('orders.approve') ?? false))
                       _ActionButton(label: 'Aprobar', run: (api) => api.approve(order.id)),
+                    if (order.status == 'SCHEDULED' && (employee?.can('orders.approve') ?? false))
+                      _ActionButton(label: 'A cocina ya', run: (api) => api.release(order.id)),
                     if (order.status == 'READY' && (employee?.can('orders.create') ?? false))
                       _ActionButton(label: 'Entregar', run: (api) => api.complete(order.id)),
                     if (employee?.can('kitchen.operate') ?? false) _KitchenButton(order: order),
@@ -584,6 +603,7 @@ class _StatusPill extends StatelessWidget {
       'CANCELLED' => DmTone.danger,
       'READY' => DmTone.success,
       'PENDING_APPROVAL' || 'PENDING_PAYMENT' => DmTone.warning,
+      'SCHEDULED' => DmTone.info,
       _ => DmTone.primary,
     };
     return DmPill(orderStatusLabels[status] ?? status, tone: tone);
@@ -696,6 +716,21 @@ class _OrderDetail extends ConsumerWidget {
                 const SizedBox(height: 12),
                 _DriverSection(order: order),
               ],
+              if (order.scheduledFor != null) ...[
+                const SizedBox(height: 12),
+                DmPanel(
+                  color: t.infoSoft,
+                  padding: const EdgeInsets.all(12),
+                  child: Text(
+                    [
+                      'Programada para ${scheduledLabel(order.scheduledFor!)}',
+                      if (order.status == 'SCHEDULED' && order.releaseAt != null)
+                        'pasa sola a cocina ${scheduledLabel(order.releaseAt!).toLowerCase()}',
+                    ].join(' · '),
+                    style: text.bodyMedium?.copyWith(color: t.info, fontWeight: FontWeight.w600),
+                  ),
+                ),
+              ],
               if (order.notes != null && order.notes!.isNotEmpty) ...[
                 const SizedBox(height: 12),
                 DmPanel(
@@ -778,6 +813,8 @@ class _OrderDetail extends ConsumerWidget {
                 const Spacer(),
                 if (order.status == 'PENDING_APPROVAL' && (employee?.can('orders.approve') ?? false))
                   _ActionButton(label: 'Aprobar y enviar a cocina', run: (api) => api.approve(order.id)),
+                if (order.status == 'SCHEDULED' && (employee?.can('orders.approve') ?? false))
+                  _ActionButton(label: 'Enviar a cocina ya', run: (api) => api.release(order.id)),
                 if (order.status == 'READY' && (employee?.can('orders.create') ?? false))
                   _ActionButton(label: 'Marcar entregada', run: (api) => api.complete(order.id)),
                 if (employee?.can('kitchen.operate') ?? false) _KitchenButton(order: order, expanded: true),

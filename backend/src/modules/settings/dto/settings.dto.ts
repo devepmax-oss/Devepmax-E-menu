@@ -59,6 +59,7 @@ export class UpdateSettingsDto {
   @IsOptional() @IsBoolean() acceptsPickup?: boolean;
   @IsOptional() @IsBoolean() acceptsDelivery?: boolean;
   @IsOptional() @IsBoolean() onlineOrderingPaused?: boolean;
+  @IsOptional() @IsBoolean() scheduledOrdersEnabled?: boolean;
   @IsOptional() @IsBoolean() requireWaiterApproval?: boolean;
   @IsOptional() @IsInt() @Min(1) @Max(240) prepTimeMinutes?: number;
   @IsOptional()

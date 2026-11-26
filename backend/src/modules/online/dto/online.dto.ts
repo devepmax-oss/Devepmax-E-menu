@@ -6,6 +6,7 @@ import {
   IsBoolean,
   IsEmail,
   IsIn,
+  IsISO8601,
   IsNumber,
   IsOptional,
   IsString,
@@ -68,4 +69,11 @@ export class CreateOnlineOrderDto extends OnlineQuoteDto {
 
   /** card = paga ahora con Stripe; pay_at_pickup = paga al recoger (solo Pickup). */
   @IsIn(['card', 'pay_at_pickup']) paymentMethod: 'card' | 'pay_at_pickup';
+
+  /** Pedido programado: una de las horas de /online/slots (instante ISO). Sin esto: lo antes posible. */
+  @IsOptional() @IsISO8601({ strict: true }, { message: 'Hora programada inválida' }) scheduledFor?: string;
+}
+
+export class SlotsQueryDto {
+  @IsIn(['PICKUP', 'DELIVERY']) fulfillmentType: 'PICKUP' | 'DELIVERY';
 }

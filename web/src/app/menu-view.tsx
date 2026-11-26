@@ -21,14 +21,19 @@ export function orderingState(config: OnlineConfig, lang: Lang = 'es') {
   const modes: FulfillmentType[] = [];
   if (config.channels.pickup) modes.push('PICKUP');
   if (config.channels.delivery) modes.push('DELIVERY');
+  const canSchedule = !!config.scheduling?.enabled;
+  const blocked = config.channels.onlineOrderingPaused || modes.length === 0 || (!config.isOpenNow && !canSchedule);
   const reason = config.channels.onlineOrderingPaused
     ? pick(lang, 'Ahora mismo no estamos recibiendo pedidos en línea.', 'We are not taking online orders right now.')
-    : !config.isOpenNow
-      ? pick(lang, 'Estamos cerrados. Puedes ver el menú y pedir cuando abramos.', 'We are closed. You can browse the menu and order when we open.')
-      : modes.length === 0
-        ? pick(lang, 'Los pedidos en línea no están disponibles.', 'Online ordering is not available.')
+    : modes.length === 0
+      ? pick(lang, 'Los pedidos en línea no están disponibles.', 'Online ordering is not available.')
+      : !config.isOpenNow
+        ? canSchedule
+          ? pick(lang, 'Estamos cerrados. Puedes programar tu pedido para cuando abramos.', 'We are closed. You can schedule your order for when we open.')
+          : pick(lang, 'Estamos cerrados. Puedes ver el menú y pedir cuando abramos.', 'We are closed. You can browse the menu and order when we open.')
         : null;
-  return { modes, canOrder: reason === null, reason };
+  /** scheduleOnly: cerrado, pero se puede programar. */
+  return { modes, canOrder: !blocked, reason, scheduleOnly: !blocked && !config.isOpenNow };
 }
 
 export function modeInfo(config: OnlineConfig, mode: FulfillmentType, lang: Lang = 'es') {

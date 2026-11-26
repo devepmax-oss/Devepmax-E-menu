@@ -32,8 +32,14 @@ export interface NewOrder {
   clientRequestId: string;
   channel: OrderChannel;
   fulfillmentType: FulfillmentType;
-  /** PLACED (a cocina), PENDING_APPROVAL (espera al mesero) o PENDING_PAYMENT (web, espera el pago). */
+  /**
+   * PLACED (a cocina), PENDING_APPROVAL (espera al mesero), PENDING_PAYMENT (web, espera el pago)
+   * o SCHEDULED (programada: pasa a cocina sola en releaseAt).
+   */
   status: OrderStatus;
+  /** Pedido programado: la hora que pidió el cliente y cuándo pasa a cocina. */
+  scheduledFor?: Date;
+  releaseAt?: Date;
   tableId?: string;
   deviceId?: string | null;
   createdById?: string | null;
@@ -73,6 +79,11 @@ type OrderWithRelations = Prisma.OrderGetPayload<{ include: typeof ORDER_INCLUDE
 
 const FINISHED: OrderStatus[] = ['COMPLETED', 'CANCELLED'];
 
+/** Programado: listo a la hora que pidió el cliente (o la de salir, en delivery). */
+function readyTarget(order: { releaseAt: Date | null }, prepMinutes: number): Date | undefined {
+  return order.releaseAt ? new Date(order.releaseAt.getTime() + prepMinutes * 60_000) : undefined;
+}
+
 export function toOrderView(order: OrderWithRelations) {
   return {
     id: order.id,
@@ -93,6 +104,8 @@ export function toOrderView(order: OrderWithRelations) {
     notes: order.notes,
     createdAt: order.createdAt,
     placedAt: order.placedAt,
+    scheduledFor: order.scheduledFor,
+    releaseAt: order.releaseAt,
     readyAt: order.readyAt,
     estimatedReadyAt: order.estimatedReadyAt,
     completedAt: order.completedAt,
@@ -256,7 +269,8 @@ export class OrdersService {
     try {
       orderId = await this.withRetry(() =>
         this.prisma.$transaction(async (tx) => {
-          const businessDate = businessDateFor(new Date(), settings.timezone);
+          // Un pedido programado cuenta en el día en que se entrega.
+          const businessDate = businessDateFor(input.scheduledFor ?? new Date(), settings.timezone);
           const counter = await tx.dailyCounter.upsert({
             where: { businessDate },
             create: { businessDate, lastOrderNumber: 1 },
@@ -295,6 +309,8 @@ export class OrdersService {
               deliveryAddress: input.deliveryAddress ?? undefined,
               deliveryInstructions: input.deliveryInstructions?.trim() || null,
               notes: input.notes?.trim() || null,
+              scheduledFor: input.scheduledFor ?? null,
+              releaseAt: input.releaseAt ?? null,
             },
           });
 
@@ -349,16 +365,52 @@ export class OrdersService {
    */
   async placeAfterPayment(orderId: string): Promise<OrderView> {
     const settings = await this.settings.get();
-    const placed = await this.prisma.$transaction(async (tx) => {
+    const result = await this.prisma.$transaction(async (tx) => {
       const order = await tx.order.findUnique({ where: { id: orderId } });
       if (!order) throw new NotFoundException('Orden no encontrada');
-      if (order.status !== 'PENDING_PAYMENT') return false;
-      await this.placeInTx(tx, orderId, settings.prepTimeMinutes);
+      if (order.status !== 'PENDING_PAYMENT') return 'none' as const;
+      // Programado y todavía falta: espera su hora.
+      if (order.releaseAt && order.releaseAt.getTime() > Date.now()) {
+        await tx.order.update({ where: { id: orderId }, data: { status: 'SCHEDULED' } });
+        return 'scheduled' as const;
+      }
+      await this.placeInTx(tx, orderId, settings.prepTimeMinutes, readyTarget(order, settings.prepTimeMinutes));
+      return 'placed' as const;
+    });
+    if (result === 'none') return this.getView(orderId);
+    await this.audit.log('system', 'order.paid_online', 'order', orderId, result === 'scheduled' ? { scheduled: true } : undefined);
+    return this.publishUpdate(orderId, result === 'placed');
+  }
+
+  /**
+   * Un pedido programado pasa a cocina: solo a su hora (el sistema) o antes, si el personal
+   * toca "Enviar a cocina ya".
+   */
+  async releaseScheduled(actor: Actor | 'system', id: string): Promise<OrderView | null> {
+    const settings = await this.settings.get();
+    const released = await this.prisma.$transaction(async (tx) => {
+      const order = await tx.order.findUnique({ where: { id } });
+      if (!order) throw new NotFoundException('Orden no encontrada');
+      if (order.status !== 'SCHEDULED') {
+        if (actor === 'system') return false;
+        throw new ConflictException('Esta orden ya no está programada');
+      }
+      await this.placeInTx(tx, id, settings.prepTimeMinutes, readyTarget(order, settings.prepTimeMinutes));
       return true;
     });
-    if (!placed) return this.getView(orderId);
-    await this.audit.log('system', 'order.paid_online', 'order', orderId);
-    return this.publishUpdate(orderId, true);
+    if (!released) return null;
+    await this.audit.log(actor, 'order.release', 'order', id, { early: actor !== 'system' });
+    return this.publishUpdate(id, true);
+  }
+
+  /** Pedidos programados cuya hora de ir a cocina ya llegó. */
+  dueScheduled(now = new Date()) {
+    return this.prisma.order.findMany({
+      where: { status: 'SCHEDULED', releaseAt: { lte: now } },
+      select: { id: true },
+      orderBy: { releaseAt: 'asc' },
+      take: 50,
+    });
   }
 
   /**
@@ -574,7 +626,7 @@ export class OrdersService {
   }
 
   /** Envía la orden a cocina: un ticket por estación. */
-  private async placeInTx(tx: Tx, orderId: string, prepMinutes = 20): Promise<void> {
+  private async placeInTx(tx: Tx, orderId: string, prepMinutes = 20, readyAt?: Date): Promise<void> {
     const items = await tx.orderItem.findMany({ where: { orderId, status: 'ACTIVE' } });
     const fallback = await tx.kitchenStation.findFirst({
       where: { isActive: true },
@@ -594,7 +646,11 @@ export class OrdersService {
     const now = new Date();
     await tx.order.update({
       where: { id: orderId },
-      data: { status: 'PLACED', placedAt: now, estimatedReadyAt: new Date(now.getTime() + prepMinutes * 60_000) },
+      data: {
+        status: 'PLACED',
+        placedAt: now,
+        estimatedReadyAt: new Date(Math.max(now.getTime() + prepMinutes * 60_000, readyAt?.getTime() ?? 0)),
+      },
     });
   }
 
