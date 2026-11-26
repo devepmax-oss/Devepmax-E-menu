@@ -132,8 +132,12 @@ async function main() {
     const waiter = await api('PATCH', `/tables/${tableId}/waiter`, { waiterId: employeeId }, A);
     check('la mesa queda a cargo del empleado', waiter.status === 200, waiter.data);
     const menu = (await api('GET', '/menu?channel=dine_in', undefined, A)).data;
-    const products = (menu?.categories ?? []).flatMap((c: Json) => c.products).filter((p: Json) => p.isAvailable !== false && !(p.modifierGroups ?? []).some((g: Json) => (g.minSelect ?? 0) > 0));
-    const order = await api('POST', '/orders', { clientRequestId: rid(), fulfillmentType: 'DINE_IN', tableId, items: [{ productId: products[0]?.id, quantity: 1, optionIds: [] }] }, A);
+    const products = (menu?.categories ?? []).flatMap((c: Json) => c.products ?? []).filter((p: Json) => p.isAvailable !== false);
+    const product = products[0] as Json | undefined;
+    if (!product) console.log('    (no hay productos disponibles en el menú de mesa: agrega uno para probar las propinas)');
+    // Igual que en la prueba de caja: las opciones obligatorias se llenan con las primeras.
+    const optionIds = (product?.modifierGroups ?? []).flatMap((g: Json) => (g.options ?? []).slice(0, g.minSelect ?? 0).map((o: Json) => o.id));
+    const order = await api('POST', '/orders', { clientRequestId: rid(), fulfillmentType: 'DINE_IN', tableId, items: [{ productId: product?.id, quantity: 1, optionIds }] }, A);
     const bill = ((await api('GET', `/billing/bills?tableId=${tableId}`, undefined, A)).data as Json[])[0];
     const paid = await api('POST', `/billing/bills/${bill?.id}/payments`, { clientRequestId: rid(), method: 'CARD_TERMINAL', amount: n(bill?.due), tip: 4, reference: 'prueba' }, A);
     check('se cobra la cuenta con $4 de propina', order.status === 201 && paid.status === 201, [order.data, paid.data]);
