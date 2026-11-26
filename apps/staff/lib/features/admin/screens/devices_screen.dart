@@ -230,12 +230,17 @@ class _PairingDialogState extends ConsumerState<_PairingDialog> {
                   Container(
                     padding: const EdgeInsets.all(14),
                     decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(20)),
-                    child: QrImageView(
-                      data: pairingQrData(code),
-                      size: 240,
-                      backgroundColor: Colors.white,
-                      errorCorrectionLevel: QrErrorCorrectLevel.M,
-                      semanticsLabel: 'Código QR de vinculación',
+                    // Tamaño fijo: el QR usa LayoutBuilder por dentro y el AlertDialog mide a sus
+                    // hijos (intrínsecos); sin esto la pantalla se traba.
+                    child: SizedBox.square(
+                      dimension: 240,
+                      child: QrImageView(
+                        data: pairingQrData(code),
+                        size: 240,
+                        backgroundColor: Colors.white,
+                        errorCorrectionLevel: QrErrorCorrectLevel.M,
+                        semanticsLabel: 'Código QR de vinculación',
+                      ),
                     ),
                   ),
                   const SizedBox(height: 16),

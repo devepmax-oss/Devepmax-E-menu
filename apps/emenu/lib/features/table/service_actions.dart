@@ -359,12 +359,15 @@ class _PayQrDialogState extends ConsumerState<_PayQrDialog> {
               Container(
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(24)),
-                child: QrImageView(
-                  data: url,
-                  size: qrSize,
-                  backgroundColor: Colors.white,
-                  errorCorrectionLevel: QrErrorCorrectLevel.M,
-                  semanticsLabel: context.tr('Código QR para pagar la cuenta', 'QR code to pay the check'),
+                child: SizedBox.square(
+                  dimension: qrSize,
+                  child: QrImageView(
+                    data: url,
+                    size: qrSize,
+                    backgroundColor: Colors.white,
+                    errorCorrectionLevel: QrErrorCorrectLevel.M,
+                    semanticsLabel: context.tr('Código QR para pagar la cuenta', 'QR code to pay the check'),
+                  ),
                 ),
               ),
               const SizedBox(height: 18),

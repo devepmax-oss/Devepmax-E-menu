@@ -153,7 +153,10 @@ class _ReceiptDialogState extends ConsumerState<_ReceiptDialog> {
                       Container(
                         padding: const EdgeInsets.all(12),
                         decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16)),
-                        child: QrImageView(data: url, size: 200, backgroundColor: Colors.white, semanticsLabel: 'QR del recibo'),
+                        child: SizedBox.square(
+                          dimension: 200,
+                          child: QrImageView(data: url, size: 200, backgroundColor: Colors.white, semanticsLabel: 'QR del recibo'),
+                        ),
                       ),
                       const SizedBox(height: 8),
                       Text('El cliente lo escanea y se lleva el recibo en su celular.', style: TextStyle(color: t.muted, fontSize: 13), textAlign: TextAlign.center),
@@ -373,11 +376,14 @@ class _ChecksDialogState extends ConsumerState<ChecksDialog> {
                       child: Container(
                         padding: const EdgeInsets.all(12),
                         decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16)),
-                        child: QrImageView(
-                          data: check['payUrl'] as String,
-                          size: 200,
-                          backgroundColor: Colors.white,
-                          semanticsLabel: 'QR para pagar la cuenta',
+                        child: SizedBox.square(
+                          dimension: 200,
+                          child: QrImageView(
+                            data: check['payUrl'] as String,
+                            size: 200,
+                            backgroundColor: Colors.white,
+                            semanticsLabel: 'QR para pagar la cuenta',
+                          ),
                         ),
                       ),
                     ),
