@@ -150,13 +150,14 @@ class _ItemsTabState extends ConsumerState<_ItemsTab> {
   }
 
   Future<void> _action(String action, InventoryItem item) async {
-    bool? ok;
-    if (action == 'count') ok = await showDialog<bool>(context: context, builder: (_) => _CountDialog(item: item));
-    if (action == 'waste') ok = await showDialog<bool>(context: context, builder: (_) => _WasteDialog(item: item));
     if (action == 'history') {
       await showDialog<void>(context: context, builder: (_) => _HistoryDialog(item: item));
       return;
     }
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (_) => action == 'count' ? _CountDialog(item: item) : _WasteDialog(item: item),
+    );
     if (ok == true) widget.onChanged();
   }
 
@@ -500,7 +501,7 @@ class _WasteDialogState extends ConsumerState<_WasteDialog> {
               : () async {
                   setState(() => _saving = true);
                   try {
-                    await ref.read(inventoryApiProvider).waste(i.id, v!, _reason.text.trim());
+                    await ref.read(inventoryApiProvider).waste(i.id, v, _reason.text.trim());
                     if (context.mounted) Navigator.pop(context, true);
                   } catch (e) {
                     if (context.mounted) showError(context, e);
