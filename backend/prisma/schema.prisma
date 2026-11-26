@@ -58,6 +58,12 @@ model RestaurantSettings {
   // Reloj checador: descansos de hasta N minutos se pagan (0 = ninguno, 1440 = todos).
   paidBreakMinutes       Int     @default(0)
   clockGraceMinutes      Int     @default(5) // tolerancia antes de contar una llegada tarde
+  // Nómina: horas extra (0 = no aplica esa regla).
+  overtimeWeeklyHours    Int     @default(40)
+  overtimeDailyHours     Int     @default(0)
+  doubleTimeDailyHours   Int     @default(0)
+  overtimeMultiplier     Decimal @default(1.5) @db.Decimal(4, 2)
+  doubleTimeMultiplier   Decimal @default(2) @db.Decimal(4, 2)
   updatedAt             DateTime @updatedAt
 }
 
@@ -111,6 +117,20 @@ model Employee {
   driverProfile DriverProfile?
   timeEntries   TimeEntry[]
   shifts        Shift[]
+  payRates      PayRate[]
+}
+
+/// Tarifa por hora de un empleado desde una fecha (se guarda el historial para la nómina).
+model PayRate {
+  id            String   @id @default(cuid())
+  employeeId    String
+  hourlyRate    Decimal  @db.Decimal(10, 2)
+  effectiveFrom DateTime @db.Date
+  createdById   String?
+  createdAt     DateTime @default(now())
+  employee      Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@unique([employeeId, effectiveFrom])
 }
 
 /// Reloj checador: una jornada (entrada → salida) con sus descansos.

@@ -18,6 +18,7 @@ import '../features/coupons/screens/coupons_screen.dart';
 import '../features/customers/screens/customers_screen.dart';
 import '../features/inventory/screens/inventory_screen.dart';
 import '../features/timeclock/screens/attendance_screen.dart';
+import '../features/payroll/screens/payroll_screen.dart';
 import '../features/reports/screens/reports_screen.dart';
 import '../features/shell/admin_shell.dart';
 import '../features/tables/screens/tables_screen.dart';
@@ -79,6 +80,7 @@ final routerProvider = Provider<GoRouter>((ref) {
           GoRoute(path: '/inventory', builder: (_, __) => const InventoryScreen()),
           GoRoute(path: '/employees', builder: (_, __) => const EmployeesScreen()),
           GoRoute(path: '/attendance', builder: (_, __) => const AttendanceScreen()),
+          GoRoute(path: '/payroll', builder: (_, __) => const PayrollScreen()),
           GoRoute(path: '/devices', builder: (_, __) => const DevicesScreen()),
           GoRoute(path: '/settings', builder: (_, __) => const SettingsScreen()),
         ],

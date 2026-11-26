@@ -32,6 +32,7 @@ const _allDestinations = [
   _Destination('/inventory', 'Inventario', Icons.inventory_2_rounded, 'inventory.manage'),
   _Destination('/employees', 'Empleados', Icons.badge_rounded, 'employees.manage'),
   _Destination('/attendance', 'Horarios', Icons.punch_clock_rounded, 'employees.manage'),
+  _Destination('/payroll', 'Nómina', Icons.payments_rounded, 'payroll.manage'),
   _Destination('/devices', 'Dispositivos', Icons.devices_rounded, 'devices.manage'),
   _Destination('/settings', 'Ajustes', Icons.settings_rounded, 'settings.manage'),
 ];

@@ -7,6 +7,7 @@ import { CustomersModule } from './modules/customers/customers.module';
 import { CouponsModule } from './modules/coupons/coupons.module';
 import { InventoryModule } from './modules/inventory/inventory.module';
 import { TimeclockModule } from './modules/timeclock/timeclock.module';
+import { PayrollModule } from './modules/payroll/payroll.module';
 import { PaymentsModule } from './modules/payments/payments.module';
 import { Module } from '@nestjs/common';
 import { HealthController } from './health/health.controller';
@@ -47,6 +48,7 @@ import { StorageModule } from './storage/storage.module';
     CouponsModule,
     InventoryModule,
     TimeclockModule,
+    PayrollModule,
   ],
   controllers: [HealthController],
 })
