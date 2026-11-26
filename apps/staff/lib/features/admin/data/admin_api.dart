@@ -12,6 +12,8 @@ final adminApiProvider = Provider<AdminApi>((ref) => AdminApi(ref.watch(dioProvi
 
 final employeesProvider = FutureProvider<List<EmployeeView>>((ref) => ref.watch(adminApiProvider).employees());
 final rolesProvider = FutureProvider<List<Role>>((ref) => ref.watch(adminApiProvider).roles());
+final employeeDetailProvider =
+    FutureProvider.autoDispose.family<EmployeeView, String>((ref, id) => ref.watch(adminApiProvider).employee(id));
 final devicesProvider = FutureProvider<List<DeviceView>>((ref) => ref.watch(adminApiProvider).devices());
 final stationsProvider = FutureProvider<List<Station>>((ref) => ref.watch(adminApiProvider).stations());
 
@@ -45,6 +47,37 @@ class AdminApi {
   // Empleados y roles
   Future<List<EmployeeView>> employees() async => (await _list('/employees')).map(EmployeeView.fromJson).toList();
   Future<List<Role>> roles() async => (await _list('/roles')).map(Role.fromJson).toList();
+  Future<EmployeeView> employee(String id) =>
+      _call(() async => EmployeeView.fromJson((await _dio.get<Json>('/employees/$id')).data!));
+  Future<void> uploadEmployeePhoto(String id, Uint8List bytes, String filename) => _call(() {
+        final ext = filename.split('.').last.toLowerCase();
+        final mime = ext == 'png' ? 'image/png' : (ext == 'webp' ? 'image/webp' : 'image/jpeg');
+        return _dio.post('/employees/$id/photo',
+            data: FormData.fromMap({
+              'file': MultipartFile.fromBytes(bytes, filename: filename, contentType: DioMediaType.parse(mime)),
+            }));
+      });
+  Future<void> removeEmployeePhoto(String id) => _call(() => _dio.delete('/employees/$id/photo'));
+  Future<int> logoutAll(String id) => _call(() async {
+        final response = await _dio.post<Json>('/employees/$id/logout-all');
+        return (response.data?['closed'] as num?)?.toInt() ?? 0;
+      });
+  Future<(List<EmployeeEvent>, String?)> history(String id, {String scope = 'all', String? cursor}) =>
+      _call(() async {
+        final response = await _dio.get<Json>('/employees/$id/history',
+            queryParameters: {'scope': scope, if (cursor != null) 'cursor': cursor});
+        final items = ((response.data!['items'] as List?) ?? const [])
+            .map((e) => EmployeeEvent.fromJson(e as Json))
+            .toList();
+        return (items, response.data!['nextCursor'] as String?);
+      });
+  Future<Role> saveRole(String? id, Json data) => _call(() async {
+        final response = id == null
+            ? await _dio.post<Json>('/roles', data: data)
+            : await _dio.patch<Json>('/roles/$id', data: data);
+        return Role.fromJson(response.data!);
+      });
+  Future<void> deleteRole(String id) => _call(() => _dio.delete('/roles/$id'));
   /// Devuelven el empleado; `generatedPin` viene solo si se generó un PIN (se muestra una única vez).
   Future<Json> createEmployee(Json data) =>
       _call(() async => (await _dio.post<Json>('/employees', data: data)).data!);

@@ -78,6 +78,7 @@ model Role {
   id          String     @id @default(cuid())
   name        String     @unique // Admin, Gerente, Cajero, Mesero, Cocina, Repartidor
   permissions String[] // códigos, ver sección 5
+  description String?
   isSystem    Boolean    @default(false)
   employees   Employee[]
 }
@@ -91,6 +92,16 @@ model Employee {
   pinHash       String?        @unique // HMAC del PIN (login rápido en POS/KDS)
   roleId        String
   isActive      Boolean        @default(true)
+  // Ficha
+  jobTitle          String? // puesto visible ("Chef de línea", "Hostess")
+  photoUrl          String?
+  hireDate          DateTime? @db.Date
+  address           String?
+  emergencyName     String?
+  emergencyPhone    String?
+  notes             String? // notas internas de la gerencia
+  terminatedAt      DateTime? // baja: el empleado queda inactivo y su historial se conserva
+  terminationReason String?
   createdAt     DateTime       @default(now())
   updatedAt     DateTime       @updatedAt
   role          Role           @relation(fields: [roleId], references: [id])
@@ -755,6 +766,7 @@ model AuditLog {
 
   @@index([entityType, entityId])
   @@index([createdAt])
+  @@index([actor, createdAt])
 }
 
 model IdempotencyKey {
