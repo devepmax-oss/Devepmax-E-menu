@@ -53,6 +53,15 @@ final menuInsightsProvider = FutureProvider.autoDispose.family<MJson, (String, S
   }
 });
 
+final kitchenTimesProvider = FutureProvider.autoDispose.family<MJson, (String, String)>((ref, period) async {
+  final dio = ref.watch(dioProvider);
+  try {
+    return (await dio.get<MJson>('/dashboard/kitchen', queryParameters: {'from': period.$1, 'to': period.$2})).data!;
+  } catch (error) {
+    throw ApiException.from(error);
+  }
+});
+
 const _classLabels = {'star': 'Estrella', 'plowhorse': 'Caballo de batalla', 'puzzle': 'Enigma', 'dog': 'Perro'};
 const _classIcons = {
   'star': Icons.star_rounded,
@@ -241,16 +250,25 @@ class _Tag extends StatelessWidget {
 }
 
 /// Esqueleto común: período arriba y el contenido del análisis abajo.
+/// [watch] y [refresh] dicen de dónde salen los datos (menú o cocina).
 class _InsightsFrame extends ConsumerWidget {
-  const _InsightsFrame({required this.period, required this.onPeriod, required this.builder});
+  const _InsightsFrame({required this.period, required this.onPeriod, required this.builder, this.kitchen = false});
   final MenuPeriod period;
   final ValueChanged<MenuPeriod> onPeriod;
   final Widget Function(BuildContext context, MJson data) builder;
+  final bool kitchen;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final t = BrandTokens.of(context);
-    final async = ref.watch(menuInsightsProvider(period.key));
+    final async = kitchen ? ref.watch(kitchenTimesProvider(period.key)) : ref.watch(menuInsightsProvider(period.key));
+    void refresh() {
+      if (kitchen) {
+        ref.invalidate(kitchenTimesProvider(period.key));
+      } else {
+        ref.invalidate(menuInsightsProvider(period.key));
+      }
+    }
     return ColoredBox(
       color: t.bg,
       child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
@@ -259,9 +277,9 @@ class _InsightsFrame extends ConsumerWidget {
         Expanded(
           child: async.when(
             loading: () => const Center(child: CircularProgressIndicator()),
-            error: (e, _) => ErrorView(error: e, onRetry: () => ref.invalidate(menuInsightsProvider(period.key))),
+            error: (e, _) => ErrorView(error: e, onRetry: refresh),
             data: (d) => RefreshIndicator(
-              onRefresh: () async => ref.invalidate(menuInsightsProvider(period.key)),
+              onRefresh: () async => refresh(),
               child: builder(context, d),
             ),
           ),
@@ -689,4 +707,215 @@ class PromotionsInsightsView extends StatelessWidget {
       ],
     );
   }
+}
+
+// ───────────────────────── Cocina ─────────────────────────
+
+const _weekdayNames = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'];
+
+String _min(Object? v) => v == null ? '—' : '${_d(v).toStringAsFixed(_d(v) < 10 ? 1 : 0)} min';
+
+String _hourLabel(int h) {
+  final twelve = h % 12 == 0 ? 12 : h % 12;
+  return '$twelve ${h < 12 ? 'a. m.' : 'p. m.'}';
+}
+
+/// Pestaña Cocina: cuánto tarda un ticket desde que llega hasta que se marca Listo.
+class KitchenTimesView extends StatelessWidget {
+  const KitchenTimesView({super.key, required this.period, required this.onPeriod});
+  final MenuPeriod period;
+  final ValueChanged<MenuPeriod> onPeriod;
+
+  @override
+  Widget build(BuildContext context) => _InsightsFrame(period: period, onPeriod: onPeriod, builder: _content, kitchen: true);
+
+  Widget _content(BuildContext context, MJson data) {
+    final t = BrandTokens.of(context);
+    final pad = pagePadding(context);
+    final s = (data['summary'] as MJson?) ?? const {};
+    final target = _i(data['targetMinutes']);
+    final stations = ((data['stations'] as List?) ?? const []).cast<MJson>();
+    final dishes = ((data['dishes'] as List?) ?? const []).cast<MJson>();
+    final hours = ((data['hours'] as List?) ?? const []).cast<MJson>();
+    final weekdays = ((data['weekdays'] as List?) ?? const []).cast<MJson>();
+    final slowest = ((data['slowest'] as List?) ?? const []).cast<MJson>();
+    final wait = (s['wait'] as MJson?) ?? const {};
+    final prep = (s['prep'] as MJson?) ?? const {};
+    Color lateColor(Object? pct) => pct == null ? t.muted : (_d(pct) <= 10 ? t.success : (_d(pct) <= 25 ? t.warning : t.danger));
+
+    if (_i(s['tickets']) == 0) {
+      return ListView(children: const [SizedBox(height: 60), EmptyState(icon: Icons.soup_kitchen_rounded, message: 'No hay tickets de cocina en este período.')]);
+    }
+
+    /// Barras horizontales de minutos promedio; en rojo las que pasan la meta.
+    Widget bars(List<(String label, String detail, double minutes, Object? latePct)> rows) {
+      final max = rows.fold<double>(target.toDouble(), (a, r) => math.max(a, r.$3));
+      return Column(children: [
+        for (final r in rows)
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 5),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+              Row(children: [
+                Expanded(
+                  child: Text.rich(
+                    TextSpan(children: [
+                      TextSpan(text: r.$1, style: const TextStyle(fontWeight: FontWeight.w700)),
+                      TextSpan(text: '  ${r.$2}', style: TextStyle(color: t.muted, fontSize: 12.5)),
+                    ]),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Text(_min(r.$3), style: TextStyle(fontWeight: FontWeight.w800, color: r.$3 > target ? t.danger : null)),
+                if (r.$4 != null) ...[
+                  const SizedBox(width: 8),
+                  SizedBox(
+                    width: 74,
+                    child: Text('${_pct(r.$4)} tarde', textAlign: TextAlign.end, style: TextStyle(color: lateColor(r.$4), fontSize: 12.5, fontWeight: FontWeight.w700)),
+                  ),
+                ],
+              ]),
+              const SizedBox(height: 4),
+              ClipRRect(
+                borderRadius: BorderRadius.circular(6),
+                child: LinearProgressIndicator(
+                  value: max <= 0 ? 0 : r.$3 / max,
+                  minHeight: 8,
+                  color: r.$3 > target ? t.danger : t.primary,
+                  backgroundColor: t.surface2,
+                ),
+              ),
+            ]),
+          ),
+      ]);
+    }
+
+    return ListView(
+      padding: EdgeInsets.fromLTRB(pad, 4, pad, 32),
+      children: [
+        _Grid(minWidth: 200, children: [
+          _Kpi(
+            label: 'Tiempo promedio',
+            value: _min(s['average']),
+            icon: Icons.timer_rounded,
+            note: '9 de cada 10 en ${_min(s['p90'])} o menos',
+          ),
+          _Kpi(
+            label: 'Tarde (más de $target min)',
+            value: _pct(s['latePct']),
+            icon: Icons.timer_off_rounded,
+            note: '${_i(s['late'])} de ${_i(s['count'])} tickets',
+            noteColor: lateColor(s['latePct']),
+          ),
+          _Kpi(label: 'Espera', value: _min(wait['average']), icon: Icons.hourglass_top_rounded, note: 'de que llega a que lo empiezan'),
+          _Kpi(label: 'Preparación', value: _min(prep['average']), icon: Icons.local_fire_department_rounded, note: 'de que lo empiezan a Listo'),
+        ]),
+        if (_i(s['notMarked']) > 0) ...[
+          const SizedBox(height: 12),
+          Container(
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(color: t.warningSoft, borderRadius: BorderRadius.circular(16)),
+            child: Row(children: [
+              Icon(Icons.info_rounded, color: t.warning),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  '${_i(s['notMarked'])} de ${_i(s['tickets'])} tickets nunca se marcaron Listo, así que no cuentan en los tiempos. '
+                  'Pide a la cocina que use Listo en su pantalla (o en Órdenes) para que la medida sea completa.',
+                ),
+              ),
+            ]),
+          ),
+        ],
+        const SizedBox(height: 6),
+        Text('La meta es el tiempo de preparación de Ajustes ($target min); un plato con su propio tiempo se compara contra el suyo.',
+            style: TextStyle(color: t.muted, fontSize: 12.5)),
+        const SizedBox(height: 14),
+        _Grid(minWidth: 340, children: [
+          _Section(
+            title: 'Por estación',
+            subtitle: 'Promedio de cada estación (espera + preparación).',
+            children: [
+              bars([
+                for (final x in stations)
+                  (
+                    '${x['name']}',
+                    '${_i(x['count'])} tickets · espera ${_min(x['averageWait'])} · prep. ${_min(x['averagePrep'])}',
+                    _d(x['average']),
+                    x['latePct'],
+                  ),
+              ]),
+            ],
+          ),
+          _Section(
+            title: 'Por hora del día',
+            subtitle: 'Cuándo se atrasa la cocina.',
+            children: [
+              bars([for (final h in hours) (_hourLabel(_i(h['hour'])), '${_i(h['count'])} tickets', _d(h['average']), h['latePct'])]),
+            ],
+          ),
+          _Section(
+            title: 'Por día de la semana',
+            children: [
+              bars([
+                for (final w in weekdays)
+                  (_weekdayNames[_i(w['weekday']).clamp(0, 6)], '${_i(w['count'])} tickets', _d(w['average']), w['latePct']),
+              ]),
+            ],
+          ),
+          _Section(
+            title: 'Platos más lentos',
+            subtitle: 'Tiempo de los tickets donde iba cada plato.',
+            children: [
+              if (dishes.isEmpty)
+                Text('Sin datos.', style: TextStyle(color: t.muted))
+              else
+                bars([
+                  for (final d in dishes.take(12))
+                    (
+                      '${d['name']}',
+                      '${_i(d['count'])} tickets${d['ownTarget'] == true ? ' · meta ${_i(d['targetMinutes'])} min' : ''}',
+                      _d(d['average']),
+                      d['latePct'],
+                    ),
+                ]),
+            ],
+          ),
+        ]),
+        const SizedBox(height: 14),
+        _Section(
+          title: 'Tickets más lentos',
+          children: [
+            for (final x in slowest)
+              Container(
+                padding: const EdgeInsets.symmetric(vertical: 10),
+                decoration: BoxDecoration(border: Border(bottom: BorderSide(color: t.line))),
+                child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Expanded(
+                    child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                      Text('Orden #${x['orderNumber']} · ${x['station']}', style: const TextStyle(fontWeight: FontWeight.w700)),
+                      Text('${x['items']}', maxLines: 2, overflow: TextOverflow.ellipsis, style: TextStyle(color: t.muted, fontSize: 13)),
+                      Text(_when(x['createdAt']), style: TextStyle(color: t.faint, fontSize: 12.5)),
+                    ]),
+                  ),
+                  const SizedBox(width: 12),
+                  Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
+                    Text(_min(x['minutes']), style: TextStyle(fontWeight: FontWeight.w800, color: _d(x['minutes']) > target ? t.danger : null)),
+                    if (x['wait'] != null) Text('espera ${_min(x['wait'])}', style: TextStyle(color: t.muted, fontSize: 12.5)),
+                  ]),
+                ]),
+              ),
+          ],
+        ),
+      ],
+    );
+  }
+}
+
+String _when(Object? isoDate) {
+  final d = DateTime.tryParse('$isoDate')?.toLocal();
+  if (d == null) return '';
+  final h = d.hour % 12 == 0 ? 12 : d.hour % 12;
+  return '${_short(d)}, $h:${d.minute.toString().padLeft(2, '0')} ${d.hour < 12 ? 'a. m.' : 'p. m.'}';
 }

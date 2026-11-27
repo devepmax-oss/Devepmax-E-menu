@@ -46,10 +46,11 @@ String _dayTitle(String iso) {
 String _percent(double v) => '${v.toStringAsFixed(v.abs() < 10 ? 1 : 0)} %';
 
 /// Pestañas del Panel, en orden. `/dashboard?tab=ventas` abre directo una de ellas.
-const panelTabs = ['hoy', 'ventas', 'menu', 'promociones'];
+const panelTabs = ['hoy', 'ventas', 'menu', 'promociones', 'cocina'];
 
 /// Panel del dueño: Hoy (alertas y lo que pasa ahora), Ventas (los reportes por período),
-/// Menú (qué platos venden y cuánto dejan) y Promociones (cuánto cuestan los descuentos).
+/// Menú (qué platos venden y cuánto dejan), Promociones (cuánto cuestan los descuentos) y
+/// Cocina (cuánto tarda cada ticket).
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key, this.initialTab});
   final String? initialTab;
@@ -59,7 +60,7 @@ class DashboardScreen extends StatefulWidget {
 }
 
 class _DashboardScreenState extends State<DashboardScreen> {
-  // Menú y Promociones comparten el período.
+  // Menú, Promociones y Cocina comparten el período.
   MenuPeriod _menuPeriod = MenuPeriod.presets()[1];
 
   @override
@@ -81,6 +82,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
               Tab(icon: Icon(Icons.insights_rounded), text: 'Ventas'),
               Tab(icon: Icon(Icons.restaurant_menu_rounded), text: 'Menú'),
               Tab(icon: Icon(Icons.local_offer_rounded), text: 'Promociones'),
+              Tab(icon: Icon(Icons.soup_kitchen_rounded), text: 'Cocina'),
             ],
           ),
         ),
@@ -91,6 +93,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
             const _KeepAlive(child: ReportsScreen(embedded: true)),
             MenuInsightsView(period: _menuPeriod, onPeriod: (p) => setState(() => _menuPeriod = p)),
             PromotionsInsightsView(period: _menuPeriod, onPeriod: (p) => setState(() => _menuPeriod = p)),
+            KitchenTimesView(period: _menuPeriod, onPeriod: (p) => setState(() => _menuPeriod = p)),
           ],
         ),
       ),

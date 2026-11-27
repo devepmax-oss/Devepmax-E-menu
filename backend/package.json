@@ -38,6 +38,7 @@
     "smoke:scheduled": "tsx scripts/smoke-scheduled.ts",
     "smoke:dashboard": "tsx scripts/smoke-dashboard.ts",
     "smoke:menu": "tsx scripts/smoke-menu.ts",
+    "smoke:kitchen-times": "tsx scripts/smoke-kitchen-times.ts",
     "demo:orders": "tsx scripts/demo-orders.ts"
   },
   "dependencies": {
