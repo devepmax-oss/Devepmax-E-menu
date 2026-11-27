@@ -10,6 +10,8 @@ import '../../../core/api/api_client.dart';
 import '../../../core/api/api_exception.dart';
 import '../../../core/ui/feedback.dart';
 import '../../menu/widgets/common.dart';
+import '../../reports/screens/reports_screen.dart';
+import 'menu_insights_view.dart';
 
 typedef DJson = Map<String, dynamic>;
 
@@ -43,16 +45,89 @@ String _dayTitle(String iso) {
 
 String _percent(double v) => '${v.toStringAsFixed(v.abs() < 10 ? 1 : 0)} %';
 
-/// Panel del dueño: cómo va hoy contra la semana pasada, qué pasa ahora y qué pide atención.
-/// Se actualiza solo cada minuto.
-class DashboardScreen extends ConsumerStatefulWidget {
-  const DashboardScreen({super.key});
+/// Pestañas del Panel, en orden. `/dashboard?tab=ventas` abre directo una de ellas.
+const panelTabs = ['hoy', 'ventas', 'menu', 'promociones'];
+
+/// Panel del dueño: Hoy (alertas y lo que pasa ahora), Ventas (los reportes por período),
+/// Menú (qué platos venden y cuánto dejan) y Promociones (cuánto cuestan los descuentos).
+class DashboardScreen extends StatefulWidget {
+  const DashboardScreen({super.key, this.initialTab});
+  final String? initialTab;
 
   @override
-  ConsumerState<DashboardScreen> createState() => _DashboardScreenState();
+  State<DashboardScreen> createState() => _DashboardScreenState();
 }
 
-class _DashboardScreenState extends ConsumerState<DashboardScreen> {
+class _DashboardScreenState extends State<DashboardScreen> {
+  // Menú y Promociones comparten el período.
+  MenuPeriod _menuPeriod = MenuPeriod.presets()[1];
+
+  @override
+  Widget build(BuildContext context) {
+    final t = BrandTokens.of(context);
+    final initial = panelTabs.indexOf(widget.initialTab ?? 'hoy');
+    return DefaultTabController(
+      length: panelTabs.length,
+      initialIndex: initial < 0 ? 0 : initial,
+      child: Scaffold(
+        backgroundColor: t.bg,
+        appBar: AppBar(
+          title: const Text('Panel'),
+          bottom: const TabBar(
+            isScrollable: true,
+            tabAlignment: TabAlignment.start,
+            tabs: [
+              Tab(icon: Icon(Icons.today_rounded), text: 'Hoy'),
+              Tab(icon: Icon(Icons.insights_rounded), text: 'Ventas'),
+              Tab(icon: Icon(Icons.restaurant_menu_rounded), text: 'Menú'),
+              Tab(icon: Icon(Icons.local_offer_rounded), text: 'Promociones'),
+            ],
+          ),
+        ),
+        body: TabBarView(
+          physics: const NeverScrollableScrollPhysics(),
+          children: [
+            const TodayView(),
+            const _KeepAlive(child: ReportsScreen(embedded: true)),
+            MenuInsightsView(period: _menuPeriod, onPeriod: (p) => setState(() => _menuPeriod = p)),
+            PromotionsInsightsView(period: _menuPeriod, onPeriod: (p) => setState(() => _menuPeriod = p)),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Conserva el estado de una pestaña (por ejemplo, el período elegido en Ventas) al cambiar de pestaña.
+class _KeepAlive extends StatefulWidget {
+  const _KeepAlive({required this.child});
+  final Widget child;
+
+  @override
+  State<_KeepAlive> createState() => _KeepAliveState();
+}
+
+class _KeepAliveState extends State<_KeepAlive> with AutomaticKeepAliveClientMixin {
+  @override
+  bool get wantKeepAlive => true;
+
+  @override
+  Widget build(BuildContext context) {
+    super.build(context);
+    return widget.child;
+  }
+}
+
+/// Pestaña Hoy: cómo va hoy contra la semana pasada, qué pasa ahora y qué pide atención.
+/// Se actualiza sola cada minuto.
+class TodayView extends ConsumerStatefulWidget {
+  const TodayView({super.key});
+
+  @override
+  ConsumerState<TodayView> createState() => _TodayViewState();
+}
+
+class _TodayViewState extends ConsumerState<TodayView> {
   Timer? _timer;
 
   @override
@@ -72,31 +147,24 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     final t = BrandTokens.of(context);
     final async = ref.watch(dashboardTodayProvider);
     final data = async.value;
-    return Scaffold(
-      backgroundColor: t.bg,
-      appBar: AppBar(
-        title: const Text('Panel'),
-        actions: [
-          if (async.isLoading && data != null)
-            const Padding(padding: EdgeInsets.all(16), child: SizedBox.square(dimension: 18, child: CircularProgressIndicator(strokeWidth: 2))),
-          IconButton(tooltip: 'Actualizar', icon: const Icon(Icons.refresh_rounded), onPressed: () => ref.invalidate(dashboardTodayProvider)),
-          const SizedBox(width: 12),
-        ],
-      ),
-      body: data != null
-          ? _DashboardBody(data: data)
+    return ColoredBox(
+      color: t.bg,
+      child: data != null
+          ? _DashboardBody(data: data, refreshing: async.isLoading, onRefresh: () => ref.invalidate(dashboardTodayProvider))
           : async.when(
               loading: () => const Center(child: CircularProgressIndicator()),
               error: (e, _) => ErrorView(error: e, onRetry: () => ref.invalidate(dashboardTodayProvider)),
-              data: (d) => _DashboardBody(data: d),
+              data: (d) => _DashboardBody(data: d, refreshing: false, onRefresh: () => ref.invalidate(dashboardTodayProvider)),
             ),
     );
   }
 }
 
 class _DashboardBody extends StatelessWidget {
-  const _DashboardBody({required this.data});
+  const _DashboardBody({required this.data, required this.refreshing, required this.onRefresh});
   final DJson data;
+  final bool refreshing;
+  final VoidCallback onRefresh;
 
   @override
   Widget build(BuildContext context) {
@@ -159,11 +227,17 @@ class _DashboardBody extends StatelessWidget {
     ];
 
     return RefreshIndicator(
-      onRefresh: () async => ProviderScope.containerOf(context).invalidate(dashboardTodayProvider),
+      onRefresh: () async => onRefresh(),
       child: ListView(
-        padding: EdgeInsets.fromLTRB(pad, 8, pad, 32),
+        padding: EdgeInsets.fromLTRB(pad, 12, pad, 32),
         children: [
-          Text(_dayTitle('${data['businessDate']}'), style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800)),
+          Row(children: [
+            Expanded(child: Text(_dayTitle('${data['businessDate']}'), style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800))),
+            if (refreshing)
+              const Padding(padding: EdgeInsets.all(12), child: SizedBox.square(dimension: 18, child: CircularProgressIndicator(strokeWidth: 2)))
+            else
+              IconButton(tooltip: 'Actualizar', icon: const Icon(Icons.refresh_rounded), onPressed: onRefresh),
+          ]),
           Text(
             'Día de operación desde las 4 a. m.${at == null ? '' : ' · actualizado ${_clock(at)}'} · comparado con el ${_dayTitle('${data['compareDate']}').toLowerCase()}',
             style: TextStyle(color: t.muted, fontSize: 12.5),

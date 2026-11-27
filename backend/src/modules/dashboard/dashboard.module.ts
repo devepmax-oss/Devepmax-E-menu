@@ -2,11 +2,12 @@ import { Module } from '@nestjs/common';
 import { SettingsModule } from '../settings/settings.module';
 import { DashboardController } from './dashboard.controller';
 import { DashboardService } from './dashboard.service';
+import { MenuInsightsService } from './menu-insights.service';
 
 @Module({
   imports: [SettingsModule],
   controllers: [DashboardController],
-  providers: [DashboardService],
-  exports: [DashboardService],
+  providers: [DashboardService, MenuInsightsService],
+  exports: [DashboardService, MenuInsightsService],
 })
 export class DashboardModule {}

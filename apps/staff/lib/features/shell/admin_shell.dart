@@ -18,12 +18,11 @@ class _Destination {
 }
 
 const _allDestinations = [
-  _Destination('/dashboard', 'Panel', Icons.space_dashboard_rounded, 'reports.view'),
+  _Destination('/dashboard', 'Panel y reportes', Icons.space_dashboard_rounded, 'reports.view'),
   _Destination('/orders', 'Órdenes', Icons.receipt_long_rounded, 'orders.create'),
   _Destination('/tables', 'Mesas', Icons.table_restaurant_rounded, 'tables.operate'),
   _Destination('/billing', 'Caja', Icons.point_of_sale_rounded, 'payments.take'),
   _Destination('/waiter', 'Mis mesas', Icons.room_service_rounded, 'tables.operate'),
-  _Destination('/reports', 'Reportes', Icons.insights_rounded, 'reports.view'),
   _Destination('/customers', 'Clientes', Icons.people_alt_rounded, 'customers.manage'),
   _Destination('/menu', 'Menú', Icons.restaurant_menu_rounded, 'menu.manage'),
   _Destination('/modifiers', 'Modificadores', Icons.tune_rounded, 'menu.manage'),

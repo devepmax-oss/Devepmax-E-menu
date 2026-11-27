@@ -20,7 +20,6 @@ import '../features/inventory/screens/inventory_screen.dart';
 import '../features/timeclock/screens/attendance_screen.dart';
 import '../features/payroll/screens/payroll_screen.dart';
 import '../features/dashboard/screens/dashboard_screen.dart';
-import '../features/reports/screens/reports_screen.dart';
 import '../features/shell/admin_shell.dart';
 import '../features/tables/screens/tables_screen.dart';
 import '../features/tables/screens/waiter_screen.dart';
@@ -71,8 +70,13 @@ final routerProvider = Provider<GoRouter>((ref) {
               billId: state.uri.queryParameters['bill'],
             ),
           ),
-          GoRoute(path: '/dashboard', builder: (_, __) => const DashboardScreen()),
-          GoRoute(path: '/reports', builder: (_, __) => const ReportsScreen()),
+          // Panel: Hoy, Ventas (los reportes), Menú y Promociones. /dashboard?tab=ventas abre una pestaña.
+          GoRoute(
+            path: '/dashboard',
+            builder: (_, state) => DashboardScreen(key: ValueKey(state.uri.toString()), initialTab: state.uri.queryParameters['tab']),
+          ),
+          // Los reportes viven ahora dentro del Panel.
+          GoRoute(path: '/reports', redirect: (_, __) => '/dashboard?tab=ventas'),
           GoRoute(path: '/customers', builder: (_, __) => const CustomersScreen()),
           GoRoute(path: '/menu', builder: (_, __) => const MenuScreen()),
           GoRoute(path: '/modifiers', builder: (_, __) => const ModifierGroupsScreen()),

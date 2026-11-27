@@ -82,7 +82,10 @@ final salesReportProvider = FutureProvider.autoDispose.family<RJson, (String, St
 /// Reportes: ventas de un día (cierre del día) o de un período, con gráficas, comparación con el
 /// período anterior, exportar a Excel e imprimir el cierre en la impresora de tickets.
 class ReportsScreen extends ConsumerStatefulWidget {
-  const ReportsScreen({super.key});
+  const ReportsScreen({super.key, this.embedded = false});
+
+  /// Dentro del Panel (pestaña Ventas): sin su propia barra superior.
+  final bool embedded;
 
   @override
   ConsumerState<ReportsScreen> createState() => _ReportsScreenState();
@@ -155,21 +158,21 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen> {
     final presets = _presets();
     final today = _businessToday();
 
-    return Scaffold(
-      backgroundColor: t.bg,
-      appBar: AppBar(
-        title: const Text('Reportes'),
-        actions: [
-          IconButton(tooltip: 'Actualizar', icon: const Icon(Icons.refresh_rounded), onPressed: () => ref.invalidate(salesReportProvider(_period.key))),
-          AppBarAction(icon: Icons.table_view_rounded, label: 'Excel', filled: false, onPressed: _busy || report == null ? null : _export),
-          if (canPrintHere && _period.singleDay && report != null) ...[
-            const SizedBox(width: 8),
-            AppBarAction(icon: Icons.print_rounded, label: 'Imprimir cierre', filled: false, onPressed: _busy ? null : () => _print(report)),
-          ],
-          const SizedBox(width: 12),
-        ],
-      ),
-      body: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+    final actions = <Widget>[
+      IconButton(tooltip: 'Actualizar', icon: const Icon(Icons.refresh_rounded), onPressed: () => ref.invalidate(salesReportProvider(_period.key))),
+      AppBarAction(icon: Icons.table_view_rounded, label: 'Excel', filled: false, onPressed: _busy || report == null ? null : _export),
+      if (canPrintHere && _period.singleDay && report != null) ...[
+        const SizedBox(width: 8),
+        AppBarAction(icon: Icons.print_rounded, label: 'Imprimir cierre', filled: false, onPressed: _busy ? null : () => _print(report)),
+      ],
+    ];
+
+    final body = Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        if (widget.embedded)
+          Padding(
+            padding: EdgeInsets.fromLTRB(pagePadding(context), 8, pagePadding(context) - 4, 4),
+            child: Wrap(alignment: WrapAlignment.end, crossAxisAlignment: WrapCrossAlignment.center, spacing: 4, runSpacing: 4, children: actions),
+          ),
         SizedBox(
           height: 48,
           child: ListView(
@@ -221,7 +224,13 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen> {
             data: (r) => _ReportBody(report: r),
           ),
         ),
-      ]),
+      ]);
+
+    if (widget.embedded) return ColoredBox(color: t.bg, child: body);
+    return Scaffold(
+      backgroundColor: t.bg,
+      appBar: AppBar(title: const Text('Reportes'), actions: [...actions, const SizedBox(width: 12)]),
+      body: body,
     );
   }
 }
