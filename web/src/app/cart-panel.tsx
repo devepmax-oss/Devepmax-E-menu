@@ -54,8 +54,8 @@ export function TotalsSummary({ quote, currency, tip, mode }: { quote: Quote | n
   const total = toNumber(t.total) + tipValue;
   const row = (label: string, value: string, className = '') => (
     <div className={`flex items-center justify-between gap-3 ${className}`}>
-      <dt>{label}</dt>
-      <dd className="m-0 tabular-nums">{value}</dd>
+      <dt className={className ? '' : 'text-muted'}>{label}</dt>
+      <dd className={`m-0 tabular-nums ${className ? '' : 'font-semibold text-ink'}`}>{value}</dd>
     </div>
   );
   return (

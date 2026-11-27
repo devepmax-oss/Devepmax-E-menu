@@ -456,23 +456,23 @@ class _PayDialogState extends ConsumerState<_PayDialog> {
                 padding: const EdgeInsets.only(top: 10),
                 child: Text(problem, style: TextStyle(color: t.danger, fontWeight: FontWeight.w700)),
               ),
+            const SizedBox(height: 16),
+            SwipeToConfirm(
+              label: useTap
+                  ? 'Desliza: cobrar con este teléfono ${formatMoney(_charged)}'
+                  : (useReader ? 'Desliza: enviar al lector ${formatMoney(_charged)}' : 'Desliza para cobrar ${formatMoney(_charged)}'),
+              busyLabel: useReader ? 'Enviando al lector…' : 'Cobrando…',
+              hint: 'Desliza la flecha hasta el final para cobrar',
+              height: compact ? 58 : 64,
+              busy: _busy,
+              icon: useTap || useReader ? Icons.contactless_rounded : null,
+              onConfirm: problem == null ? (useTap ? _chargeHere : (useReader ? () => _sendToReader(reader) : _confirm)) : null,
+            ),
           ]),
         ),
       ),
       actions: [
         TextButton(onPressed: _busy ? null : () => Navigator.pop(context), child: const Text('Cancelar')),
-        FilledButton.icon(
-          style: FilledButton.styleFrom(minimumSize: Size(compact ? 0 : 200, 52)),
-          onPressed: problem == null && !_busy
-              ? (useTap ? _chargeHere : (useReader ? () => _sendToReader(reader) : _confirm))
-              : null,
-          icon: _busy
-              ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
-              : Icon(useTap || useReader ? Icons.contactless_rounded : Icons.check_rounded),
-          label: Text(useTap
-              ? 'Cobrar con este teléfono ${formatMoney(_charged)}'
-              : (useReader ? 'Enviar al lector ${formatMoney(_charged)}' : 'Cobrar ${formatMoney(_charged)}')),
-        ),
       ],
     );
   }
@@ -496,9 +496,9 @@ extension on _PayDialogState {
         final bill = charge.bill;
         final card = bill?.payments.where((p) => p.status == 'SUCCEEDED').lastOrNull?.reference;
         body = Column(mainAxisSize: MainAxisSize.min, children: [
-          Icon(Icons.check_circle_rounded, size: 96, color: t.success),
-          const SizedBox(height: 12),
-          Text('Aprobado', style: text.headlineMedium),
+          DmSuccessMark(size: 112, color: t.success),
+          const SizedBox(height: 16),
+          Text('Aprobado', style: text.headlineMedium?.copyWith(fontWeight: FontWeight.w800)),
           if (card != null) Text(card, style: TextStyle(color: t.muted, fontSize: 16)),
           if (charge.tip > 0) Padding(
             padding: const EdgeInsets.only(top: 6),

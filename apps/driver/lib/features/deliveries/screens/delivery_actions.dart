@@ -49,22 +49,9 @@ class _DeliveryActionButtonState extends ConsumerState<DeliveryActionButton> {
     }
   }
 
+  /// Deslizar ya es la confirmación: no hace falta preguntar otra vez.
   Future<void> _deliver() async {
     final d = widget.delivery;
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text('¿Entregaste el pedido #${d.number}?'),
-        content: Text(d.paid
-            ? 'Ya está pagado: no cobres nada.'
-            : 'Cobra ${formatMoney(d.amountDue)} antes de marcarlo como entregado.'),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Todavía no')),
-          FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('Sí, entregado')),
-        ],
-      ),
-    );
-    if (ok != true) return;
     await _run((api) => api.delivered(d.assignmentId), done: 'Pedido #${d.number} entregado');
   }
 
@@ -102,11 +89,26 @@ class _DeliveryActionButtonState extends ConsumerState<DeliveryActionButton> {
           child: label(Icons.shopping_bag_rounded, 'Lo recogí'),
         );
       case 'PICKED_UP':
-        return FilledButton(
-          style: style,
-          onPressed: _busy ? null : _deliver,
-          child: label(Icons.where_to_vote_rounded, 'Entregado'),
-        );
+        final t = BrandTokens.of(context);
+        return Column(crossAxisAlignment: CrossAxisAlignment.stretch, mainAxisSize: MainAxisSize.min, children: [
+          Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: Text(
+              d.paid ? 'Ya está pagado: no cobres nada.' : 'Cobra ${formatMoney(d.amountDue)} antes de deslizar.',
+              textAlign: TextAlign.center,
+              style: TextStyle(color: d.paid ? t.muted : t.warning, fontWeight: FontWeight.w700),
+            ),
+          ),
+          SwipeToConfirm(
+            label: 'Desliza: entregado',
+            busyLabel: 'Guardando…',
+            hint: 'Desliza la flecha hasta el final cuando entregues el pedido',
+            height: widget.large ? 64 : 56,
+            busy: _busy,
+            icon: Icons.where_to_vote_rounded,
+            onConfirm: _deliver,
+          ),
+        ]);
       default:
         return const SizedBox.shrink();
     }

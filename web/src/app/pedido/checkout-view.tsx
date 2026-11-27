@@ -1,10 +1,11 @@
 'use client';
 
-import { CalendarClock, ChevronLeft, CreditCard, MapPin, Store, TicketPercent, Wallet, X, Zap } from 'lucide-react';
+import { CalendarClock, Check, ChevronLeft, CreditCard, MapPin, Store, TicketPercent, Wallet, X, Zap } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useLang, useT } from '@/components/i18n';
+import { SuccessMark, SwipeButton } from '@/components/swipe-button';
 import { Button, Notice } from '@/components/ui';
 import { account, pendingCoupon, useAccount, type LoyaltyReward } from '@/lib/account';
 import { api, ApiError } from '@/lib/api';
@@ -69,6 +70,41 @@ function dayLabel(day: string, timezone: string, lang: Lang) {
   );
 }
 
+/** Pantalla de "¡Pedido confirmado!" que aparece al terminar, antes del seguimiento. */
+function OrderPlaced({ number, scheduled, onTrack }: { number: number; scheduled: boolean; onTrack: () => void }) {
+  const t = useT();
+  return (
+    <main className="fade-in fixed inset-0 z-50 flex items-end justify-center bg-gradient-to-b from-brand/30 via-bg to-bg sm:items-center sm:p-6">
+      <section
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="placed-title"
+        className="sheet-in w-full max-w-md rounded-t-[34px] border border-line bg-surface px-6 pt-10 pb-8 text-center shadow-float sm:rounded-[34px]"
+      >
+        <div className="flex justify-center">
+          <SuccessMark />
+        </div>
+        <h1 id="placed-title" className="m-0 mt-7 text-3xl font-extrabold">
+          {scheduled ? t('¡Pedido programado!', 'Order scheduled!') : t('¡Pedido confirmado!', 'Order confirmed!')}
+        </h1>
+        <p className="m-0 mt-2 text-[15px] leading-relaxed text-soft">
+          {scheduled
+            ? t(`Tu pedido #${number} quedó programado. Lo empezamos a preparar a tiempo.`, `Your order #${number} is scheduled. We will start cooking right on time.`)
+            : t(`Tu pedido #${number} fue confirmado y ya está en la cocina.`, `Your order #${number} is confirmed and already in the kitchen.`)}
+        </p>
+        <div className="mt-8 flex flex-col gap-3">
+          <button type="button" autoFocus onClick={onTrack} className="press h-14 cursor-pointer rounded-full border-0 bg-brand text-base font-bold text-on-brand">
+            {t('Seguir mi pedido', 'Track my order')}
+          </button>
+          <Link href="/" className="press flex h-14 items-center justify-center rounded-full bg-surface-2 text-base font-bold text-ink no-underline">
+            {t('Volver al menú', 'Back to the menu')}
+          </Link>
+        </div>
+      </section>
+    </main>
+  );
+}
+
 function Section({ title, children, id }: { title: string; children: React.ReactNode; id?: string }) {
   return (
     <section id={id} className="flex scroll-mt-6 flex-col gap-4 rounded-[26px] border border-line bg-surface p-5">
@@ -109,6 +145,7 @@ export function CheckoutView({ config }: { config: OnlineConfig }) {
   const [submitting, setSubmitting] = useState(false);
   const [created, setCreated] = useState<CreatedOrder | null>(null);
   const [leaving, setLeaving] = useState(false);
+  const [placed, setPlaced] = useState<{ code: string; number: number; scheduled: boolean } | null>(null);
   const requestRef = useRef<{ key: string; id: string } | null>(null);
 
   // ¿Para cuándo? Lo antes posible o programado (cerrado: solo programado).
@@ -176,6 +213,19 @@ export function CheckoutView({ config }: { config: OnlineConfig }) {
     );
   }
 
+  if (placed) {
+    return (
+      <OrderPlaced
+        number={placed.number}
+        scheduled={placed.scheduled}
+        onTrack={() => {
+          setLeaving(true);
+          router.push(`/pedido/${placed.code}`);
+        }}
+      />
+    );
+  }
+
   if (cartCount(state) === 0 && !created) {
     return (
       <main className="mx-auto flex min-h-dvh max-w-md flex-col items-center justify-center gap-5 px-6 text-center">
@@ -239,7 +289,7 @@ export function CheckoutView({ config }: { config: OnlineConfig }) {
         setCreated(result);
         setTimeout(() => document.getElementById('pago')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50);
       } else {
-        finish(result.order.publicCode);
+        finish(result.order.publicCode, result.order.number);
       }
     } catch (e) {
       setSubmitError(e instanceof ApiError ? e.message : t('No pudimos enviar tu pedido. Intenta de nuevo.', 'We could not send your order. Please try again.'));
@@ -248,11 +298,11 @@ export function CheckoutView({ config }: { config: OnlineConfig }) {
     }
   };
 
-  const finish = (code: string) => {
-    setLeaving(true);
+  const finish = (code: string, number: number) => {
     cart.clear();
     pendingCoupon.clear();
-    router.push(`/pedido/${code}`);
+    setPlaced({ code, number, scheduled });
+    router.prefetch(`/pedido/${code}`);
   };
 
   const paid = async () => {
@@ -262,7 +312,7 @@ export function CheckoutView({ config }: { config: OnlineConfig }) {
     } catch {
       // El webhook de Stripe también lo confirma; el seguimiento lo mostrará.
     }
-    finish(created.order.publicCode);
+    finish(created.order.publicCode, created.order.number);
   };
 
   const locked = !!created;
@@ -518,12 +568,20 @@ export function CheckoutView({ config }: { config: OnlineConfig }) {
                         onClick={() => setPayChoice(p)}
                         className={`press flex min-h-16 cursor-pointer items-center gap-3 rounded-2xl border px-4 text-left ${on ? 'border-brand bg-brand-soft' : 'border-line bg-surface-2'}`}
                       >
-                        {p === 'card' ? <CreditCard aria-hidden className="size-5 text-accent-text" /> : <Wallet aria-hidden className="size-5 text-accent-text" />}
+                        <span className="flex size-11 shrink-0 items-center justify-center rounded-2xl bg-surface-3">
+                          {p === 'card' ? <CreditCard aria-hidden className="size-5 text-accent-text" /> : <Wallet aria-hidden className="size-5 text-accent-text" />}
+                        </span>
                         <span className="flex flex-1 flex-col">
                           <span className="font-bold text-ink">{p === 'card' ? t('Pagar ahora', 'Pay now') : t('Pagar al recoger', 'Pay at pickup')}</span>
                           <span className="text-xs text-muted">{p === 'card' ? t('Tarjeta, Apple Pay o Google Pay', 'Card, Apple Pay or Google Pay') : t('En efectivo o tarjeta en el local', 'Cash or card at the restaurant')}</span>
                         </span>
-                        <span aria-hidden className={`size-5 rounded-full border-2 ${on ? 'border-brand bg-brand shadow-[inset_0_0_0_3px_var(--surface-2)]' : 'border-line-strong'}`} />
+                        {on ? (
+                          <span aria-hidden className="flex size-6 shrink-0 items-center justify-center rounded-full bg-brand text-on-brand">
+                            <Check className="size-4" strokeWidth={3} />
+                          </span>
+                        ) : (
+                          <span aria-hidden className="size-6 shrink-0 rounded-full border-2 border-line-strong" />
+                        )}
                       </button>
                     );
                   })}
@@ -603,7 +661,10 @@ export function CheckoutView({ config }: { config: OnlineConfig }) {
               )
             ) : null}
 
-            <TotalsSummary quote={quote} currency={currency} tip={tipAmount} mode={mode} />
+            <div className="rounded-[22px] bg-surface-2 p-4">
+              <h3 className="m-0 mb-3 text-base font-bold">{t('Resumen de la cuenta', 'Billing summary')}</h3>
+              <TotalsSummary quote={quote} currency={currency} tip={tipAmount} mode={mode} />
+            </div>
             {quote && delivery && !quote.meetsMinimum ? <Notice tone="danger">{t(`El pedido mínimo para delivery es de ${money(quote.minOrder, currency)}.`, `The delivery minimum is ${money(quote.minOrder, currency)}.`)}</Notice> : null}
             {submitError ? <Notice tone="danger">{submitError}</Notice> : null}
 
@@ -628,16 +689,17 @@ export function CheckoutView({ config }: { config: OnlineConfig }) {
                 </button>
               </div>
             ) : (
-              <Button
-                className="h-14 w-full text-base"
-                onClick={submit}
+              <SwipeButton
+                onConfirm={submit}
                 loading={submitting}
+                busyLabel={t('Enviando…', 'Sending…')}
                 disabled={!canOrder || !quote || !pay || !!quoteError || (delivery && !quote.meetsMinimum) || (scheduled && !slot)}
-              >
-                {pay === 'pay_at_pickup'
-                  ? `${scheduled ? t('Programar pedido', 'Schedule order') : t('Hacer pedido', 'Place order')} · ${money(total, currency)}`
-                  : `${t('Continuar al pago', 'Continue to payment')} · ${money(total, currency)}`}
-              </Button>
+                label={
+                  pay === 'pay_at_pickup'
+                    ? `${scheduled ? t('Desliza para programar', 'Slide to schedule') : t('Desliza para pedir', 'Slide to order')} · ${money(total, currency)}`
+                    : `${t('Desliza para continuar', 'Slide to continue')} · ${money(total, currency)}`
+                }
+              />
             )}
           </Section>
         </aside>

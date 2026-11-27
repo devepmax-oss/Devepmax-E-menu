@@ -2,10 +2,10 @@
 
 import { Elements, ExpressCheckoutElement, PaymentElement, useElements, useStripe } from '@stripe/react-stripe-js';
 import { loadStripe, type Appearance, type Stripe } from '@stripe/stripe-js';
-import { Lock } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { useLang, useT } from '@/components/i18n';
-import { Button, Notice } from '@/components/ui';
+import { SwipeButton } from '@/components/swipe-button';
+import { Notice } from '@/components/ui';
 
 const stripes = new Map<string, Promise<Stripe | null>>();
 const getStripe = (key: string) => {
@@ -107,9 +107,13 @@ function PayForm({
       </div>
       <PaymentElement options={{ layout: 'tabs', ...(customer ? { fields: { billingDetails: { name: 'never', phone: 'never' } } } : {}) }} />
       {error ? <Notice tone="danger">{error}</Notice> : null}
-      <Button className="h-14 w-full text-base" onClick={confirm} loading={busy} disabled={!stripe || !elements}>
-        <Lock aria-hidden className="size-4" /> {t('Pagar', 'Pay')} {amountLabel}
-      </Button>
+      <SwipeButton
+        label={`${t('Desliza para pagar', 'Slide to pay')} ${amountLabel}`}
+        busyLabel={t('Procesando el pago…', 'Processing payment…')}
+        onConfirm={confirm}
+        loading={busy}
+        disabled={!stripe || !elements}
+      />
       <p className="m-0 text-center text-xs text-muted">{t('Pago seguro con Stripe. Tus datos de tarjeta no pasan por el restaurante.', 'Secure payment with Stripe. Your card details never reach the restaurant.')}</p>
     </div>
   );

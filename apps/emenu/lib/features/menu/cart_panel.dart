@@ -40,10 +40,16 @@ class _Cart extends ConsumerWidget {
     final q = quote.value;
 
     Widget row(String label, double value, {Color? color, bool bold = false}) => Padding(
-          padding: const EdgeInsets.only(top: 4),
+          padding: EdgeInsets.only(top: bold ? 0 : 6),
           child: Row(children: [
-            Expanded(child: Text(label, style: (bold ? text.titleLarge : text.bodyMedium)?.copyWith(color: color))),
-            Text(formatMoney(value), style: (bold ? text.titleLarge : text.bodyMedium)?.copyWith(color: color)),
+            Expanded(
+              child: Text(label,
+                  style: bold ? text.titleMedium?.copyWith(fontWeight: FontWeight.w800) : TextStyle(color: color ?? t.muted, fontSize: 14.5)),
+            ),
+            Text(formatMoney(value),
+                style: bold
+                    ? text.headlineSmall?.copyWith(fontWeight: FontWeight.w800)
+                    : TextStyle(color: color ?? t.text, fontSize: 15, fontWeight: FontWeight.w600)),
           ]),
         );
 
@@ -95,25 +101,33 @@ class _Cart extends ConsumerWidget {
         padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
         decoration: BoxDecoration(border: Border(top: BorderSide(color: t.line))),
         child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-          if (q != null) ...[
-            row('Subtotal', q.subtotal),
-            for (final p in q.promotions) row(p.name, -p.amount, color: t.success),
-            row(context.tr('Impuestos', 'Tax'), q.taxTotal),
-            const SizedBox(height: 4),
-            row('Total', q.total, bold: true),
-          ] else
-            row(quote.isLoading ? context.tr('Calculando…', 'Calculating…') : context.tr('Total aprox.', 'Estimated total'), estimate, bold: true),
+          // Resumen de la cuenta en una tarjeta.
+          Container(
+            padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
+            decoration: BoxDecoration(color: t.surface2, borderRadius: BorderRadius.circular(20)),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+              Text(context.tr('Resumen', 'Summary'), style: text.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
+              if (q != null) ...[
+                const SizedBox(height: 4),
+                row('Subtotal', q.subtotal),
+                for (final p in q.promotions) row(p.name, -p.amount, color: t.success),
+                row(context.tr('Impuestos', 'Tax'), q.taxTotal),
+                Divider(color: t.line, height: 22),
+                row('Total', q.total, bold: true),
+              ] else ...[
+                Divider(color: t.line, height: 22),
+                row(quote.isLoading ? context.tr('Calculando…', 'Calculating…') : context.tr('Total aprox.', 'Estimated total'), estimate, bold: true),
+              ],
+            ]),
+          ),
           const SizedBox(height: 14),
-          FilledButton.icon(
-            style: FilledButton.styleFrom(
-              minimumSize: const Size.fromHeight(64),
-              textStyle: const TextStyle(fontSize: 19, fontWeight: FontWeight.w800),
-            ),
-            onPressed: sending ? null : send,
-            icon: sending
-                ? const SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2.5))
-                : const Icon(Icons.send_rounded),
-            label: Text(sending ? context.tr('Enviando…', 'Sending…') : context.tr('Enviar a cocina', 'Send to the kitchen')),
+          SwipeToConfirm(
+            label: context.tr('Desliza para enviar a cocina', 'Slide to send to the kitchen'),
+            busyLabel: context.tr('Enviando…', 'Sending…'),
+            hint: context.tr('Desliza la flecha hasta el final para enviar tu pedido', 'Slide the arrow all the way to send your order'),
+            busy: sending,
+            height: 68,
+            onConfirm: send,
           ),
         ]),
       ),
@@ -224,19 +238,33 @@ Future<void> showOrderSent(BuildContext context, {required bool pending}) {
       });
       final t = BrandTokens.of(context);
       return Dialog(
-        child: Padding(
-          padding: const EdgeInsets.all(36),
-          child: Column(mainAxisSize: MainAxisSize.min, children: [
-            Icon(Icons.check_circle_rounded, size: 96, color: t.success),
-            const SizedBox(height: 16),
-            Text(context.tr('¡Pedido enviado!', 'Order sent!'), style: Theme.of(context).textTheme.headlineMedium),
-            const SizedBox(height: 8),
-            Text(
-              pending ? context.tr('Un mesero lo confirmará en un momento.', 'A server will confirm it in a moment.') : context.tr('La cocina ya lo tiene. Aquí verás cuándo esté listo.', 'The kitchen has it. You will see here when it is ready.'),
-              textAlign: TextAlign.center,
-              style: TextStyle(color: t.muted, fontSize: 16),
-            ),
-          ]),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(32)),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 440),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(32, 36, 32, 28),
+            child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+              const Center(child: DmSuccessMark(size: 128)),
+              const SizedBox(height: 22),
+              Text(
+                pending ? context.tr('¡Pedido enviado!', 'Order sent!') : context.tr('¡Pedido confirmado!', 'Order confirmed!'),
+                textAlign: TextAlign.center,
+                style: Theme.of(context).textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.w800),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                pending ? context.tr('Un mesero lo confirmará en un momento.', 'A server will confirm it in a moment.') : context.tr('La cocina ya lo tiene y lo está preparando. Aquí verás cuándo esté listo.', 'The kitchen has it and is preparing it. You will see here when it is ready.'),
+                textAlign: TextAlign.center,
+                style: TextStyle(color: t.muted, fontSize: 16),
+              ),
+              const SizedBox(height: 24),
+              FilledButton(
+                style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(60), shape: const StadiumBorder(), textStyle: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
+                onPressed: () => Navigator.of(context).pop(),
+                child: Text(context.tr('Ver mi pedido', 'See my order')),
+              ),
+            ]),
+          ),
         ),
       );
     },
